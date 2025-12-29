@@ -1,0 +1,118 @@
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { z } from "zod";
+
+const updateTaskSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  hidden: z.boolean().optional(),
+});
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth();
+  const { id } = await params;
+
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const task = await prisma.task.findFirst({
+    where: {
+      id,
+      userId: session.user.id,
+    },
+    include: {
+      events: {
+        orderBy: { createdAt: "desc" },
+      },
+    },
+  });
+
+  if (!task) {
+    return NextResponse.json({ error: "Task not found" }, { status: 404 });
+  }
+
+  return NextResponse.json(task);
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth();
+  const { id } = await params;
+
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    const data = updateTaskSchema.parse(body);
+
+    const task = await prisma.task.findFirst({
+      where: {
+        id,
+        userId: session.user.id,
+      },
+    });
+
+    if (!task) {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+
+    const updated = await prisma.task.update({
+      where: { id },
+      data,
+      include: {
+        events: true,
+      },
+    });
+
+    return NextResponse.json(updated);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: error.issues[0].message },
+        { status: 400 }
+      );
+    }
+    console.error("Update task error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth();
+  const { id } = await params;
+
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const task = await prisma.task.findFirst({
+    where: {
+      id,
+      userId: session.user.id,
+    },
+  });
+
+  if (!task) {
+    return NextResponse.json({ error: "Task not found" }, { status: 404 });
+  }
+
+  await prisma.task.delete({
+    where: { id },
+  });
+
+  return NextResponse.json({ success: true });
+}
