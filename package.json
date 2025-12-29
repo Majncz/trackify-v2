@@ -3,12 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "tsx server/index.ts",
+    "dev:next": "next dev",
     "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "start": "NODE_ENV=production node server/index.js",
+    "lint": "next lint",
+    "migrate": "tsx scripts/migrate-data.ts"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^7.2.0",
     "@prisma/client": "^7.2.0",
     "@tanstack/react-query": "^5.90.14",
     "bcryptjs": "^3.0.3",
@@ -16,6 +19,7 @@
     "date-fns": "^4.1.0",
     "next": "14.2.35",
     "next-auth": "^5.0.0-beta.30",
+    "pg": "^8.16.3",
     "react": "^18",
     "react-dom": "^18",
     "socket.io": "^4.8.3",
@@ -28,6 +32,7 @@
     "@tanstack/react-query-devtools": "^5.91.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
+    "@types/pg": "^8.16.0",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "@types/uuid": "^10.0.0",
