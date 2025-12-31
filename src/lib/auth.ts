@@ -1,9 +1,18 @@
-import NextAuth from "next-auth";
+import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
 
+class InvalidEmail extends CredentialsSignin {
+  code = "No account found with this email";
+}
+
+class InvalidPassword extends CredentialsSignin {
+  code = "Incorrect password";
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  trustHost: true,
   session: { strategy: "jwt" },
   pages: {
     signIn: "/login",
@@ -25,7 +34,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
 
         if (!user || !user.password) {
-          return null;
+          throw new InvalidEmail();
         }
 
         const isValid = await bcrypt.compare(
@@ -34,7 +43,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         );
 
         if (!isValid) {
-          return null;
+          throw new InvalidPassword();
         }
 
         return {

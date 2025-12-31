@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
 import { TimerDisplay } from "@/components/timer/timer-display";
 import { formatDurationWords } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { MoreVertical, Play, Square, Pencil, Trash2 } from "lucide-react";
 
 interface Event {
   id: string;
@@ -63,107 +66,103 @@ export function TaskItem({
   };
 
   return (
-    <div
+    <Card
       className={cn(
-        "bg-white rounded-lg border p-4 transition-all",
-        isActive ? "border-blue-500 shadow-md" : "border-gray-200 hover:border-gray-300"
+        "transition-all",
+        isActive && "border-primary ring-1 ring-primary"
       )}
     >
-      <div className="flex items-center justify-between">
-        <div className="flex-1 min-w-0">
-          {isEditing ? (
-            <input
-              type="text"
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              onBlur={handleSave}
-              onKeyDown={handleKeyDown}
-              autoFocus
-              className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          ) : (
-            <h3
-              className="font-medium text-gray-900 truncate cursor-pointer hover:text-blue-600"
-              onClick={() => setIsEditing(true)}
-            >
-              {task.name}
-            </h3>
-          )}
-          <p className="text-sm text-gray-500 mt-1">
-            Total: {formatDurationWords(totalTime)}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3 ml-4">
-          {isActive ? (
-            <>
-              <TimerDisplay milliseconds={elapsed} size="md" />
-              <Button
-                onClick={onStop}
-                variant="danger"
-                size="sm"
-                disabled={isLoading}
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex-1 min-w-0">
+            {isEditing ? (
+              <Input
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onBlur={handleSave}
+                onKeyDown={handleKeyDown}
+                autoFocus
+                className="max-w-xs"
+              />
+            ) : (
+              <h3
+                className="font-medium truncate cursor-pointer hover:text-primary"
+                onClick={() => setIsEditing(true)}
               >
-                {isLoading ? "Saving..." : "Stop"}
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button onClick={onStart} variant="primary" size="sm">
-                Start
-              </Button>
-              <div className="relative">
-                <button
-                  onClick={() => setShowMenu(!showMenu)}
-                  className="p-1 text-gray-400 hover:text-gray-600"
+                {task.name}
+              </h3>
+            )}
+            <p className="text-sm text-muted-foreground mt-1">
+              Total: {formatDurationWords(totalTime)}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 ml-4">
+            {isActive ? (
+              <>
+                <TimerDisplay milliseconds={elapsed} size="md" />
+                <Button
+                  onClick={onStop}
+                  variant="destructive"
+                  size="sm"
+                  disabled={isLoading}
                 >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+                  <Square className="h-4 w-4 mr-1" />
+                  {isLoading ? "Saving..." : "Stop"}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button onClick={onStart} size="sm">
+                  <Play className="h-4 w-4 mr-1" />
+                  Start
+                </Button>
+                <div className="relative">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setShowMenu(!showMenu)}
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
-                    />
-                  </svg>
-                </button>
-                {showMenu && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-10"
-                      onClick={() => setShowMenu(false)}
-                    />
-                    <div className="absolute right-0 mt-1 w-32 bg-white rounded-md shadow-lg border border-gray-200 z-20">
-                      <button
-                        onClick={() => {
-                          setIsEditing(true);
-                          setShowMenu(false);
-                        }}
-                        className="block w-full px-4 py-2 text-sm text-left text-gray-700 hover:bg-gray-100"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => {
-                          onDelete();
-                          setShowMenu(false);
-                        }}
-                        className="block w-full px-4 py-2 text-sm text-left text-red-600 hover:bg-red-50"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            </>
-          )}
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                  {showMenu && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setShowMenu(false)}
+                      />
+                      <div className="absolute right-0 mt-1 w-32 bg-popover rounded-md shadow-lg border z-20">
+                        <button
+                          onClick={() => {
+                            setIsEditing(true);
+                            setShowMenu(false);
+                          }}
+                          className="flex items-center gap-2 w-full px-4 py-2 text-sm text-left hover:bg-accent rounded-t-md"
+                        >
+                          <Pencil className="h-3 w-3" />
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => {
+                            onDelete();
+                            setShowMenu(false);
+                          }}
+                          className="flex items-center gap-2 w-full px-4 py-2 text-sm text-left text-destructive hover:bg-destructive/10 rounded-b-md"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          Delete
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
