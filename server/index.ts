@@ -40,8 +40,13 @@ app.prepare().then(() => {
     socket.on("authenticate", (data: { userId: string }) => {
       userId = data.userId;
       socket.join(`user:${userId}`);
+      console.log(`User ${userId} authenticated`);
+    });
 
-      // Send current timer state if exists
+    // Client explicitly requests timer state after listeners are ready
+    socket.on("timer:request-state", () => {
+      if (!userId) return;
+
       const timer = activeTimers.get(userId);
       if (timer) {
         socket.emit("timer:state", {
@@ -55,16 +60,17 @@ app.prepare().then(() => {
     socket.on("timer:start", (data: { taskId: string }) => {
       if (!userId) return;
 
+      const startTime = Date.now();
       activeTimers.set(userId, {
         taskId: data.taskId,
-        startTime: Date.now(),
+        startTime,
         socketIds: new Set([socket.id]),
       });
 
       // Broadcast to all user's devices
       io.to(`user:${userId}`).emit("timer:started", {
         taskId: data.taskId,
-        startTime: Date.now(),
+        startTime,
       });
     });
 
