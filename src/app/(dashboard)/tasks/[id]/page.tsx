@@ -54,11 +54,13 @@ export default function TaskDetailPage({
   const totalTime = task.events.reduce((sum, e) => sum + e.duration, 0);
 
   function handleEditClick() {
+    if (!task) return;
     setEditName(task.name);
     setIsEditing(true);
   }
 
   function handleSave() {
+    if (!task) return;
     if (editName.trim() && editName !== task.name) {
       updateTask.mutate({ id: task.id, name: editName.trim() });
     }
@@ -66,6 +68,7 @@ export default function TaskDetailPage({
   }
 
   function handleCancel() {
+    if (!task) return;
     setEditName(task.name);
     setIsEditing(false);
   }
@@ -79,6 +82,7 @@ export default function TaskDetailPage({
   }
 
   async function handleDelete() {
+    if (!task) return;
     if (confirm("Are you sure you want to delete this task?")) {
       await deleteTask.mutateAsync(task.id);
       router.push("/");

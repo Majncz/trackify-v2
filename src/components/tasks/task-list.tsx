@@ -15,7 +15,7 @@ export function TaskList() {
   const [newTaskName, setNewTaskName] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
   const [tasksPerRow, setTasksPerRow] = useState(3);
-  const { tasks, isLoading, createTask, updateTask, deleteTask } = useTasks();
+  const { tasks, isLoading, createTask } = useTasks();
   const { taskId, elapsed, running, startTimer, stopTimer, isCreatingEvent } =
     useTimer();
 

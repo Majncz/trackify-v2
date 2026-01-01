@@ -25,15 +25,17 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!session?.user?.id) return;
 
+    const userId = session.user.id;
     const socket = getSocket();
     socketRef.current = socket;
+    const listeners = listenersRef.current;
 
     function handleConnect() {
       setIsConnected(true);
-      socket.emit("authenticate", { userId: session.user.id });
+      socket.emit("authenticate", { userId });
       
       // Re-attach all buffered listeners
-      listenersRef.current.forEach((callbacks, event) => {
+      listeners.forEach((callbacks, event) => {
         callbacks.forEach((callback) => {
           socket.on(event, callback);
         });
@@ -59,7 +61,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       socket.off("disconnect", handleDisconnect);
       
       // Remove all event listeners
-      listenersRef.current.forEach((callbacks, event) => {
+      listeners.forEach((callbacks, event) => {
         callbacks.forEach((callback) => {
           socket.off(event, callback);
         });
