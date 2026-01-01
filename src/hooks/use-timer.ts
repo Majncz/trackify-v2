@@ -16,7 +16,6 @@ interface TimerStartedData {
   startTime: number;
 }
 
-
 interface TimerStateData {
   taskId: string;
   startTime: number;
@@ -32,8 +31,14 @@ export function useTimer() {
   });
 
   const intervalRef = useRef<NodeJS.Timeout>();
-  const { emit, on } = useSocket();
+  const stateRef = useRef(state);
+  const { emit, on, isConnected, requestTimerState } = useSocket();
   const queryClient = useQueryClient();
+
+  // Keep ref in sync with state for callbacks
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   // Update elapsed time
   useEffect(() => {
@@ -97,6 +102,13 @@ export function useTimer() {
     };
   }, [on, queryClient]);
 
+  // Request timer state when socket connects
+  useEffect(() => {
+    if (isConnected) {
+      requestTimerState();
+    }
+  }, [isConnected, requestTimerState]);
+
   const createEvent = useMutation({
     mutationFn: async (data: {
       taskId: string;
@@ -120,10 +132,11 @@ export function useTimer() {
 
   const startTimer = useCallback(
     (taskId: string) => {
+      const startTime = Date.now();
       emit("timer:start", { taskId });
       setState({
         taskId,
-        startTime: Date.now(),
+        startTime,
         elapsed: 0,
         running: true,
       });
@@ -132,18 +145,19 @@ export function useTimer() {
   );
 
   const stopTimer = useCallback(async () => {
-    if (!state.taskId || !state.startTime) return;
+    const currentState = stateRef.current;
+    if (!currentState.taskId || !currentState.startTime) return;
 
-    const duration = Date.now() - state.startTime;
+    const duration = Date.now() - currentState.startTime;
 
     emit("timer:stop", {
-      taskId: state.taskId,
+      taskId: currentState.taskId,
       duration,
     });
 
     // Create event in database
     await createEvent.mutateAsync({
-      taskId: state.taskId,
+      taskId: currentState.taskId,
       name: "Time entry",
       duration,
     });
@@ -154,7 +168,7 @@ export function useTimer() {
       elapsed: 0,
       running: false,
     });
-  }, [state, emit, createEvent]);
+  }, [emit, createEvent]);
 
   return {
     ...state,

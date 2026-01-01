@@ -9,8 +9,8 @@ export default function DashboardPage() {
         <p className="text-muted-foreground">Track your time efficiently</p>
       </div>
 
-      <StatsSummary />
       <TaskList />
+      <StatsSummary />
     </div>
   );
 }
