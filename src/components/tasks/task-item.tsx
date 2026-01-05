@@ -59,7 +59,7 @@ export function TaskItem({
   function handleStopClick(e: React.MouseEvent) {
     e.stopPropagation();
     onStop();
-  }
+    }
 
   return (
     <Card
@@ -75,26 +75,26 @@ export function TaskItem({
         </div>
 
         <p className="text-sm text-muted-foreground mb-3">
-          Total: {formatDurationWords(totalTime)}
-        </p>
+              Total: {formatDurationWords(totalTime)}
+            </p>
 
         <div className="mt-auto">
-          {isActive ? (
-            <Button
+            {isActive ? (
+                <Button
               onClick={handleStopClick}
-              variant="destructive"
-              size="sm"
-              disabled={isLoading}
+                  variant="destructive"
+                  size="sm"
+                  disabled={isLoading}
               className="w-full"
-            >
-              <Square className="h-4 w-4 mr-1" />
-              {isLoading ? "Saving..." : "Stop"}
-            </Button>
-          ) : (
+                >
+                  <Square className="h-4 w-4 mr-1" />
+                  {isLoading ? "Saving..." : "Stop"}
+                </Button>
+            ) : (
             <Button onClick={handleStartClick} size="sm" className="w-full">
-              <Play className="h-4 w-4 mr-1" />
-              Start
-            </Button>
+                  <Play className="h-4 w-4 mr-1" />
+                  Start
+                </Button>
           )}
         </div>
       </CardContent>
