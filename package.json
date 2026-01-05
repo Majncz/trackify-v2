@@ -6,7 +6,7 @@
     "dev": "NEXTAUTH_URL=https://dev.time.ranajakub.com PORT=3002 npx tsx server/index.ts",
     "build": "next build && npx tsc server/index.ts --outDir dist --esModuleInterop --skipLibCheck --module commonjs --target ES2020",
     "start": "NODE_ENV=production PORT=3000 node dist/index.js",
-    "deploy": "./scripts/deploy.sh",
+    "deploy": "bash scripts/deploy.sh",
     "lint": "next lint",
     "migrate": "tsx scripts/migrate-data.ts"
   },

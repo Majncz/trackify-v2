@@ -38,18 +38,24 @@ Dev server runs on port 3002 → https://dev.time.ranajakub.com
 
 ## Production Deployment
 
-**One command:**
+**One command deploys everything:**
 
 ```bash
+# Deploy with auto-generated commit message
 npm run deploy
+
+# Deploy with custom commit message
+npm run deploy "feat: add new feature"
 ```
 
-This will:
-1. Stop any running production server
-2. Clean old builds
-3. Build the application
-4. Start the production server on port 3000
-5. Verify it's responding
+The deploy script handles the full workflow:
+1. **Commit** all changes in dev directory
+2. **Push** to GitHub
+3. **Pull** latest code to prod directory (`/root/trackify-prod`)
+4. **Install** dependencies & generate Prisma client
+5. **Build** the application
+6. **Start** production server on port 3000
+7. **Verify** health check passes
 
 ## Server Configuration
 
