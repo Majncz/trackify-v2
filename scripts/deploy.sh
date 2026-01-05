@@ -1,42 +1,49 @@
 #!/bin/bash
 set -e
 
-cd /root/trackify
+PORT=3002
+APP_DIR="/root/trackify"
+LOG_FILE="/tmp/trackify-prod.log"
 
-echo "🛑 Stopping existing server..."
+cd "$APP_DIR"
+
+echo "🛑 Stopping existing servers..."
 pkill -f 'node dist/index.js' 2>/dev/null || true
-sleep 1
+pkill -f 'tsx server/index.ts' 2>/dev/null || true
+sleep 2
+
+# Double-check port is free
+if lsof -i :$PORT > /dev/null 2>&1; then
+    echo "⚠️  Port $PORT still in use, force killing..."
+    fuser -k $PORT/tcp 2>/dev/null || true
+    sleep 1
+fi
 
 echo "🧹 Cleaning old build..."
-rm -rf .next
+rm -rf .next dist
 
 echo "🔨 Building application..."
 npm run build
 
-echo "🚀 Starting production server..."
-nohup npm run start > /tmp/trackify-prod.log 2>&1 &
+echo "🚀 Starting production server on port $PORT..."
+nohup npm run start > "$LOG_FILE" 2>&1 &
+SERVER_PID=$!
 
 echo "⏳ Waiting for server to start..."
-sleep 3
-
-# Check if server is running
-if pgrep -f 'node dist/index.js' > /dev/null; then
-    # Check if it's responding
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/login 2>/dev/null || echo "000")
+for i in {1..10}; do
+    sleep 1
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$PORT/login" 2>/dev/null || echo "000")
     if [ "$HTTP_CODE" = "200" ]; then
-        echo "✅ Deploy successful! Server running at http://localhost:3000"
+        echo "✅ Deploy successful! Server running on port $PORT (PID: $SERVER_PID)"
         echo ""
         echo "Recent logs:"
-        tail -5 /tmp/trackify-prod.log
-    else
-        echo "⚠️  Server started but not responding correctly (HTTP $HTTP_CODE)"
-        echo "Check logs: tail -f /tmp/trackify-prod.log"
-        exit 1
+        tail -5 "$LOG_FILE"
+        exit 0
     fi
-else
-    echo "❌ Server failed to start!"
-    echo "Logs:"
-    tail -20 /tmp/trackify-prod.log
-    exit 1
-fi
+    echo "   Attempt $i/10 (HTTP: $HTTP_CODE)..."
+done
 
+echo "❌ Server failed to start!"
+echo "Logs:"
+tail -30 "$LOG_FILE"
+exit 1
