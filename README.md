@@ -30,9 +30,11 @@ npx prisma generate
 # Push schema to database
 npx prisma db push
 
-# Start dev server (runs on port 3002)
+# Start dev server with hot reload
 npm run dev
 ```
+
+Dev server runs on port 3002 → https://dev.time.ranajakub.com
 
 ## Production Deployment
 
@@ -43,18 +45,21 @@ npm run deploy
 ```
 
 This will:
-1. Stop any running servers (including zombie processes)
+1. Stop any running production server
 2. Clean old builds
 3. Build the application
-4. Start the production server on port 3002
+4. Start the production server on port 3000
 5. Verify it's responding
 
 ## Server Configuration
 
-| Service | Port | URL |
-|---------|------|-----|
-| Production | 3002 | https://dev.time.ranajakub.com |
-| Database | 5435 | localhost (Docker) |
+| Environment | Directory | Port | URL | Command |
+|-------------|-----------|------|-----|---------|
+| Development | `/root/trackify` | 3002 | https://dev.time.ranajakub.com | `npm run dev` |
+| Production | `/root/trackify-prod` | 3000 | https://time.ranajakub.com | `npm run deploy` |
+| Database | - | 5435 | localhost (Docker) | - |
+
+**Note:** Dev and prod use separate directories to avoid build conflicts. The deploy script automatically pulls latest code and builds in the prod directory.
 
 Caddy reverse proxy config is at `/etc/caddy/Caddyfile`.
 

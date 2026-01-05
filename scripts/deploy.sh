@@ -1,46 +1,59 @@
 #!/bin/bash
 set -e
 
-PORT=3002
-APP_DIR="/root/trackify"
+# Production runs from /root/trackify-prod on port 3000
+# Dev runs from /root/trackify on port 3002
+PROD_DIR="/root/trackify-prod"
+DEV_DIR="/root/trackify"
+PORT=3000
 LOG_FILE="/tmp/trackify-prod.log"
 
-cd "$APP_DIR"
+echo "📦 Deploying to production..."
 
-echo "🛑 Stopping existing servers..."
+# Stop existing production server
+echo "🛑 Stopping production server..."
 pkill -f 'node dist/index.js' 2>/dev/null || true
-pkill -f 'tsx server/index.ts' 2>/dev/null || true
 sleep 2
 
-# Double-check port is free
-if lsof -i :$PORT > /dev/null 2>&1; then
-    echo "⚠️  Port $PORT still in use, force killing..."
-    fuser -k $PORT/tcp 2>/dev/null || true
-    sleep 1
-fi
+# Pull latest changes in prod directory
+echo "📥 Pulling latest changes..."
+cd "$PROD_DIR"
+git pull origin master
 
+# Install dependencies if package.json changed
+echo "📦 Installing dependencies..."
+npm install --production=false
+
+# Generate Prisma client
+echo "🔧 Generating Prisma client..."
+npx prisma generate
+
+# Clean and build
 echo "🧹 Cleaning old build..."
 rm -rf .next dist
 
 echo "🔨 Building application..."
 npm run build
 
+# Start production server
 echo "🚀 Starting production server on port $PORT..."
-nohup npm run start > "$LOG_FILE" 2>&1 &
+NEXTAUTH_URL="https://time.ranajakub.com" nohup npm run start > "$LOG_FILE" 2>&1 &
 SERVER_PID=$!
 
 echo "⏳ Waiting for server to start..."
-for i in {1..10}; do
+for i in {1..15}; do
     sleep 1
     HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$PORT/login" 2>/dev/null || echo "000")
     if [ "$HTTP_CODE" = "200" ]; then
-        echo "✅ Deploy successful! Server running on port $PORT (PID: $SERVER_PID)"
         echo ""
-        echo "Recent logs:"
-        tail -5 "$LOG_FILE"
+        echo "✅ Production deployed!"
+        echo "   URL: https://time.ranajakub.com"
+        echo "   Port: $PORT"
+        echo "   PID: $SERVER_PID"
+        echo "   Logs: tail -f $LOG_FILE"
         exit 0
     fi
-    echo "   Attempt $i/10 (HTTP: $HTTP_CODE)..."
+    echo "   Attempt $i/15 (HTTP: $HTTP_CODE)..."
 done
 
 echo "❌ Server failed to start!"
