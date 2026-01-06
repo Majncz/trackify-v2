@@ -18,16 +18,22 @@ export function formatDuration(ms: number): string {
 }
 
 export function formatDurationWords(ms: number): string {
-  if (ms === 0) return "0m";
+  if (ms === 0) return "0s";
 
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
+  const totalSeconds = Math.floor(ms / 1000);
+  const seconds = totalSeconds % 60;
+  const minutes = Math.floor(totalSeconds / 60) % 60;
+  const hours = Math.floor(totalSeconds / 3600);
 
-  const m = minutes % 60;
-  const h = hours;
-
-  if (h === 0) return `${m}m`;
-  if (m === 0) return `${h}h`;
-  return `${h}h ${m}m`;
+  // Less than a minute - show seconds
+  if (hours === 0 && minutes === 0) return `${seconds}s`;
+  
+  // Less than an hour - show minutes (and seconds if relevant)
+  if (hours === 0) return `${minutes}m`;
+  
+  // Hours only
+  if (minutes === 0) return `${hours}h`;
+  
+  // Hours and minutes
+  return `${hours}h ${minutes}m`;
 }

@@ -27,15 +27,21 @@ export function TaskList() {
       if (aIsRunning && !bIsRunning) return -1;
       if (!aIsRunning && bIsRunning) return 1;
       
-      // Then: sort by most recent event
-      const aMostRecent = a.events.length > 0
-        ? Math.max(...a.events.map((e) => new Date(e.createdAt).getTime()))
-        : 0;
-      const bMostRecent = b.events.length > 0
-        ? Math.max(...b.events.map((e) => new Date(e.createdAt).getTime()))
-        : 0;
+      // Second: new tasks (no events) at top
+      const aHasEvents = a.events.length > 0;
+      const bHasEvents = b.events.length > 0;
       
-      return bMostRecent - aMostRecent; // Most recent first
+      if (!aHasEvents && bHasEvents) return -1;
+      if (aHasEvents && !bHasEvents) return 1;
+      
+      // Then: sort by most recent event (most recent first)
+      if (aHasEvents && bHasEvents) {
+        const aMostRecent = Math.max(...a.events.map((e) => new Date(e.createdAt).getTime()));
+        const bMostRecent = Math.max(...b.events.map((e) => new Date(e.createdAt).getTime()));
+        return bMostRecent - aMostRecent;
+      }
+      
+      return 0;
     });
 
   // Calculate how many tasks fit in 2 rows based on screen size

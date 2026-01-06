@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDurationWords } from "@/lib/utils";
-import { ArrowLeft, Trash2 } from "lucide-react";
+import { ArrowLeft, EyeOff } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function TaskDetailPage({
@@ -81,9 +81,9 @@ export default function TaskDetailPage({
     }
   }
 
-  async function handleDelete() {
+  async function handleHide() {
     if (!task) return;
-    if (confirm("Are you sure you want to delete this task?")) {
+    if (confirm("Hide this task? You can restore it from Settings.")) {
       await deleteTask.mutateAsync(task.id);
       router.push("/");
     }
@@ -122,13 +122,13 @@ export default function TaskDetailPage({
             </CardTitle>
             {!isEditing && (
               <Button
-                variant="destructive"
+                variant="outline"
                 size="sm"
-                onClick={handleDelete}
+                onClick={handleHide}
                 disabled={deleteTask.isPending}
               >
-                <Trash2 className="h-4 w-4 mr-2" />
-                {deleteTask.isPending ? "Deleting..." : "Delete"}
+                <EyeOff className="h-4 w-4 mr-2" />
+                {deleteTask.isPending ? "Hiding..." : "Hide"}
               </Button>
             )}
           </div>

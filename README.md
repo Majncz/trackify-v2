@@ -36,19 +36,23 @@ npm run dev
 
 Dev server runs on port 3002 → https://dev.time.ranajakub.com
 
-### ⚠️ IMPORTANT: Hot Reload
+### ⚠️ IMPORTANT: Hot Reload vs Restart
 
-**DO NOT restart the dev server when making code changes!**
+**DO NOT restart the dev server for code changes** - hot reload handles it automatically.
 
-The dev server has hot reload - it automatically picks up file changes. Just:
-1. Make your code changes
-2. Save the file
-3. Refresh the browser (or it auto-refreshes)
+**DO restart the dev server after:**
+- Prisma schema changes (`prisma/schema.prisma`)
+- `package.json` changes
+- Environment variable changes (`.env`)
+- Server crashed
 
-Only restart the dev server if:
-- It crashed with an actual error
-- You changed `package.json` or environment variables
-- Port 3002 is not responding at all
+**After Prisma schema changes:**
+```bash
+npx prisma db push      # Sync database
+npx prisma generate     # Regenerate client
+# Then restart dev server - Prisma client is cached!
+pkill -f 'tsx server' && npm run dev
+```
 
 **Check if dev is already running:**
 ```bash

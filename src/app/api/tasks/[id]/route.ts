@@ -110,8 +110,10 @@ export async function DELETE(
     return NextResponse.json({ error: "Task not found" }, { status: 404 });
   }
 
-  await prisma.task.delete({
+  // Soft delete - hide the task instead of deleting
+  await prisma.task.update({
     where: { id },
+    data: { hidden: true },
   });
 
   return NextResponse.json({ success: true });

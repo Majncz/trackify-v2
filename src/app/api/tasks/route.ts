@@ -7,15 +7,21 @@ const taskSchema = z.object({
   name: z.string().min(1).max(100),
 });
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await auth();
 
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const showHidden = searchParams.get("hidden") === "true";
+
   const tasks = await prisma.task.findMany({
-    where: { userId: session.user.id },
+    where: { 
+      userId: session.user.id,
+      hidden: showHidden,
+    },
     include: {
       events: {
         orderBy: { createdAt: "desc" },

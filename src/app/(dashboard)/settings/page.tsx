@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Mail, User } from "lucide-react";
 import { LogoutButton } from "./logout-button";
+import { HiddenTasks } from "./hidden-tasks";
 
 export default async function SettingsPage() {
   const session = await auth();
@@ -33,6 +34,8 @@ export default async function SettingsPage() {
           <LogoutButton />
         </CardContent>
       </Card>
+
+      <HiddenTasks />
     </div>
   );
 }
