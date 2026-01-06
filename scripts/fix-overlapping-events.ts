@@ -128,7 +128,7 @@ async function main() {
   });
 
   let allMatch = true;
-  for (const [taskId, original] of originalTotals) {
+  Array.from(originalTotals.entries()).forEach(([taskId, original]) => {
     const newTotal = newTotals.get(taskId) || 0;
     const match = original.total === newTotal;
     if (!match) {
@@ -137,7 +137,7 @@ async function main() {
       const newHours = (newTotal / MS_PER_HOUR).toFixed(2);
       console.log(`❌ ${original.name}: ${originalHours}h → ${newHours}h MISMATCH!`);
     }
-  }
+  });
 
   if (allMatch) {
     console.log("✅ All task totals verified - no data lost!\n");
