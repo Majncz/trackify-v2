@@ -125,14 +125,14 @@ export function TaskList() {
           <>
             <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {displayedTasks.map((task) => (
-                <TaskItem
-                  key={task.id}
-                  task={task}
-                  isActive={taskId === task.id && running}
-                  onStart={() => startTimer(task.id)}
-                  onStop={stopTimer}
-                  isLoading={isCreatingEvent && taskId === task.id}
-                />
+            <TaskItem
+              key={task.id}
+              task={task}
+              isActive={taskId === task.id && running}
+              onStart={() => startTimer(task.id)}
+              onStop={stopTimer}
+              isLoading={isCreatingEvent && taskId === task.id}
+            />
               ))}
             </div>
             {shouldShowExpand && (

@@ -130,20 +130,6 @@ export function useTimer() {
     },
   });
 
-  const startTimer = useCallback(
-    (taskId: string) => {
-      const startTime = Date.now();
-      emit("timer:start", { taskId });
-      setState({
-        taskId,
-        startTime,
-        elapsed: 0,
-        running: true,
-      });
-    },
-    [emit]
-  );
-
   const stopTimer = useCallback(async () => {
     const currentState = stateRef.current;
     if (!currentState.taskId || !currentState.startTime) return;
@@ -169,6 +155,25 @@ export function useTimer() {
       running: false,
     });
   }, [emit, createEvent]);
+
+  const startTimer = useCallback(
+    async (taskId: string) => {
+      // If a timer is already running, stop it first (saves the event)
+      if (stateRef.current.running && stateRef.current.taskId) {
+        await stopTimer();
+      }
+
+      const startTime = Date.now();
+      emit("timer:start", { taskId });
+      setState({
+        taskId,
+        startTime,
+        elapsed: 0,
+        running: true,
+      });
+    },
+    [emit, stopTimer]
+  );
 
   return {
     ...state,

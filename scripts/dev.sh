@@ -25,3 +25,4 @@ echo "   URL: https://dev.time.ranajakub.com"
 echo ""
 exec npm run dev
 
+
