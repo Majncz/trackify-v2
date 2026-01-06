@@ -36,6 +36,25 @@ npm run dev
 
 Dev server runs on port 3002 → https://dev.time.ranajakub.com
 
+### ⚠️ IMPORTANT: Hot Reload
+
+**DO NOT restart the dev server when making code changes!**
+
+The dev server has hot reload - it automatically picks up file changes. Just:
+1. Make your code changes
+2. Save the file
+3. Refresh the browser (or it auto-refreshes)
+
+Only restart the dev server if:
+- It crashed with an actual error
+- You changed `package.json` or environment variables
+- Port 3002 is not responding at all
+
+**Check if dev is already running:**
+```bash
+lsof -i :3002  # Shows process if running
+```
+
 ## Production Deployment
 
 **One command deploys everything:**
