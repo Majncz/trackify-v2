@@ -136,7 +136,7 @@ async function main() {
   console.log("═══════════════════════════════════════════════════════════\n");
 
   let allMatch = true;
-  for (const [taskId, original] of originalTotals) {
+  Array.from(originalTotals.entries()).forEach(([taskId, original]) => {
     const newTotal = newTotals.get(taskId) || 0;
     const match = original.total === newTotal;
     if (!match) allMatch = false;
@@ -146,7 +146,7 @@ async function main() {
     const status = match ? "✅" : "❌";
 
     console.log(`${status} ${original.name}: ${originalHours}h → ${newHours}h`);
-  }
+  });
 
   console.log(`\n${allMatch ? "✅ All task totals preserved!" : "❌ MISMATCH DETECTED!"}\n`);
 
