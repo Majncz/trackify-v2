@@ -409,7 +409,7 @@ export function TimeChart() {
                     border: "1px solid hsl(var(--border))",
                     borderRadius: "8px",
                   }}
-                  formatter={(value: number) => [`${value}h`, undefined]}
+                  formatter={(value) => [`${value}h`, undefined]}
                 />
                 <Legend
                   content={({ payload }) => (
