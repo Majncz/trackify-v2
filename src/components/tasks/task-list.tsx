@@ -5,27 +5,17 @@ import { useTasks } from "@/hooks/use-tasks";
 import { useTimer } from "@/hooks/use-timer";
 import { TaskItem } from "./task-item";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { TimerDisplay } from "@/components/timer/timer-display";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 export function TaskList() {
-  const [newTaskName, setNewTaskName] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
   const [tasksPerRow, setTasksPerRow] = useState(3);
-  const { tasks, isLoading, createTask } = useTasks();
+  const { tasks, isLoading } = useTasks();
   const { taskId, elapsed, running, startTimer, stopTimer, isCreatingEvent } =
     useTimer();
-
-  const handleCreateTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTaskName.trim()) return;
-
-    await createTask.mutateAsync(newTaskName.trim());
-    setNewTaskName("");
-  };
 
   const visibleTasks = tasks
     .filter((t) => !t.hidden)
@@ -122,7 +112,7 @@ export function TaskList() {
         {visibleTasks.length === 0 ? (
           <Card>
             <CardContent className="py-8 text-center text-muted-foreground">
-              No tasks yet. Create one below to get started!
+              No tasks yet. Click &quot;New Task&quot; to get started!
             </CardContent>
           </Card>
         ) : (
@@ -164,29 +154,6 @@ export function TaskList() {
         )}
       </div>
 
-      {/* New Task Form */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Add New Task</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleCreateTask} className="flex gap-3">
-            <Input
-              type="text"
-              value={newTaskName}
-              onChange={(e) => setNewTaskName(e.target.value)}
-              placeholder="Enter task name..."
-              className="flex-1"
-            />
-            <Button
-              type="submit"
-              disabled={!newTaskName.trim() || createTask.isPending}
-            >
-              {createTask.isPending ? "Adding..." : "Add Task"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
     </div>
   );
 }
