@@ -1,0 +1,43 @@
+# Trackify Cursor Rules
+
+## CRITICAL RULES - DO NOT VIOLATE
+
+### 1. NEVER deploy without explicit user request
+- Only run `npm run deploy` when the user explicitly says "deploy", "deploy it", "push to prod", etc.
+- Never deploy automatically after completing a feature
+
+### 2. NEVER build or restart dev server for code changes  
+- Hot reload is active - just save files and refresh browser
+- DO NOT run `npm run build` during development
+- DO NOT run `pkill` or restart the dev server for code changes
+
+### 3. Only restart dev server after:
+- Prisma schema changes (`prisma/schema.prisma`)
+- `package.json` changes (new dependencies)
+- `.env` file changes
+- Server crash (confirmed with `lsof -i :3002` showing nothing)
+
+### 4. NEVER clear `.next` cache
+- Clearing `.next` causes full rebuild and can deadlock the server
+- If CSS looks broken, tell user to try hard refresh (Ctrl+Shift+R) first
+- Only clear cache as absolute last resort after confirming it's corrupted
+
+### 5. Troubleshooting order:
+1. Ask user to hard refresh browser (Ctrl+Shift+R)
+2. Check if server is responding (`curl -I https://dev.time.ranajakub.com/`)
+3. Check if server process exists (`lsof -i :3002`)
+4. Only restart if server is actually dead
+
+## Development Workflow
+
+1. Make code changes
+2. Save files (hot reload picks them up)
+3. User refreshes browser
+4. Done
+
+## When User Says "Deploy"
+
+Only then run: `npm run deploy "commit message"`
+
+
+

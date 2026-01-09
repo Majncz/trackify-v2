@@ -2,6 +2,10 @@
 
 A time tracking application built with Next.js, Socket.IO, and PostgreSQL.
 
+## ⚠️ AI Assistant Rules
+
+**NEVER deploy without the user explicitly asking for it.** Only run `npm run deploy` when the user says "deploy" or similar.
+
 ## Tech Stack
 
 - **Frontend**: Next.js 14 (App Router), React, Tailwind CSS, shadcn/ui

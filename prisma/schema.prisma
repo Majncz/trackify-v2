@@ -12,6 +12,7 @@ model User {
   password       String
   tasks          Task[]
   passwordResets PasswordReset[]
+  conversations  Conversation[]
 
   @@map("trackify_user")
 }
@@ -49,4 +50,28 @@ model Event {
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@map("trackify_event")
+}
+
+model Conversation {
+  id        String        @id @default(uuid())
+  title     String?
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  ChatMessage[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@map("trackify_conversation")
+}
+
+model ChatMessage {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  content        String       @db.Text
+  parts          Json?
+  createdAt      DateTime     @default(now())
+
+  @@map("trackify_chat_message")
 }

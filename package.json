@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "NEXTAUTH_URL=https://dev.time.ranajakub.com PORT=3002 npx tsx server/index.ts",
     "dev:start": "bash scripts/dev.sh",
+    "dev:restart": "pkill -9 -f 'tsx server/index.ts' 2>/dev/null; pkill -9 -f 'server/index.ts' 2>/dev/null; fuser -k 3002/tcp 2>/dev/null; sleep 2 && npm run dev",
     "dev:status": "lsof -i :3002 && echo '✅ Dev running' || echo '❌ Dev not running'",
     "build": "next build && npx tsc server/index.ts --outDir dist --esModuleInterop --skipLibCheck --module commonjs --target ES2020",
     "start": "NODE_ENV=production PORT=3000 node dist/index.js",
@@ -13,7 +14,7 @@
     "migrate": "tsx scripts/migrate-data.ts"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.7",
+    "@ai-sdk/anthropic": "^3.0.9",
     "@ai-sdk/react": "^3.0.12",
     "@prisma/adapter-pg": "^7.2.0",
     "@prisma/client": "^7.2.0",
@@ -25,7 +26,7 @@
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-tabs": "^1.1.13",
     "@tanstack/react-query": "^5.90.14",
-    "ai": "^6.0.12",
+    "ai": "^6.0.19",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -37,7 +38,9 @@
     "pg": "^8.16.3",
     "react": "^18",
     "react-dom": "^18",
+    "react-markdown": "^10.1.0",
     "recharts": "^3.6.0",
+    "remark-gfm": "^4.0.1",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "tailwind-merge": "^3.4.0",

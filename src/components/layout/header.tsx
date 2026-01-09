@@ -24,7 +24,7 @@ export function Header() {
             title={isConnected ? "Connected" : "Disconnected"}
           />
         </Link>
-        <Link href="/settings">
+        <Link href="/settings" className="hidden md:block">
           <Button variant="ghost" size="icon">
             <Settings className="h-5 w-5" />
             <span className="sr-only">Settings</span>

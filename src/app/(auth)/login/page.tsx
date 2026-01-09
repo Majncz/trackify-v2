@@ -44,7 +44,8 @@ export default function LoginPage() {
         router.push("/");
         router.refresh();
       }
-    } catch {
+    } catch (err) {
+      console.error("Login error:", err);
       setError("Something went wrong");
     } finally {
       setLoading(false);

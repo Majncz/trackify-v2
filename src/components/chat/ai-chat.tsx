@@ -1,201 +1,66 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
-import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import { useState } from "react";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import {
-  X,
-  Send,
-  Loader2,
-  Bot,
-  User,
-  Sparkles,
-} from "lucide-react";
+import { PanelRightClose, PanelRightOpen } from "lucide-react";
+import { ChatInterface } from "./chat-interface";
 
 export function AIChat() {
   const [isOpen, setIsOpen] = useState(false);
-  const [input, setInput] = useState("");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const transport = useMemo(
-    () => new DefaultChatTransport({ api: "/api/chat" }),
-    []
-  );
-
-  const { messages, sendMessage, status } = useChat({
-    transport,
-  });
-
-  const isLoading = status === "streaming" || status === "submitted";
-
-  // Scroll to bottom when messages change
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  // Focus input when opened
-  useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 100);
-    }
-  }, [isOpen]);
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!input.trim() || isLoading) return;
-
-    sendMessage({ text: input });
-    setInput("");
+  const pathname = usePathname();
+  
+  // Hide sidebar on /chat page since full chat is already visible
+  if (pathname === "/chat") {
+    return null;
   }
 
   return (
-    <>
-      {/* Floating button */}
+    <div className="hidden md:block">
+      {/* Toggle Button */}
       <Button
-        onClick={() => setIsOpen(true)}
-        className={cn(
-          "fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg z-50",
-          "bg-gradient-to-br from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500",
-          "transition-all duration-300 hover:scale-105",
-          isOpen && "scale-0 opacity-0"
-        )}
+        variant="outline"
         size="icon"
+        onClick={() => setIsOpen(!isOpen)}
+        className="fixed bottom-4 right-4 z-50 h-12 w-12 rounded-full shadow-lg"
       >
-        <Sparkles className="h-6 w-6" />
+        {isOpen ? (
+          <PanelRightClose className="h-5 w-5" />
+        ) : (
+          <PanelRightOpen className="h-5 w-5" />
+        )}
+        <span className="sr-only">
+          {isOpen ? "Close AI Assistant" : "Open AI Assistant"}
+        </span>
       </Button>
 
-      {/* Chat panel */}
-      <div
+      {/* Sidebar */}
+      <aside
         className={cn(
-          "fixed bottom-6 right-6 z-50 transition-all duration-300 ease-out",
-          isOpen
-            ? "opacity-100 translate-y-0"
-            : "opacity-0 translate-y-4 pointer-events-none"
+          "fixed top-14 right-0 h-[calc(100vh-3.5rem)] bg-background border-l shadow-lg transition-transform duration-300 z-40",
+          "w-96",
+          isOpen ? "translate-x-0" : "translate-x-full"
         )}
       >
-        <Card className="w-[400px] h-[600px] flex flex-col shadow-2xl border-2 overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-violet-600 to-indigo-600 text-white">
-            <div className="flex items-center gap-2">
-              <Bot className="h-5 w-5" />
-              <span className="font-semibold">AI Assistant</span>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsOpen(false)}
-              className="h-8 w-8 text-white hover:bg-white/20"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-muted/30">
-            {messages.length === 0 && (
-              <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground">
-                <Sparkles className="h-12 w-12 mb-4 text-violet-500" />
-                <h3 className="font-semibold text-foreground mb-2">
-                  How can I help you?
-                </h3>
-                <p className="text-sm max-w-[280px]">
-                  Try things like:
-                </p>
-                <div className="mt-4 space-y-2 text-sm">
-                  <p className="bg-muted px-3 py-2 rounded-lg">
-                    &quot;Yesterday I worked 3 hours on Membros&quot;
-                  </p>
-                  <p className="bg-muted px-3 py-2 rounded-lg">
-                    &quot;What tasks do I have?&quot;
-                  </p>
-                  <p className="bg-muted px-3 py-2 rounded-lg">
-                    &quot;How much did I work this week?&quot;
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={cn(
-                  "flex gap-3",
-                  message.role === "user" ? "justify-end" : "justify-start"
-                )}
+        <ChatInterface
+          variant="sidebar"
+          showTabBar={true}
+          header={(
+            <div className="flex items-center justify-between px-4 py-3">
+              <span className="font-medium">AI Assistant</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsOpen(false)}
               >
-                {message.role === "assistant" && (
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center flex-shrink-0">
-                    <Bot className="h-4 w-4 text-white" />
-                  </div>
-                )}
-
-                <div
-                  className={cn(
-                    "max-w-[80%] rounded-2xl px-4 py-2",
-                    message.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted"
-                  )}
-                >
-                  <p className="text-sm whitespace-pre-wrap">
-                    {message.parts
-                      ?.filter((p) => p.type === "text")
-                      .map((p) => (p as { type: "text"; text: string }).text)
-                      .join("") || ""}
-                  </p>
-                </div>
-
-                {message.role === "user" && (
-                  <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                    <User className="h-4 w-4 text-primary-foreground" />
-                  </div>
-                )}
-              </div>
-            ))}
-
-            {isLoading && (
-              <div className="flex gap-3 justify-start">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center flex-shrink-0">
-                  <Bot className="h-4 w-4 text-white" />
-                </div>
-                <div className="bg-muted rounded-2xl px-4 py-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                </div>
-              </div>
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Input */}
-          <form
-            onSubmit={handleSubmit}
-            className="p-4 border-t flex gap-2 bg-background"
-          >
-            <Input
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Type a message..."
-              disabled={isLoading}
-              className="flex-1"
-            />
-            <Button
-              type="submit"
-              size="icon"
-              disabled={isLoading || !input.trim()}
-              className="bg-gradient-to-br from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500"
-            >
-              <Send className="h-4 w-4" />
-            </Button>
-          </form>
-        </Card>
-      </div>
-    </>
+                <PanelRightClose className="h-5 w-5" />
+                <span className="sr-only">Close sidebar</span>
+              </Button>
+            </div>
+          )}
+        />
+      </aside>
+    </div>
   );
 }
