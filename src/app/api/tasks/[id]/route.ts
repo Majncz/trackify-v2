@@ -110,11 +110,19 @@ export async function DELETE(
     return NextResponse.json({ error: "Task not found" }, { status: 404 });
   }
 
+  // Stop any active timer for this task before hiding it
+  await prisma.activeTimer.deleteMany({
+    where: {
+      userId: session.user.id,
+      taskId: id,
+    },
+  });
+
   // Soft delete - hide the task instead of deleting
   await prisma.task.update({
     where: { id },
     data: { hidden: true },
   });
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, taskHidden: true });
 }

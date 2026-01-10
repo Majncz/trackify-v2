@@ -108,6 +108,8 @@ export function useTasks() {
     },
     onSuccess: (id) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      // Notify server to stop any running timer for this task
+      emit("task:hidden", id);
       emit("task:deleted", id);
     },
   });

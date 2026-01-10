@@ -30,8 +30,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Reset link has expired" }, { status: 400 });
     }
 
-    // Hash new password and update user
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // Hash new password and update user (using 12 rounds to match registration)
+    const hashedPassword = await bcrypt.hash(password, 12);
 
     await prisma.user.update({
       where: { id: resetRecord.userId },

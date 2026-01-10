@@ -2,6 +2,7 @@ import { createServer } from "http";
 import { parse } from "url";
 import next from "next";
 import { Server as SocketIOServer } from "socket.io";
+import { prisma } from "../src/lib/prisma";
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "0.0.0.0";
@@ -16,7 +17,42 @@ interface ActiveTimer {
   socketIds: Set<string>;
 }
 
-app.prepare().then(() => {
+async function loadActiveTimers(): Promise<Map<string, ActiveTimer>> {
+  const timers = await prisma.activeTimer.findMany({
+    include: {
+      task: { select: { hidden: true } },
+    },
+  });
+  const map = new Map<string, ActiveTimer>();
+  const orphanedTimerIds: string[] = [];
+
+  for (const timer of timers) {
+    // Only clean up timers for hidden tasks
+    if (timer.task.hidden) {
+      orphanedTimerIds.push(timer.id);
+      console.log(`Cleaning up timer for hidden task (user: ${timer.userId})`);
+      continue;
+    }
+
+    map.set(timer.userId, {
+      taskId: timer.taskId,
+      startTime: timer.startTime.getTime(),
+      socketIds: new Set(),
+    });
+  }
+
+  // Clean up orphaned timers from DB
+  if (orphanedTimerIds.length > 0) {
+    await prisma.activeTimer.deleteMany({
+      where: { id: { in: orphanedTimerIds } },
+    });
+    console.log(`Cleaned up ${orphanedTimerIds.length} orphaned timer(s)`);
+  }
+
+  return map;
+}
+
+app.prepare().then(async () => {
   const httpServer = createServer((req, res) => {
     const parsedUrl = parse(req.url!, true);
     handle(req, res, parsedUrl);
@@ -29,8 +65,9 @@ app.prepare().then(() => {
     },
   });
 
-  // Store active timers per user
-  const activeTimers = new Map<string, ActiveTimer>();
+  // Store active timers per user - load from DB on startup
+  const activeTimers = await loadActiveTimers();
+  console.log(`Loaded ${activeTimers.size} active timer(s) from database`);
 
   io.on("connection", (socket) => {
     console.log("Client connected:", socket.id);
@@ -57,33 +94,76 @@ app.prepare().then(() => {
       }
     });
 
-    socket.on("timer:start", (data: { taskId: string }) => {
+    socket.on("timer:start", async (data: { taskId: string }) => {
       if (!userId) return;
 
       const startTime = Date.now();
-      activeTimers.set(userId, {
-        taskId: data.taskId,
-        startTime,
-        socketIds: new Set([socket.id]),
-      });
 
-      // Broadcast to all user's devices
-      io.to(`user:${userId}`).emit("timer:started", {
-        taskId: data.taskId,
-        startTime,
-      });
+      try {
+        // Persist to DB first - only update memory if successful
+        await prisma.activeTimer.upsert({
+          where: { userId },
+          create: {
+            userId,
+            taskId: data.taskId,
+            startTime: new Date(startTime),
+          },
+          update: {
+            taskId: data.taskId,
+            startTime: new Date(startTime),
+          },
+        });
+
+        // Only update in-memory state after successful DB write
+        activeTimers.set(userId, {
+          taskId: data.taskId,
+          startTime,
+          socketIds: new Set([socket.id]),
+        });
+
+        // Broadcast to all user's devices
+        io.to(`user:${userId}`).emit("timer:started", {
+          taskId: data.taskId,
+          startTime,
+        });
+      } catch (error) {
+        console.error(`Failed to start timer for user ${userId}:`, error);
+        // Notify client of failure
+        socket.emit("timer:error", {
+          action: "start",
+          message: "Failed to start timer. Please try again.",
+        });
+      }
     });
 
-    socket.on("timer:stop", (data: { taskId: string; duration: number }) => {
+    socket.on("timer:stop", async (data: { taskId: string; duration: number }) => {
       if (!userId) return;
 
-      activeTimers.delete(userId);
+      try {
+        // Remove from DB first
+        await prisma.activeTimer.delete({
+          where: { userId },
+        }).catch(() => {
+          // Ignore if not found - may have been cleaned up
+        });
 
-      // Broadcast stop to all user's devices
-      io.to(`user:${userId}`).emit("timer:stopped", {
-        taskId: data.taskId,
-        duration: data.duration,
-      });
+        // Only update in-memory state after successful DB operation
+        activeTimers.delete(userId);
+
+        // Broadcast stop to all user's devices
+        io.to(`user:${userId}`).emit("timer:stopped", {
+          taskId: data.taskId,
+          duration: data.duration,
+        });
+      } catch (error) {
+        console.error(`Failed to stop timer for user ${userId}:`, error);
+        // Still try to broadcast stop to prevent UI being stuck
+        activeTimers.delete(userId);
+        io.to(`user:${userId}`).emit("timer:stopped", {
+          taskId: data.taskId,
+          duration: data.duration,
+        });
+      }
     });
 
     socket.on("task:created", (task) => {
@@ -98,6 +178,13 @@ app.prepare().then(() => {
 
     socket.on("task:deleted", (taskId: string) => {
       if (!userId) return;
+      
+      // Clear in-memory timer if task is being deleted
+      const timer = activeTimers.get(userId);
+      if (timer && timer.taskId === taskId) {
+        activeTimers.delete(userId);
+      }
+      
       io.to(`user:${userId}`).emit("task:deleted", taskId);
     });
 
