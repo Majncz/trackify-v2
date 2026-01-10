@@ -39,7 +39,7 @@ echo "   Pushed to origin/master"
 # Step 3: Stop existing production server
 echo ""
 echo "🛑 Step 3: Stopping production server..."
-pkill -f 'node dist/index.js' 2>/dev/null || true
+pkill -f 'node dist/server/index.js' 2>/dev/null || true
 sleep 2
 
 # Step 4: Pull latest changes in prod directory

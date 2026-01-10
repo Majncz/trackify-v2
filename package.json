@@ -8,7 +8,7 @@
     "dev:restart": "pkill -9 -f 'tsx server/index.ts' 2>/dev/null; pkill -9 -f 'server/index.ts' 2>/dev/null; fuser -k 3002/tcp 2>/dev/null; sleep 2 && npm run dev",
     "dev:status": "lsof -i :3002 && echo '✅ Dev running' || echo '❌ Dev not running'",
     "build": "next build && npx tsc server/index.ts --outDir dist --esModuleInterop --skipLibCheck --module commonjs --target ES2020",
-    "start": "NODE_ENV=production PORT=3000 node dist/index.js",
+    "start": "NODE_ENV=production PORT=3000 node dist/server/index.js",
     "deploy": "bash scripts/deploy.sh",
     "lint": "next lint",
     "migrate": "tsx scripts/migrate-data.ts"
