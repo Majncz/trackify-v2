@@ -111,13 +111,13 @@ async function main() {
 
       console.log("Verifying task totals are unchanged:");
       let allMatch = true;
-      for (const [taskId, timeBefore] of taskTimeBefore) {
+      Array.from(taskTimeBefore.entries()).forEach(([taskId, timeBefore]) => {
         const timeAfter = taskTimeAfter.get(taskId) || 0;
         if (timeBefore !== timeAfter) {
           console.log(`  ❌ Task ${taskId}: ${timeBefore}ms -> ${timeAfter}ms`);
           allMatch = false;
         }
-      }
+      });
       
       if (allMatch) {
         console.log("  ✅ All task totals match!\n");
