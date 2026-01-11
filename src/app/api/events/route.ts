@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { validateNoOverlap, OverlapError } from "@/lib/event-overlap";
 import { z } from "zod";
 
 const eventSchema = z.object({
   taskId: z.string().uuid(),
   name: z.string().default("Time entry"),
   duration: z.number().int().positive(),
+  createdAt: z.string().datetime().optional(), // ISO timestamp for when the event started
 });
 
 export async function GET(request: NextRequest) {
@@ -46,7 +48,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { taskId, name, duration } = eventSchema.parse(body);
+    const { taskId, name, duration, createdAt } = eventSchema.parse(body);
 
     // Verify task belongs to user
     const task = await prisma.task.findFirst({
@@ -60,11 +62,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
 
+    // Determine event start time
+    const eventStart = createdAt ? new Date(createdAt) : new Date();
+
+    // Check for overlapping events
+    // Skip running timer check - this endpoint is called by the timer after it stops,
+    // so the ActiveTimer record may still briefly exist due to race condition
+    await validateNoOverlap({
+      userId: session.user.id,
+      eventStart,
+      duration,
+      skipRunningTimerCheck: true,
+    });
+
     const event = await prisma.event.create({
       data: {
         taskId,
         name,
         duration,
+        createdAt: eventStart,
       },
       include: {
         task: {
@@ -79,6 +95,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: error.issues[0].message },
         { status: 400 }
+      );
+    }
+    if (error instanceof OverlapError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 409 }
       );
     }
     console.error("Create event error:", error);

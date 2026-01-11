@@ -114,13 +114,17 @@ export function useTimer() {
       taskId: string;
       name: string;
       duration: number;
+      createdAt: string; // ISO timestamp of when the timer started
     }) => {
       const res = await fetch("/api/events", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      if (!res.ok) throw new Error("Failed to create event");
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to create event");
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -141,11 +145,12 @@ export function useTimer() {
       duration,
     });
 
-    // Create event in database
+    // Create event in database with the actual start time
     await createEvent.mutateAsync({
       taskId: currentState.taskId,
       name: "Time entry",
       duration,
+      createdAt: new Date(currentState.startTime).toISOString(),
     });
 
     setState({

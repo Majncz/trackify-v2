@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { validateNoOverlap, OverlapError } from "@/lib/event-overlap";
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -39,12 +40,28 @@ export async function POST(req: Request) {
           break;
         }
 
+        // Check for overlapping events
+        const eventStart = createdAt ? new Date(createdAt) : new Date();
+        try {
+          await validateNoOverlap({
+            userId,
+            eventStart,
+            duration,
+          });
+        } catch (err) {
+          if (err instanceof OverlapError) {
+            result = { success: false, error: err.message };
+            break;
+          }
+          throw err;
+        }
+
         const event = await prisma.event.create({
           data: {
             taskId,
             name: name || "Time entry",
             duration,
-            ...(createdAt && { createdAt: new Date(createdAt) }),
+            createdAt: eventStart,
           },
         });
 
