@@ -21,6 +21,22 @@ Persistent log for tricky dev-environment outages. Update this file whenever you
 
 ---
 
+## 2026-01-11 – Dev server not running (3rd occurrence)
+**Symptom**: `https://dev.time.ranajakub.com/` not loading.
+
+**Root cause**: Dev server process was not running. No process listening on port 3002. The previous `nohup` session had terminated at some point.
+
+**Commands run**:
+- `ps aux | grep trackify` – no processes found.
+- `cd /root/trackify && npm run dev` – started dev server in background.
+- `curl http://localhost:3002/login` – verified HTTP 200.
+
+**Resolution**: Restarted dev server. Site now responds.
+
+**Notes**: This is the **3rd time in 2 days** the dev server has gone down. The suggested fix (pm2/systemd) hasn't been implemented yet. This should be prioritized to prevent recurring manual restarts.
+
+---
+
 ## 2026-01-10 – Dev subdomain 502 / white page
 **Symptom**: `https://dev.time.ranajakub.com/` showed a blank screen and Caddy returned 502s.
 
