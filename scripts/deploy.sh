@@ -39,7 +39,7 @@ echo "   Pushed to origin/master"
 # Step 3: Stop existing production server
 echo ""
 echo "🛑 Step 3: Stopping production server..."
-pkill -f 'node dist/server/index.js' 2>/dev/null || true
+pm2 stop trackify-prod 2>/dev/null || true
 sleep 2
 
 # Step 4: Pull latest changes in prod directory
@@ -69,8 +69,8 @@ npm run build
 # Step 8: Start production server
 echo ""
 echo "🚀 Step 8: Starting production server..."
-NEXTAUTH_URL="https://time.ranajakub.com" nohup npm run start > "$LOG_FILE" 2>&1 &
-SERVER_PID=$!
+pm2 start trackify-prod 2>/dev/null || pm2 restart trackify-prod
+SERVER_PID=$(pm2 pid trackify-prod)
 
 # Step 9: Health check
 echo ""

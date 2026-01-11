@@ -21,19 +21,27 @@ Persistent log for tricky dev-environment outages. Update this file whenever you
 
 ---
 
-## 2026-01-11 – Dev server not running (3rd occurrence)
+## 2026-01-11 – Dev server not running (3rd occurrence) + PM2 setup
 **Symptom**: `https://dev.time.ranajakub.com/` not loading.
 
 **Root cause**: Dev server process was not running. No process listening on port 3002. The previous `nohup` session had terminated at some point.
 
 **Commands run**:
 - `ps aux | grep trackify` – no processes found.
-- `cd /root/trackify && npm run dev` – started dev server in background.
-- `curl http://localhost:3002/login` – verified HTTP 200.
+- Created `/root/trackify/ecosystem.config.cjs` with pm2 config for both dev and prod.
+- `pm2 start ecosystem.config.cjs` – started both servers.
+- `pm2 save` – saved process list for auto-restart on reboot.
+- Updated `scripts/deploy.sh` to use pm2 instead of nohup.
 
-**Resolution**: Restarted dev server. Site now responds.
+**Resolution**: 
+- Both dev and prod servers now managed by **pm2** with auto-restart.
+- Logs at `/var/log/trackify-dev-*.log` and `/var/log/trackify-prod-*.log`.
+- Servers will auto-restart on crash and on system reboot.
 
-**Notes**: This is the **3rd time in 2 days** the dev server has gone down. The suggested fix (pm2/systemd) hasn't been implemented yet. This should be prioritized to prevent recurring manual restarts.
+**Useful commands**:
+- `pm2 status` – check server status
+- `pm2 logs trackify-dev` – view dev logs
+- `pm2 restart trackify-dev` – restart dev server
 
 ---
 
