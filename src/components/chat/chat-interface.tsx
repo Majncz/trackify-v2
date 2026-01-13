@@ -5,6 +5,7 @@ import { DefaultChatTransport } from "ai";
 import { useRef, useEffect, useState, ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ChatTabBar } from "@/components/chat/chat-tab-bar";
@@ -27,9 +28,10 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
   createEvent: "Log time to a task",
   getStats: "Get time statistics",
   deleteEvent: "Delete a time entry",
+  updateEvent: "Update a time entry",
 };
 
-export const WRITE_TOOLS = ["createTask", "createEvent", "deleteEvent"];
+export const WRITE_TOOLS = ["createTask", "createEvent", "deleteEvent", "updateEvent"];
 
 // Helper functions (outside component to avoid recreation)
 function formatToolName(name: string): string {
@@ -68,6 +70,12 @@ function getToolDescription(name: string, args: Record<string, unknown>): string
   if (name === "deleteEvent") {
     return `Delete time entry`;
   }
+  if (name === "updateEvent") {
+    const changes: string[] = [];
+    if (args.newDate) changes.push(`move to ${formatDate(args.newDate as string)}`);
+    if (args.newDuration) changes.push(`change duration to ${formatDuration(args.newDuration as number)}`);
+    return changes.length > 0 ? changes.join(" and ") : "Update time entry";
+  }
   return Object.entries(args)
     .filter(([k]) => !k.includes("Id"))
     .map(([k, v]) => {
@@ -97,6 +105,7 @@ interface ChatInterfaceProps {
 
 export function ChatInterface({ variant = "page", showTabBar = true, header }: ChatInterfaceProps) {
   const isSidebar = variant === "sidebar";
+  const queryClient = useQueryClient();
   
   const [input, setInput] = useState("");
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -119,6 +128,7 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
         if (options?.body) {
           const body = JSON.parse(options.body as string);
           body.conversationId = conversationIdRef.current;
+          body.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
           return fetch(url, {
             ...options,
             body: JSON.stringify(body),
@@ -150,6 +160,8 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
         if (res.ok) {
           const dbMessages = await res.json();
           if (cancelled) return;
+          // Don't clear messages if DB has none - preserves optimistic UI messages
+          if (dbMessages.length === 0) return;
           const uiMessages = dbMessages.map((msg: { id: string; role: string; content: string; parts?: unknown[] }) => ({
             id: msg.id,
             role: msg.role,
@@ -193,16 +205,36 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
       const response = await fetch("/api/chat/execute-tool", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ toolName, args }),
+        body: JSON.stringify({ toolName, args, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
       });
 
       const result = await response.json();
+      
+      // Check if the tool execution itself failed (success: false)
+      if (result.success === false) {
+        setPendingApprovals((prev) => ({ ...prev, [toolCallId]: "rejected" }));
+        // Pass the error to the AI so it can inform the user
+        await addToolOutput({ toolCallId, tool: toolName, output: result });
+        sendMessage();
+        return;
+      }
+      
       setPendingApprovals((prev) => ({ ...prev, [toolCallId]: "approved" }));
       await addToolOutput({ toolCallId, tool: toolName, output: result });
+      
+      // Invalidate queries after successful write operations to refresh frontend data
+      if (WRITE_TOOLS.includes(toolName)) {
+        queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        queryClient.invalidateQueries({ queryKey: ["stats"] });
+        queryClient.invalidateQueries({ queryKey: ["events"] });
+      }
+      
       sendMessage();
     } catch (err) {
       console.error("Tool execution failed:", err);
       setPendingApprovals((prev) => ({ ...prev, [toolCallId]: "rejected" }));
+      await addToolOutput({ toolCallId, tool: toolName, output: { success: false, error: "Network error - please try again" } });
+      sendMessage();
     }
   }
 
@@ -276,7 +308,7 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
       )}
 
       {/* Messages */}
-      <div className={cn("flex-1 overflow-y-auto", spacing, isSidebar ? "pb-4" : "pb-24 md:pb-4")}>
+      <div className={cn("flex-1 overflow-y-auto", spacing, isSidebar ? "px-2 pb-4" : "pb-24 md:pb-4")}>
         {messages.length === 0 && !error && (
           <div className={cn(
             "flex flex-col items-center justify-center text-center text-muted-foreground",

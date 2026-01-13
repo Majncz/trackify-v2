@@ -1,16 +1,29 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { toZonedTime, fromZonedTime } from "date-fns-tz";
 import { startOfDay, endOfDay } from "date-fns";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await auth();
 
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const today = new Date();
+  // Get timezone from query param, default to UTC
+  const { searchParams } = new URL(request.url);
+  const timezone = searchParams.get("timezone") || "UTC";
+
+  // Get current time in user's timezone, then find start/end of day
+  const now = new Date();
+  const nowInUserTz = toZonedTime(now, timezone);
+  const todayStartInUserTz = startOfDay(nowInUserTz);
+  const todayEndInUserTz = endOfDay(nowInUserTz);
+  
+  // Convert back to UTC for database comparison
+  const todayStartUtc = fromZonedTime(todayStartInUserTz, timezone);
+  const todayEndUtc = fromZonedTime(todayEndInUserTz, timezone);
 
   // Get all tasks with their events
   const tasks = await prisma.task.findMany({
@@ -28,7 +41,7 @@ export async function GET() {
     const todayTime = task.events
       .filter(
         (e) =>
-          e.createdAt >= startOfDay(today) && e.createdAt <= endOfDay(today)
+          e.createdAt >= todayStartUtc && e.createdAt <= todayEndUtc
       )
       .reduce((sum, e) => sum + e.duration, 0);
 

@@ -22,6 +22,20 @@ interface TimerStateData {
   running: boolean;
 }
 
+interface Event {
+  id: string;
+  taskId: string;
+  name: string;
+  duration: number;
+  createdAt: string;
+}
+
+interface Task {
+  id: string;
+  name: string;
+  events: Event[];
+}
+
 export function useTimer() {
   const [state, setState] = useState<TimerState>({
     taskId: null,
@@ -127,45 +141,85 @@ export function useTimer() {
       }
       return res.json();
     },
-    onSuccess: () => {
+    onMutate: async (newEvent) => {
+      // Cancel outgoing refetches so they don't overwrite our optimistic update
+      await queryClient.cancelQueries({ queryKey: ["tasks"] });
+      await queryClient.cancelQueries({ queryKey: ["stats"] });
+
+      // Snapshot previous values
+      const previousTasks = queryClient.getQueryData(["tasks"]);
+
+      // Optimistically update tasks cache with new event
+      queryClient.setQueryData(["tasks"], (old: Task[] | undefined) => {
+        if (!old) return old;
+        return old.map((task) => {
+          if (task.id === newEvent.taskId) {
+            return {
+              ...task,
+              events: [
+                ...task.events,
+                {
+                  id: `temp-${Date.now()}`,
+                  taskId: newEvent.taskId,
+                  name: newEvent.name,
+                  duration: newEvent.duration,
+                  createdAt: newEvent.createdAt,
+                },
+              ],
+            };
+          }
+          return task;
+        });
+      });
+
+      return { previousTasks };
+    },
+    onError: (_err, _newEvent, context) => {
+      // Roll back on error
+      if (context?.previousTasks) {
+        queryClient.setQueryData(["tasks"], context.previousTasks);
+      }
+    },
+    onSettled: () => {
+      // Sync with server after mutation completes
       queryClient.invalidateQueries({ queryKey: ["events"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
   });
 
-  const stopTimer = useCallback(async () => {
+  const stopTimer = useCallback(() => {
     const currentState = stateRef.current;
     if (!currentState.taskId || !currentState.startTime) return;
 
     const duration = Date.now() - currentState.startTime;
+    const taskId = currentState.taskId;
+    const startTime = currentState.startTime;
 
-    emit("timer:stop", {
-      taskId: currentState.taskId,
-      duration,
-    });
-
-    // Create event in database with the actual start time
-    await createEvent.mutateAsync({
-      taskId: currentState.taskId,
-      name: "Time entry",
-      duration,
-      createdAt: new Date(currentState.startTime).toISOString(),
-    });
-
+    // IMMEDIATELY update UI - user sees instant response
     setState({
       taskId: null,
       startTime: null,
       elapsed: 0,
       running: false,
     });
+
+    emit("timer:stop", { taskId, duration });
+
+    // Save to database in background (don't block UI)
+    createEvent.mutate({
+      taskId,
+      name: "Time entry",
+      duration,
+      createdAt: new Date(startTime).toISOString(),
+    });
   }, [emit, createEvent]);
 
   const startTimer = useCallback(
-    async (taskId: string) => {
+    (taskId: string) => {
       // If a timer is already running, stop it first (saves the event)
       if (stateRef.current.running && stateRef.current.taskId) {
-        await stopTimer();
+        stopTimer();
       }
 
       const startTime = Date.now();

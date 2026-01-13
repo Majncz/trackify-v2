@@ -3,6 +3,8 @@ import { streamText, tool, stepCountIs, convertToModelMessages } from "ai";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { toZonedTime, fromZonedTime } from "date-fns-tz";
+import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns";
 
 // Allow streaming responses up to 60 seconds
 export const maxDuration = 60;
@@ -18,18 +20,19 @@ function formatDuration(ms: number): string {
   return `${minutes}m`;
 }
 
-// Helper to format date to readable string
-function formatDate(date: Date | null): string | null {
+// Helper to format date to readable string in user's timezone
+function formatDate(date: Date | null, timezone: string): string | null {
   if (!date) return null;
   return date.toLocaleDateString("en-US", { 
     month: "short", 
     day: "numeric",
-    year: date.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined 
+    year: date.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
+    timeZone: timezone,
   });
 }
 
 // Create tool definitions with execute functions
-function createTools(userId: string) {
+function createTools(userId: string, timezone: string) {
   return {
     listTasks: tool({
       description: "Get all tasks with their all-time total hours and last activity date. For time-filtered statistics, use getStats instead.",
@@ -51,7 +54,7 @@ function createTools(userId: string) {
             id: t.id,
             name: t.name,
             totalTime: formatDuration(totalMs),
-            lastActivity: formatDate(lastEvent?.createdAt || null),
+            lastActivity: formatDate(lastEvent?.createdAt || null, timezone),
           };
         });
       },
@@ -117,13 +120,17 @@ function createTools(userId: string) {
           taskFilter = { name: { contains: taskName, mode: "insensitive" } };
         }
 
-        // Build date filter
+        // Build date filter with timezone awareness
         const dateFilter: { gte?: Date; lte?: Date } = {};
-        if (startDate) dateFilter.gte = new Date(startDate);
+        if (startDate) {
+          // Parse as start of day in user's timezone
+          const startInUserTz = new Date(startDate + "T00:00:00");
+          dateFilter.gte = fromZonedTime(startInUserTz, timezone);
+        }
         if (endDate) {
-          const end = new Date(endDate);
-          end.setHours(23, 59, 59, 999);
-          dateFilter.lte = end;
+          // Parse as end of day in user's timezone
+          const endInUserTz = new Date(endDate + "T23:59:59.999");
+          dateFilter.lte = fromZonedTime(endInUserTz, timezone);
         }
 
         const events = await prisma.event.findMany({
@@ -150,8 +157,8 @@ function createTools(userId: string) {
             duration: formatDuration(e.duration),
             durationMs: e.duration,
             name: e.name || null,
-            date: e.createdAt.toISOString().split("T")[0],
-            time: e.createdAt.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+            date: e.createdAt.toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: timezone }),
+            time: e.createdAt.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: timezone }),
           })),
         };
       },
@@ -189,62 +196,83 @@ function createTools(userId: string) {
           .describe("Custom end date in ISO format (e.g., '2025-12-31'). Defaults to now if not specified."),
       }),
       execute: async ({ period, startDate: startDateStr, endDate: endDateStr }) => {
-        let startDate: Date;
-        let endDate: Date = new Date();
+        let startDateUtc: Date;
+        let endDateUtc: Date;
         let periodLabel: string;
 
         const now = new Date();
+        const nowInUserTz = toZonedTime(now, timezone);
         
         // If custom dates provided, use them
         if (startDateStr) {
-          startDate = new Date(startDateStr);
+          // Parse as date in user's timezone
+          const startInUserTz = new Date(startDateStr + "T00:00:00");
+          startDateUtc = fromZonedTime(startInUserTz, timezone);
+          
           if (endDateStr) {
-            endDate = new Date(endDateStr);
-            // Set to end of day
-            endDate.setHours(23, 59, 59, 999);
+            const endInUserTz = new Date(endDateStr + "T23:59:59.999");
+            endDateUtc = fromZonedTime(endInUserTz, timezone);
+          } else {
+            endDateUtc = now;
           }
           
           // Generate period label from dates
-          const startYear = startDate.getFullYear();
-          const endYear = endDate.getFullYear();
-          const startMonth = startDate.toLocaleString("en-US", { month: "short" });
-          const endMonth = endDate.toLocaleString("en-US", { month: "short" });
+          const startYear = startInUserTz.getFullYear();
+          const endYear = endDateStr ? new Date(endDateStr).getFullYear() : nowInUserTz.getFullYear();
+          const startMonth = startInUserTz.toLocaleString("en-US", { month: "short" });
+          const endMonth = endDateStr 
+            ? new Date(endDateStr).toLocaleString("en-US", { month: "short" })
+            : nowInUserTz.toLocaleString("en-US", { month: "short" });
           
-          if (startYear === endYear && startDate.getMonth() === 0 && startDate.getDate() === 1 && 
-              endDate.getMonth() === 11 && endDate.getDate() === 31) {
+          if (startYear === endYear && startInUserTz.getMonth() === 0 && startInUserTz.getDate() === 1 && 
+              endDateStr && new Date(endDateStr).getMonth() === 11 && new Date(endDateStr).getDate() === 31) {
             // Full year
             periodLabel = `${startYear}`;
           } else if (startYear === endYear) {
-            periodLabel = `${startMonth} ${startDate.getDate()} - ${endMonth} ${endDate.getDate()}, ${startYear}`;
+            periodLabel = `${startMonth} ${startInUserTz.getDate()} - ${endMonth} ${endDateStr ? new Date(endDateStr).getDate() : nowInUserTz.getDate()}, ${startYear}`;
           } else {
-            periodLabel = `${startMonth} ${startDate.getDate()}, ${startYear} - ${endMonth} ${endDate.getDate()}, ${endYear}`;
+            periodLabel = `${startMonth} ${startInUserTz.getDate()}, ${startYear} - ${endMonth} ${endDateStr ? new Date(endDateStr).getDate() : nowInUserTz.getDate()}, ${endYear}`;
           }
         } else {
-          // Use preset period
+          // Use preset period with timezone-aware calculations
           const p = period || "all";
           periodLabel = p;
           
           switch (p) {
-            case "today":
-              startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-              break;
-            case "week": {
-              const dayOfWeek = now.getDay();
-              const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-              startDate = new Date(now.getFullYear(), now.getMonth(), diff);
+            case "today": {
+              const todayStartInUserTz = startOfDay(nowInUserTz);
+              const todayEndInUserTz = endOfDay(nowInUserTz);
+              startDateUtc = fromZonedTime(todayStartInUserTz, timezone);
+              endDateUtc = fromZonedTime(todayEndInUserTz, timezone);
               break;
             }
-            case "month":
-              startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-              periodLabel = now.toLocaleString("en-US", { month: "long", year: "numeric" });
+            case "week": {
+              const weekStartInUserTz = startOfWeek(nowInUserTz, { weekStartsOn: 1 });
+              const weekEndInUserTz = endOfWeek(nowInUserTz, { weekStartsOn: 1 });
+              startDateUtc = fromZonedTime(weekStartInUserTz, timezone);
+              endDateUtc = fromZonedTime(weekEndInUserTz, timezone);
               break;
-            case "year":
-              startDate = new Date(now.getFullYear(), 0, 1);
-              periodLabel = `${now.getFullYear()}`;
+            }
+            case "month": {
+              const monthStartInUserTz = startOfMonth(nowInUserTz);
+              const monthEndInUserTz = endOfMonth(nowInUserTz);
+              startDateUtc = fromZonedTime(monthStartInUserTz, timezone);
+              endDateUtc = fromZonedTime(monthEndInUserTz, timezone);
+              periodLabel = nowInUserTz.toLocaleString("en-US", { month: "long", year: "numeric" });
               break;
+            }
+            case "year": {
+              const yearStartInUserTz = startOfYear(nowInUserTz);
+              const yearEndInUserTz = endOfYear(nowInUserTz);
+              startDateUtc = fromZonedTime(yearStartInUserTz, timezone);
+              endDateUtc = fromZonedTime(yearEndInUserTz, timezone);
+              periodLabel = `${nowInUserTz.getFullYear()}`;
+              break;
+            }
             case "all":
             default:
-              startDate = new Date(0);
+              startDateUtc = new Date(0);
+              endDateUtc = now;
               periodLabel = "all-time";
               break;
           }
@@ -256,8 +284,8 @@ function createTools(userId: string) {
             events: {
               where: { 
                 createdAt: { 
-                  gte: startDate,
-                  lte: endDate,
+                  gte: startDateUtc,
+                  lte: endDateUtc,
                 } 
               },
             },
@@ -278,8 +306,8 @@ function createTools(userId: string) {
 
         return {
           period: periodLabel,
-          startDate: startDate.toISOString().split("T")[0],
-          endDate: endDate.toISOString().split("T")[0],
+          startDate: startDateUtc.toISOString().split("T")[0],
+          endDate: endDateUtc.toISOString().split("T")[0],
           totalTime: `${totalHours}h ${totalMinutes}m`,
           taskBreakdown: taskStats.map((t) => ({
             name: t.name,
@@ -296,6 +324,16 @@ function createTools(userId: string) {
       }),
       // No execute - requires approval
     }),
+
+    updateEvent: tool({
+      description: "Update a time entry - move it to a different date/time and/or change its duration. Use listEvents first to find the event ID.",
+      inputSchema: z.object({
+        eventId: z.string().describe("The event ID to update"),
+        newDate: z.string().optional().describe("New date/time in ISO format (e.g., '2025-01-15T14:00:00'). If only date is needed, use format '2025-01-15'."),
+        newDuration: z.number().optional().describe("New duration in milliseconds (e.g., 3600000 for 1 hour)"),
+      }),
+      // No execute - requires approval
+    }),
   };
 }
 
@@ -308,7 +346,7 @@ export async function POST(req: Request) {
 
   const userId = session.user.id;
   const body = await req.json();
-  const { messages, conversationId } = body;
+  const { messages, conversationId, timezone = "UTC" } = body;
 
   const conversation = conversationId ? await prisma.conversation.findFirst({
     where: { id: conversationId, userId },
@@ -354,17 +392,22 @@ export async function POST(req: Request) {
   }
 
   // Create tools with execute functions
-  const tools = createTools(userId);
+  const tools = createTools(userId, timezone);
 
   // Convert UI messages to model messages format
   const modelMessages = await convertToModelMessages(messages);
+
+  // Get current date in user's timezone for the system prompt
+  const nowForPrompt = new Date();
+  const todayInUserTz = toZonedTime(nowForPrompt, timezone);
 
   const result = streamText({
     model: anthropic("claude-sonnet-4-20250514"),
     system: `You are an AI assistant for Trackify, a time tracking application.
 
-Today: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.
-Current year: ${new Date().getFullYear()}.
+Today: ${todayInUserTz.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.
+Current year: ${todayInUserTz.getFullYear()}.
+User's timezone: ${timezone}.
 
 **Using getStats for time statistics:**
 Use presets for common periods:
@@ -385,10 +428,17 @@ Use custom date ranges for specific periods:
 - Duration in milliseconds (1h = 3600000ms), dates in ISO format
 - Use findTask first to get taskId, then createEvent
 
-**When finding/deleting events:**
+**When finding/deleting/updating events:**
 - Use listEvents with filters: taskName, date range, limit (default 10)
 - Show event ID, task, duration, date in a table
 - To delete, use deleteEvent with the event ID
+- To move or change duration, use updateEvent with the event ID
+
+**When updating events (moving or changing duration):**
+- Use listEvents first to find the event ID
+- Use updateEvent with eventId and optionally newDate (ISO format) and/or newDuration (milliseconds)
+- Example: move "yesterday's entry to today" → updateEvent with newDate: "2025-01-13T14:00:00"
+- Example: change 2h to 3h → updateEvent with newDuration: 10800000
 
 Use markdown: **bold** for emphasis, tables for data, keep responses concise.`,
     messages: modelMessages,

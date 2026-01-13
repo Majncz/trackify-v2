@@ -74,9 +74,12 @@ export function TaskItem({
           <h3 className="font-medium truncate">{task.name}</h3>
         </div>
 
-        <p className="text-sm text-muted-foreground mb-3">
-              Total: {formatDurationWords(totalTime)}
-            </p>
+        <p className={cn(
+          "text-sm text-muted-foreground mb-3",
+          isLoading && "animate-pulse opacity-70"
+        )}>
+          Total: {formatDurationWords(totalTime)}
+        </p>
 
         <div className="mt-auto">
             {isActive ? (

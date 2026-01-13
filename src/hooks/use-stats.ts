@@ -15,11 +15,16 @@ interface Stats {
   todayTotal: number;
 }
 
+function getUserTimezone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
 export function useStats() {
   return useQuery<Stats>({
     queryKey: ["stats"],
     queryFn: async () => {
-      const res = await fetch("/api/stats");
+      const timezone = getUserTimezone();
+      const res = await fetch(`/api/stats?timezone=${encodeURIComponent(timezone)}`);
       if (!res.ok) throw new Error("Failed to fetch stats");
       return res.json();
     },

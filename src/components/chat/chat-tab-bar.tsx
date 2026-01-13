@@ -85,7 +85,7 @@ export function ChatTabBar({ currentConversationId, onConversationChange, refres
 
   return (
     <div className="border-b bg-background mb-4">
-      <div ref={scrollRef} className="flex items-center overflow-x-auto px-1 py-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+      <div ref={scrollRef} className="flex items-center overflow-x-auto px-3 py-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         {loading ? (
           <div className="px-4 py-2 text-sm text-muted-foreground">Loading...</div>
         ) : (
