@@ -238,10 +238,17 @@ export function useTimer() {
     [emit, stopTimer]
   );
 
+  // Clear error after it's been shown
+  const clearError = useCallback(() => {
+    createEvent.reset();
+  }, [createEvent]);
+
   return {
     ...state,
     startTimer,
     stopTimer,
     isCreatingEvent: createEvent.isPending,
+    createEventError: createEvent.error,
+    clearError,
   };
 }

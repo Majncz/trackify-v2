@@ -6,15 +6,16 @@ import { useTimer } from "@/hooks/use-timer";
 import { TaskItem } from "./task-item";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { TimerDisplay } from "@/components/timer/timer-display";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, AlertCircle, X } from "lucide-react";
 
 export function TaskList() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [tasksPerRow, setTasksPerRow] = useState(3);
   const { tasks, isLoading } = useTasks();
-  const { taskId, elapsed, running, startTimer, stopTimer, isCreatingEvent } =
+  const { taskId, elapsed, running, startTimer, stopTimer, isCreatingEvent, createEventError, clearError } =
     useTimer();
 
   const visibleTasks = tasks
@@ -82,6 +83,25 @@ export function TaskList() {
 
   return (
     <div className="space-y-6">
+      {/* Error Alert */}
+      {createEventError && (
+        <Alert variant="destructive" className="relative">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Failed to save time entry</AlertTitle>
+          <AlertDescription>
+            {createEventError.message}
+          </AlertDescription>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="absolute top-2 right-2 h-6 w-6 p-0"
+            onClick={clearError}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </Alert>
+      )}
+
       {/* Active Timer Banner */}
       {running && taskId && (
         <Card className="border-primary bg-primary/5">
