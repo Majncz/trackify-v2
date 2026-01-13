@@ -60,7 +60,7 @@ export function useTimer() {
       intervalRef.current = setInterval(() => {
         setState((prev) => ({
           ...prev,
-          elapsed: Date.now() - prev.startTime!,
+          elapsed: Math.max(0, Date.now() - prev.startTime!),
         }));
       }, 100);
     }
@@ -76,10 +76,14 @@ export function useTimer() {
   useEffect(() => {
     const unsubStart = on("timer:started", (data) => {
       const { taskId, startTime } = data as TimerStartedData;
+      // Only update if not already running this task (avoids overwriting local state)
+      if (stateRef.current.taskId === taskId && stateRef.current.running) {
+        return;
+      }
       setState({
         taskId,
         startTime,
-        elapsed: Date.now() - startTime,
+        elapsed: Math.max(0, Date.now() - startTime),
         running: true,
       });
     });
@@ -103,7 +107,7 @@ export function useTimer() {
         setState({
           taskId,
           startTime,
-          elapsed: Date.now() - startTime,
+          elapsed: Math.max(0, Date.now() - startTime),
           running: true,
         });
       }
