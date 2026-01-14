@@ -8,15 +8,30 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { TimerDisplay } from "@/components/timer/timer-display";
+import { AdjustTimerDialog } from "@/components/timer/adjust-timer-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronDown, ChevronUp, AlertCircle, X } from "lucide-react";
 
 export function TaskList() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [tasksPerRow, setTasksPerRow] = useState(3);
+  const [isAdjustDialogOpen, setIsAdjustDialogOpen] = useState(false);
   const { tasks, isLoading } = useTasks();
-  const { taskId, elapsed, running, startTimer, stopTimer, isCreatingEvent, createEventError, clearError } =
-    useTimer();
+  const {
+    taskId,
+    elapsed,
+    running,
+    startTime,
+    startTimer,
+    stopTimer,
+    adjustStartTime,
+    isCreatingEvent,
+    createEventError,
+    isAdjustingStartTime,
+    adjustStartTimeError,
+    clearError,
+    clearAdjustError,
+  } = useTimer();
 
   const visibleTasks = tasks
     .filter((t) => !t.hidden)
@@ -116,7 +131,12 @@ export function TaskList() {
                 </p>
               </div>
               <div className="flex items-center gap-4">
-                <TimerDisplay milliseconds={elapsed} size="lg" />
+                <TimerDisplay
+                  milliseconds={elapsed}
+                  size="lg"
+                  onClick={() => setIsAdjustDialogOpen(true)}
+                  clickable={true}
+                />
                 <Button
                   onClick={stopTimer}
                   variant="destructive"
@@ -180,6 +200,22 @@ export function TaskList() {
         )}
       </div>
 
+      {/* Adjust Timer Dialog */}
+      {running && taskId && startTime && (
+        <AdjustTimerDialog
+          open={isAdjustDialogOpen}
+          onOpenChange={setIsAdjustDialogOpen}
+          currentStartTime={startTime}
+          onAdjust={adjustStartTime}
+          onClearError={clearAdjustError}
+          isAdjusting={isAdjustingStartTime}
+          error={
+            adjustStartTimeError instanceof Error
+              ? adjustStartTimeError.message
+              : null
+          }
+        />
+      )}
     </div>
   );
 }

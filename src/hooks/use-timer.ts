@@ -22,6 +22,16 @@ interface TimerStateData {
   running: boolean;
 }
 
+interface TimerStartUpdatedData {
+  taskId: string;
+  startTime: number;
+}
+
+interface TimerErrorData {
+  action: string;
+  message: string;
+}
+
 interface Event {
   id: string;
   taskId: string;
@@ -43,9 +53,11 @@ export function useTimer() {
     elapsed: 0,
     running: false,
   });
+  const [socketError, setSocketError] = useState<string | null>(null);
 
   const intervalRef = useRef<NodeJS.Timeout>();
   const stateRef = useRef(state);
+  const previousStartTimeRef = useRef<number | null>(null);
   const { emit, on, isConnected, requestTimerState } = useSocket();
   const queryClient = useQueryClient();
 
@@ -113,10 +125,42 @@ export function useTimer() {
       }
     });
 
+    const unsubStartUpdated = on("timer:start-updated", (data) => {
+      const { taskId, startTime } = data as TimerStartUpdatedData;
+      // Only update if this is the current running timer
+      if (stateRef.current.taskId === taskId && stateRef.current.running) {
+        setState({
+          ...stateRef.current,
+          startTime,
+          elapsed: Math.max(0, Date.now() - startTime),
+        });
+        // Clear the previous start time ref since update succeeded
+        previousStartTimeRef.current = null;
+      }
+    });
+
+    const unsubError = on("timer:error", (data) => {
+      const { action, message } = data as TimerErrorData;
+      if (action === "update-start") {
+        // Roll back optimistic update if we have a previous start time
+        if (previousStartTimeRef.current !== null && stateRef.current.running) {
+          setState({
+            ...stateRef.current,
+            startTime: previousStartTimeRef.current,
+            elapsed: Math.max(0, Date.now() - previousStartTimeRef.current),
+          });
+        }
+        previousStartTimeRef.current = null;
+        setSocketError(message);
+      }
+    });
+
     return () => {
       unsubStart();
       unsubStop();
       unsubState();
+      unsubStartUpdated();
+      unsubError();
     };
   }, [on, queryClient]);
 
@@ -243,12 +287,75 @@ export function useTimer() {
     createEvent.reset();
   }, [createEvent]);
 
+  const adjustStartTimeMutation = useMutation({
+    mutationFn: async (newStartTime: number): Promise<void> => {
+      // Clear any previous socket error at the start
+      setSocketError(null);
+
+      // First validate the new start time
+      const validateRes = await fetch("/api/timer/validate-start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          newStartTime: new Date(newStartTime).toISOString(),
+        }),
+      });
+
+      if (!validateRes.ok) {
+        const errorData = await validateRes.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to validate start time");
+      }
+
+      // If validation passes, emit socket event to update start time
+      const currentState = stateRef.current;
+      if (!currentState.taskId || !currentState.running) {
+        throw new Error("No active timer to adjust");
+      }
+
+      // Store previous start time for potential rollback if socket fails
+      previousStartTimeRef.current = currentState.startTime;
+
+      // Emit the update request - the socket will handle the update
+      // and broadcast timer:start-updated to all devices
+      emit("timer:update-start", {
+        taskId: currentState.taskId,
+        newStartTime,
+      });
+
+      // Optimistically update local state immediately
+      setState({
+        ...currentState,
+        startTime: newStartTime,
+        elapsed: Math.max(0, Date.now() - newStartTime),
+      });
+    },
+  });
+
+  const adjustStartTime = useCallback(
+    async (newStartTime: number) => {
+      return adjustStartTimeMutation.mutateAsync(newStartTime);
+    },
+    [adjustStartTimeMutation]
+  );
+
+  const clearAdjustError = useCallback(() => {
+    adjustStartTimeMutation.reset();
+    setSocketError(null);
+  }, [adjustStartTimeMutation]);
+
+  // Combine mutation error with socket error
+  const adjustError = adjustStartTimeMutation.error || (socketError ? new Error(socketError) : null);
+
   return {
     ...state,
     startTimer,
     stopTimer,
+    adjustStartTime,
     isCreatingEvent: createEvent.isPending,
     createEventError: createEvent.error,
+    isAdjustingStartTime: adjustStartTimeMutation.isPending,
+    adjustStartTimeError: adjustError,
     clearError,
+    clearAdjustError,
   };
 }

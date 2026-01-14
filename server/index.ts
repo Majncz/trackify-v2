@@ -169,6 +169,93 @@ app.prepare().then(async () => {
       }
     });
 
+    socket.on("timer:update-start", async (data: { taskId: string; newStartTime: number }) => {
+      if (!userId) return;
+
+      const timer = activeTimers.get(userId);
+      if (!timer) {
+        socket.emit("timer:error", {
+          action: "update-start",
+          message: "No active timer found to adjust",
+        });
+        return;
+      }
+
+      if (timer.taskId !== data.taskId) {
+        socket.emit("timer:error", {
+          action: "update-start",
+          message: "Timer has changed. Please try again.",
+        });
+        return;
+      }
+
+      const newStartTime = data.newStartTime;
+      const now = Date.now();
+
+      // Validate new start time is not in the future
+      if (newStartTime > now) {
+        socket.emit("timer:error", {
+          action: "update-start",
+          message: "Start time cannot be in the future",
+        });
+        return;
+      }
+
+      try {
+        // Check for overlapping events before updating
+        const overlappingEvents = await prisma.event.findMany({
+          where: {
+            task: { userId },
+            createdAt: { lt: new Date(now) },
+          },
+          include: {
+            task: { select: { name: true } },
+          },
+        });
+
+        // Check if any events overlap with the new time range
+        for (const event of overlappingEvents) {
+          const eventStart = event.createdAt.getTime();
+          const eventEnd = eventStart + event.duration;
+          
+          // Overlap if: newStart < eventEnd AND eventStart < newEnd(now)
+          if (newStartTime < eventEnd && eventStart < now) {
+            socket.emit("timer:error", {
+              action: "update-start",
+              message: `This would overlap with "${event.task.name}: ${event.name}"`,
+            });
+            return;
+          }
+        }
+
+        // Update in database
+        await prisma.activeTimer.update({
+          where: { userId },
+          data: {
+            startTime: new Date(newStartTime),
+          },
+        });
+
+        // Update in-memory state
+        activeTimers.set(userId, {
+          ...timer,
+          startTime: newStartTime,
+        });
+
+        // Broadcast update to all user's devices
+        io.to(`user:${userId}`).emit("timer:start-updated", {
+          taskId: data.taskId,
+          startTime: newStartTime,
+        });
+      } catch (error) {
+        console.error(`Failed to update timer start time for user ${userId}:`, error);
+        socket.emit("timer:error", {
+          action: "update-start",
+          message: "Failed to update start time. Please try again.",
+        });
+      }
+    });
+
     socket.on("task:created", (task) => {
       if (!userId) return;
       io.to(`user:${userId}`).emit("task:created", task);
