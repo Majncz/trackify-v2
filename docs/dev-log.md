@@ -21,6 +21,30 @@ Persistent log for tricky dev-environment outages. Update this file whenever you
 
 ---
 
+## 2026-01-14 – Next.js vendor-chunks cache corruption (500 on /api/auth/session)
+**Symptom**: All API routes returning 500, browser console showing `ClientFetchError: Unexpected token '<'` (HTML error page instead of JSON). Auth session endpoint completely broken.
+
+**Root cause**: Corrupted `.next` build cache. Server logs showed:
+```
+Error: Cannot find module './vendor-chunks/jose.js'
+```
+The `jose` library (used by NextAuth for JWT) had its webpack chunk go missing from `.next/server/vendor-chunks/`. This can happen during aggressive hot module replacement.
+
+**Commands run**:
+- `pm2 logs trackify-dev --lines 50 --nostream` – found the `MODULE_NOT_FOUND` error.
+- `rm -rf .next && pm2 restart trackify-dev` – cleared cache and restarted.
+
+**Resolution**: Deleting `.next` and restarting fixed it immediately. First request takes longer as Next.js recompiles.
+
+**Prevention**:
+- This is a known Next.js dev server issue with no guaranteed fix.
+- If you see random 500s with "MODULE_NOT_FOUND" in logs, clear `.next` first.
+- Could add a health check that auto-clears cache on repeated 500s, but that's overkill for dev.
+
+**Notes**: First occurrence of this specific issue. Not related to pm2 or server crashes — the server was running fine, just had corrupted build artifacts.
+
+---
+
 ## 2026-01-11 – Dev server not running (3rd occurrence) + PM2 setup
 **Symptom**: `https://dev.time.ranajakub.com/` not loading.
 

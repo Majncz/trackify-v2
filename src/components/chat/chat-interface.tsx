@@ -262,6 +262,14 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
     }
   }, [isSidebar]);
 
+  // Auto-resize textarea as user types
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = "auto";
+      inputRef.current.style.height = `${inputRef.current.scrollHeight}px`;
+    }
+  }, [input]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!input.trim() || isLoading) return;

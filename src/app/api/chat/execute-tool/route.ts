@@ -1,6 +1,18 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { validateNoOverlap, OverlapError } from "@/lib/event-overlap";
+import { fromZonedTime } from "date-fns-tz";
+
+// Parse a date string as being in the user's timezone
+function parseInTimezone(dateStr: string, timezone: string): Date {
+  // If the string already has timezone info (Z or +/-), parse directly
+  if (dateStr.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(dateStr)) {
+    return new Date(dateStr);
+  }
+  // Otherwise, interpret as user's local time
+  const localDate = new Date(dateStr);
+  return fromZonedTime(localDate, timezone);
+}
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -48,11 +60,15 @@ export async function POST(req: Request) {
         }
 
         // Check for overlapping events
-        const eventStart = createdAt ? new Date(createdAt) : new Date();
+        const now = new Date();
+        const eventStart = createdAt 
+          ? parseInTimezone(createdAt, timezone) 
+          : new Date(now.getTime() - duration);
+        const eventEnd = new Date(eventStart.getTime() + duration);
         
-        // Validate date isn't in the future
-        if (eventStart > new Date()) {
-          result = { success: false, error: "Cannot create events in the future" };
+        // Validate event doesn't end in the future
+        if (eventEnd > now) {
+          result = { success: false, error: "Cannot create events that end in the future" };
           break;
         }
         try {
@@ -137,15 +153,6 @@ export async function POST(req: Request) {
           result = { success: false, error: "Duration must be positive" };
           break;
         }
-        
-        // Validate date if provided
-        if (newDate) {
-          const parsedDate = new Date(newDate);
-          if (parsedDate > new Date()) {
-            result = { success: false, error: "Cannot move events to the future" };
-            break;
-          }
-        }
 
         const event = await prisma.event.findFirst({
           where: { id: eventId, task: { userId } },
@@ -157,12 +164,23 @@ export async function POST(req: Request) {
           break;
         }
 
+        // Validate updated event doesn't end in the future
+        const now = new Date();
+        const finalStart = newDate ? parseInTimezone(newDate, timezone) : event.createdAt;
+        const finalDuration = newDuration ?? event.duration;
+        const finalEnd = new Date(finalStart.getTime() + finalDuration);
+        
+        if (finalEnd > now) {
+          result = { success: false, error: "Cannot update event to end in the future" };
+          break;
+        }
+
         const updateData: { createdAt?: Date; duration?: number } = {};
         const changes: string[] = [];
 
         // Handle date change
         if (newDate) {
-          const newEventStart = new Date(newDate);
+          const newEventStart = parseInTimezone(newDate, timezone);
           const durationToCheck = newDuration ?? event.duration;
           
           // Check for overlapping events (excluding current event)
