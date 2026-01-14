@@ -214,8 +214,8 @@ export function AdjustTimerDialog({
     try {
       await onAdjust(selectedStartTime);
       onOpenChange(false);
-    } catch (err) {
-      // Error is handled by parent component
+    } catch {
+      // Error is handled by parent component via adjustStartTimeError prop
     }
   };
 
