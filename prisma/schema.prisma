@@ -14,6 +14,7 @@ model User {
   passwordResets PasswordReset[]
   conversations  Conversation[]
   activeTimers   ActiveTimer[]
+  apiTokens      ApiToken[]
 
   @@map("trackify_user")
 }
@@ -91,4 +92,18 @@ model ActiveTimer {
   createdAt DateTime @default(now())
 
   @@map("trackify_active_timer")
+}
+
+model ApiToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  name      String   @default("Mobile App")
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  lastUsedAt DateTime?
+
+  @@index([token])
+  @@map("trackify_api_token")
 }

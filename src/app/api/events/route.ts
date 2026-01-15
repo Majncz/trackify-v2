@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { validateNoOverlap, OverlapError } from "@/lib/event-overlap";
 import { z } from "zod";
@@ -12,9 +12,9 @@ const eventSchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
-  const session = await auth();
+  const user = await getAuthUser(request);
 
-  if (!session?.user?.id) {
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   const events = await prisma.event.findMany({
     where: {
       task: {
-        userId: session.user.id,
+        userId: user.id,
         ...(taskId && { id: taskId }),
       },
     },
@@ -40,9 +40,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await auth();
+  const user = await getAuthUser(request);
 
-  if (!session?.user?.id) {
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     const task = await prisma.task.findFirst({
       where: {
         id: taskId,
-        userId: session.user.id,
+        userId: user.id,
       },
     });
 
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     // Skip running timer check - this endpoint is called by the timer after it stops,
     // so the ActiveTimer record may still briefly exist due to race condition
     await validateNoOverlap({
-      userId: session.user.id,
+      userId: user.id,
       eventStart,
       duration,
       skipRunningTimerCheck: true,

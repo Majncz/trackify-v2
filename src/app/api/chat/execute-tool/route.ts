@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { validateNoOverlap, OverlapError } from "@/lib/event-overlap";
 import { fromZonedTime } from "date-fns-tz";
@@ -15,13 +15,13 @@ function parseInTimezone(dateStr: string, timezone: string): Date {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
+  const user = await getAuthUser(req);
 
-  if (!session?.user?.id) {
+  if (!user) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const userId = session.user.id;
+  const userId = user.id;
   const { toolName, args, timezone = "UTC" } = await req.json();
 
   try {

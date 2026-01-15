@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -6,9 +6,9 @@ export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
+  const user = await getAuthUser(req);
 
-  if (!session?.user?.id) {
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -17,7 +17,7 @@ export async function GET(
   const conversation = await prisma.conversation.findFirst({
     where: {
       id,
-      userId: session.user.id,
+      userId: user.id,
     },
   });
 

@@ -8,7 +8,7 @@ module.exports = {
       env: {
         NODE_ENV: "development",
         PORT: 3002,
-        NEXTAUTH_URL: "https://dev.time.ranajakub.com",
+        NEXTAUTH_URL: "https://dev.trackify.ranajakub.com",
       },
       watch: false,
       autorestart: true,
@@ -29,7 +29,7 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         PORT: 3000,
-        NEXTAUTH_URL: "https://time.ranajakub.com",
+        NEXTAUTH_URL: "https://trackify.ranajakub.com",
       },
       watch: false,
       autorestart: true,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/api-auth";
 import { validateNoOverlap, OverlapError } from "@/lib/event-overlap";
 import { z } from "zod";
 
@@ -8,9 +8,9 @@ const validateStartSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const session = await auth();
+  const user = await getAuthUser(request);
 
-  if (!session?.user?.id) {
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     // Check for overlapping events
     // Skip running timer check since we're adjusting the running timer itself
     await validateNoOverlap({
-      userId: session.user.id,
+      userId: user.id,
       eventStart: startDate,
       duration,
       skipRunningTimerCheck: true,

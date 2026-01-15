@@ -1,7 +1,7 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { streamText, tool, stepCountIs, convertToModelMessages } from "ai";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { toZonedTime, fromZonedTime } from "date-fns-tz";
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns";
@@ -338,13 +338,13 @@ function createTools(userId: string, timezone: string) {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
+  const user = await getAuthUser(req);
 
-  if (!session?.user?.id) {
+  if (!user) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const userId = session.user.id;
+  const userId = user.id;
   const body = await req.json();
   const { messages, conversationId, timezone = "UTC" } = body;
 

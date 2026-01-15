@@ -1,16 +1,16 @@
-import { auth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-export async function GET() {
-  const session = await auth();
+export async function GET(request: NextRequest) {
+  const user = await getAuthUser(request);
 
-  if (!session?.user?.id) {
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const conversations = await prisma.conversation.findMany({
-    where: { userId: session.user.id },
+    where: { userId: user.id },
     select: {
       id: true,
       title: true,
@@ -23,16 +23,16 @@ export async function GET() {
   return NextResponse.json(conversations);
 }
 
-export async function POST() {
-  const session = await auth();
+export async function POST(request: NextRequest) {
+  const user = await getAuthUser(request);
 
-  if (!session?.user?.id) {
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const conversation = await prisma.conversation.create({
     data: {
-      userId: session.user.id,
+      userId: user.id,
     },
     select: {
       id: true,

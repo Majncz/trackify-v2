@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
@@ -12,17 +12,17 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
+  const user = await getAuthUser(request);
   const { id } = await params;
 
-  if (!session?.user?.id) {
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const task = await prisma.task.findFirst({
     where: {
       id,
-      userId: session.user.id,
+      userId: user.id,
     },
     include: {
       events: {
@@ -42,10 +42,10 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
+  const user = await getAuthUser(request);
   const { id } = await params;
 
-  if (!session?.user?.id) {
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -56,7 +56,7 @@ export async function PUT(
     const task = await prisma.task.findFirst({
       where: {
         id,
-        userId: session.user.id,
+        userId: user.id,
       },
     });
 
@@ -92,17 +92,17 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
+  const user = await getAuthUser(request);
   const { id } = await params;
 
-  if (!session?.user?.id) {
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const task = await prisma.task.findFirst({
     where: {
       id,
-      userId: session.user.id,
+      userId: user.id,
     },
   });
 
@@ -113,7 +113,7 @@ export async function DELETE(
   // Stop any active timer for this task before hiding it
   await prisma.activeTimer.deleteMany({
     where: {
-      userId: session.user.id,
+      userId: user.id,
       taskId: id,
     },
   });

@@ -21,12 +21,14 @@ export function ChatTabBar({ currentConversationId, onConversationChange, refres
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const conversationsRef = useRef<Conversation[]>([]);
 
   async function fetchConversations() {
     try {
       const res = await fetch("/api/conversations");
       if (res.ok) {
         const data = await res.json();
+        conversationsRef.current = data;
         setConversations(data);
       }
     } catch (error) {
@@ -49,10 +51,10 @@ export function ChatTabBar({ currentConversationId, onConversationChange, refres
 
   // Refresh when current conversation changes (e.g., new conversation created)
   useEffect(() => {
-    if (currentConversationId && !conversations.find(c => c.id === currentConversationId)) {
+    if (currentConversationId && !conversationsRef.current.find(c => c.id === currentConversationId)) {
       fetchConversations();
     }
-  }, [currentConversationId, conversations]);
+  }, [currentConversationId]);
 
   // Scroll to end so the + button is visible
   useEffect(() => {
@@ -66,7 +68,11 @@ export function ChatTabBar({ currentConversationId, onConversationChange, refres
       const res = await fetch("/api/conversations", { method: "POST" });
       if (res.ok) {
         const newConv = await res.json();
-        setConversations((prev) => [...prev, newConv]);
+        setConversations((prev) => {
+          const updated = [...prev, newConv];
+          conversationsRef.current = updated;
+          return updated;
+        });
         onConversationChange(newConv.id);
       }
     } catch (error) {

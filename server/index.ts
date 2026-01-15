@@ -63,8 +63,10 @@ app.prepare().then(async () => {
 
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: process.env.NEXTAUTH_URL || "http://localhost:3000",
+      // Allow all origins for web and mobile app connections
+      origin: true,
       methods: ["GET", "POST"],
+      credentials: true,
     },
   });
 
@@ -77,10 +79,59 @@ app.prepare().then(async () => {
 
     let userId: string | null = null;
 
-    socket.on("authenticate", (data: { userId: string }) => {
-      userId = data.userId;
-      socket.join(`user:${userId}`);
-      console.log(`User ${userId} authenticated`);
+    // Support both web (userId from session) and mobile (Bearer token) auth
+    socket.on("authenticate", async (data: { userId?: string; token?: string }) => {
+      // Leave previous room if re-authenticating
+      if (userId) {
+        socket.leave(`user:${userId}`);
+      }
+
+      // Mobile app: validate Bearer token
+      if (data.token) {
+        try {
+          const apiToken = await prisma.apiToken.findUnique({
+            where: { token: data.token },
+            include: { user: { select: { id: true } } },
+          });
+
+          if (!apiToken || apiToken.expiresAt < new Date()) {
+            socket.emit("auth:error", { message: "Invalid or expired token" });
+            socket.disconnect();
+            return;
+          }
+
+          userId = apiToken.user.id;
+          socket.join(`user:${userId}`);
+          socket.emit("auth:success", { userId });
+          console.log(`User ${userId} authenticated via token`);
+
+          // Update token lastUsedAt
+          prisma.apiToken.update({
+            where: { id: apiToken.id },
+            data: { lastUsedAt: new Date() },
+          }).catch(() => {});
+
+          return;
+        } catch (error) {
+          console.error("Socket token auth error:", error);
+          socket.emit("auth:error", { message: "Authentication failed" });
+          socket.disconnect();
+          return;
+        }
+      }
+
+      // Web app: trust userId from authenticated session
+      // (The web client only sends userId after validating via NextAuth)
+      if (data.userId) {
+        userId = data.userId;
+        socket.join(`user:${userId}`);
+        console.log(`User ${userId} authenticated via session`);
+        return;
+      }
+
+      // No valid auth provided
+      socket.emit("auth:error", { message: "No authentication provided" });
+      socket.disconnect();
     });
 
     // Client explicitly requests timer state after listeners are ready
