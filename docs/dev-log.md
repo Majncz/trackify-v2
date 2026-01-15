@@ -21,6 +21,40 @@ Persistent log for tricky dev-environment outages. Update this file whenever you
 
 ---
 
+## 2026-01-14 – Server unresponsive (200% CPU, SSH timeout, forced restart)
+**Symptom**: SSH connection dropped, server CPU at 200% in hosting panel, unable to reconnect for 10+ minutes. Required hard restart from hosting provider dashboard.
+
+**Root cause**: 
+1. Deploy script was running `npm run build` (CPU-intensive Next.js + TypeScript compilation)
+2. Shell commands from Cursor agent kept timing out and retrying, possibly spawning multiple processes
+3. Build was interrupted mid-way, leaving no `dist/server/index.js` file
+4. After restart, PM2 tried to start `trackify-prod` but the entry file was missing
+5. PM2 entered crash loop (12 restarts in rapid succession), further stressing the system
+
+**Commands run**:
+- `pm2 status` – saw `trackify-prod` in "waiting" state with 12 restarts
+- `pm2 logs trackify-prod --lines 50 --nostream` – found `MODULE_NOT_FOUND: Cannot find module '/root/trackify-prod/dist/server/index.js'`
+- `pm2 stop trackify-prod` – stop crash loop
+- `rm -rf /root/trackify-prod/.next /root/trackify-prod/dist` – clean partial build
+- `npm run build` (in trackify-prod) – rebuild from scratch
+- `pm2 restart trackify-prod` – start production
+
+**Resolution**: Stopped crash loop, rebuilt production from clean state, server now running normally.
+
+**Prevention options**:
+1. **PM2 max restarts**: Add `max_restarts: 5` and `min_uptime: "10s"` to ecosystem.config.cjs to prevent infinite crash loops
+2. **Build on separate machine**: Run `npm run build` locally or in CI/CD, then deploy pre-built artifacts
+3. **Graceful deploy script**: Modify `deploy.sh` to:
+   - Build in a temp directory first
+   - Only swap to new build after success
+   - Keep old build as fallback
+4. **Resource limits**: Use `nice -n 10` for build commands to lower CPU priority
+5. **Health monitoring**: Add external uptime monitor (e.g., UptimeRobot) to alert when server becomes unresponsive
+
+**Notes**: The 2-core VPS struggled with parallel Next.js + TypeScript compilation. Consider upgrading to 4-core for builds, or implementing option 2/3 above.
+
+---
+
 ## 2026-01-14 – Next.js vendor-chunks cache corruption (500 on /api/auth/session)
 **Symptom**: All API routes returning 500, browser console showing `ClientFetchError: Unexpected token '<'` (HTML error page instead of JSON). Auth session endpoint completely broken.
 

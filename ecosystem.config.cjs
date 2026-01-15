@@ -12,7 +12,8 @@ module.exports = {
       },
       watch: false,
       autorestart: true,
-      max_restarts: 10,
+      max_restarts: 5,
+      min_uptime: "10s", // Process must run 10s+ to reset restart counter
       restart_delay: 5000,
       exp_backoff_restart_delay: 1000,
       error_file: "/var/log/trackify-dev-error.log",
@@ -32,7 +33,8 @@ module.exports = {
       },
       watch: false,
       autorestart: true,
-      max_restarts: 10,
+      max_restarts: 5,
+      min_uptime: "10s", // Process must run 10s+ to reset restart counter
       restart_delay: 5000,
       exp_backoff_restart_delay: 1000,
       error_file: "/var/log/trackify-prod-error.log",
