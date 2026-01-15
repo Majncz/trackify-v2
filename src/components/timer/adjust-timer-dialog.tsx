@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -53,6 +53,12 @@ export function AdjustTimerDialog({
   const [localError, setLocalError] = useState<string | null>(null);
   const [, forceUpdate] = useState(0); // For refreshing duration display
   const { tasks } = useTasks();
+  const onClearErrorRef = useRef(onClearError);
+
+  // Keep ref in sync
+  useEffect(() => {
+    onClearErrorRef.current = onClearError;
+  }, [onClearError]);
 
   // Collect all events from all tasks for overlap checking
   const allEvents = useMemo(() => {
@@ -145,9 +151,9 @@ export function AdjustTimerDialog({
       setSelectedStartTime(currentStartTime);
       setLocalError(null);
       // Clear any previous errors when dialog opens
-      onClearError?.();
+      onClearErrorRef.current?.();
     }
-  }, [open, currentStartTime, onClearError]);
+  }, [open, currentStartTime]);
 
   // Keep duration display updated while dialog is open
   useEffect(() => {
