@@ -1,0 +1,43 @@
+name: Deploy Trackify
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 195.201.147.39
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /root/trackify
+            
+            # Backup database before deploy
+            docker exec trackify-database pg_dump -U trackify trackify > backups/pre_deploy_$(date +%Y%m%d_%H%M%S).sql
+            
+            # Pull latest changes
+            git pull origin master
+            
+            # Install dependencies
+            npm ci
+            
+            # Generate Prisma client
+            npx prisma generate
+            
+            # Run database migrations
+            npx prisma migrate deploy
+            
+            # Build the app
+            npm run build
+            
+            # Restart PM2
+            pm2 restart trackify-prod
+            
+            echo "✅ Deployment complete!"
