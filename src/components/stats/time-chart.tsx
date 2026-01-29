@@ -49,21 +49,19 @@ interface ChartDataPoint {
 
 // Calculate how much of an event falls within a given interval
 function getOverlapDuration(
-  eventStart: Date,
-  eventDuration: number,
+  eventFrom: Date,
+  eventTo: Date,
   intervalStart: Date,
   intervalEnd: Date
 ): number {
-  const eventEnd = new Date(eventStart.getTime() + eventDuration);
-  
   // No overlap if event ends before interval starts or starts after interval ends
-  if (eventEnd <= intervalStart || eventStart >= intervalEnd) {
+  if (eventTo <= intervalStart || eventFrom >= intervalEnd) {
     return 0;
   }
   
   // Calculate overlap
-  const overlapStart = eventStart > intervalStart ? eventStart : intervalStart;
-  const overlapEnd = eventEnd < intervalEnd ? eventEnd : intervalEnd;
+  const overlapStart = eventFrom > intervalStart ? eventFrom : intervalStart;
+  const overlapEnd = eventTo < intervalEnd ? eventTo : intervalEnd;
   
   return Math.max(0, overlapEnd.getTime() - overlapStart.getTime());
 }
@@ -83,8 +81,8 @@ export function TimeChart() {
     const allEvents = visibleTasks.flatMap((t) =>
       t.events.map((e) => ({ 
         ...e, 
-        createdAt: new Date(e.createdAt),
-        duration: e.duration 
+        from: new Date(e.from),
+        to: new Date(e.to)
       }))
     );
 
@@ -95,16 +93,16 @@ export function TimeChart() {
     const totals = new Map<string, number>();
     
     allEvents.forEach((event) => {
-      const eventStart = event.createdAt;
-      const eventEnd = new Date(eventStart.getTime() + event.duration);
+      const eventFrom = event.from;
+      const eventTo = event.to;
       
-      let currentDate = new Date(eventStart);
-      while (currentDate <= eventEnd) {
+      let currentDate = new Date(eventFrom);
+      while (currentDate <= eventTo) {
         const intervalStart = startOfDay(currentDate);
         const intervalEnd = new Date(endOfDay(currentDate).getTime() + 1);
         const key = format(intervalStart, "yyyy-MM-dd");
         
-        const overlap = getOverlapDuration(eventStart, event.duration, intervalStart, intervalEnd);
+        const overlap = getOverlapDuration(eventFrom, eventTo, intervalStart, intervalEnd);
         if (overlap > 0) {
           totals.set(key, (totals.get(key) || 0) + overlap);
         }
@@ -144,8 +142,9 @@ export function TimeChart() {
     const taskTotals: { id: string; name: string; total: number }[] = visibleTasks.map((task) => {
       let total = 0;
       task.events.forEach((event) => {
-        const eventStart = new Date(event.createdAt);
-        const overlap = getOverlapDuration(eventStart, event.duration, rangeStart, rangeEnd);
+        const eventFrom = new Date(event.from);
+        const eventTo = new Date(event.to);
+        const overlap = getOverlapDuration(eventFrom, eventTo, rangeStart, rangeEnd);
         total += overlap;
       });
       return { id: task.id, name: task.name, total };
@@ -173,8 +172,9 @@ export function TimeChart() {
 
         let taskTime = 0;
         task.events.forEach((event) => {
-          const eventStart = new Date(event.createdAt);
-          taskTime += getOverlapDuration(eventStart, event.duration, intervalStart, intervalEnd);
+          const eventFrom = new Date(event.from);
+          const eventTo = new Date(event.to);
+          taskTime += getOverlapDuration(eventFrom, eventTo, intervalStart, intervalEnd);
         });
 
         point[task.name] = Math.round((taskTime / 3600000) * 10) / 10;
@@ -188,8 +188,9 @@ export function TimeChart() {
           if (!task) return;
 
           task.events.forEach((event) => {
-            const eventStart = new Date(event.createdAt);
-            otherTime += getOverlapDuration(eventStart, event.duration, intervalStart, intervalEnd);
+            const eventFrom = new Date(event.from);
+            const eventTo = new Date(event.to);
+            otherTime += getOverlapDuration(eventFrom, eventTo, intervalStart, intervalEnd);
           });
         });
         point["Other"] = Math.round((otherTime / 3600000) * 10) / 10;
@@ -220,19 +221,19 @@ export function TimeChart() {
 
   // Pre-index events by date for O(1) lookup instead of O(events) per cell
   const eventsByDate = useMemo(() => {
-    const index: Map<string, Array<{ taskName: string; start: Date; duration: number }>> = new Map();
+    const index: Map<string, Array<{ taskName: string; from: Date; to: Date }>> = new Map();
     
     visibleTasks.forEach((task) => {
       task.events.forEach((event) => {
-        const eventStart = new Date(event.createdAt);
-        const eventEnd = new Date(eventStart.getTime() + event.duration);
+        const eventFrom = new Date(event.from);
+        const eventTo = new Date(event.to);
         
         // Add to each day this event spans
-        let current = startOfDay(eventStart);
-        while (current <= eventEnd) {
+        let current = startOfDay(eventFrom);
+        while (current <= eventTo) {
           const key = format(current, "yyyy-MM-dd");
           if (!index.has(key)) index.set(key, []);
-          index.get(key)!.push({ taskName: task.name, start: eventStart, duration: event.duration });
+          index.get(key)!.push({ taskName: task.name, from: eventFrom, to: eventTo });
           current = addHours(current, 24);
         }
       });
@@ -265,8 +266,8 @@ export function TimeChart() {
         const cell: WeekGridCell = { totalMinutes: 0, taskMinutes: {} };
 
         // Only check events for this specific day
-        dayEvents.forEach(({ taskName, start, duration: dur }) => {
-          const overlap = getOverlapDuration(start, dur, hourStart, hourEnd);
+        dayEvents.forEach(({ taskName, from, to }) => {
+          const overlap = getOverlapDuration(from, to, hourStart, hourEnd);
           if (overlap > 0) {
             const minutes = overlap / 60000;
             cell.totalMinutes += minutes;
@@ -298,8 +299,8 @@ export function TimeChart() {
     const allEvents = visibleTasks.flatMap((t) =>
       t.events.map((e) => ({
         ...e,
-        createdAt: new Date(e.createdAt),
-        duration: e.duration,
+        from: new Date(e.from),
+        to: new Date(e.to),
       }))
     );
 
@@ -309,8 +310,8 @@ export function TimeChart() {
 
     // Find the earliest date
     const eventDates = allEvents.flatMap((e) => [
-      new Date(e.createdAt),
-      new Date(e.createdAt.getTime() + e.duration),
+      e.from,
+      e.to,
     ]);
     const earliestDate = new Date(Math.min(...eventDates.map((d) => d.getTime())));
     const today = endOfDay(new Date());
@@ -349,10 +350,10 @@ export function TimeChart() {
       const dayKey = format(day, "yyyy-MM-dd");
       const dayEvents = eventsByDate.get(dayKey) || [];
       let totalMinutes = 0;
-      dayEvents.forEach(({ start, duration: dur }) => {
+      dayEvents.forEach(({ from, to }) => {
         const dayStart = startOfDay(day);
         const dayEnd = endOfDay(day);
-        const overlap = getOverlapDuration(start, dur, dayStart, dayEnd);
+        const overlap = getOverlapDuration(from, to, dayStart, dayEnd);
         totalMinutes += overlap / 60000;
       });
       dayMinutes.set(dayKey, totalMinutes);

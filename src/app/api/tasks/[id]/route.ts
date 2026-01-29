@@ -26,7 +26,7 @@ export async function GET(
     },
     include: {
       events: {
-        orderBy: { createdAt: "desc" },
+        orderBy: { from: "desc" },
       },
     },
   });

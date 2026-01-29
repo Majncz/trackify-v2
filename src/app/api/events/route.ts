@@ -7,8 +7,8 @@ import { z } from "zod";
 const eventSchema = z.object({
   taskId: z.string().uuid(),
   name: z.string().default("Time entry"),
-  duration: z.number().int().positive(),
-  createdAt: z.string().datetime().optional(), // ISO timestamp for when the event started
+  from: z.string().datetime(), // ISO timestamp for when the event started
+  to: z.string().datetime(),   // ISO timestamp for when the event ended
 });
 
 export async function GET(request: NextRequest) {
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
         select: { name: true },
       },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: { from: "desc" },
   });
 
   return NextResponse.json(events);
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { taskId, name, duration, createdAt } = eventSchema.parse(body);
+    const { taskId, name, from, to } = eventSchema.parse(body);
 
     // Verify task belongs to user
     const task = await prisma.task.findFirst({
@@ -62,16 +62,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
 
-    // Determine event start time
-    const eventStart = createdAt ? new Date(createdAt) : new Date();
+    // Parse dates
+    const eventFrom = new Date(from);
+    const eventTo = new Date(to);
+
+    // Validate to > from
+    if (eventTo <= eventFrom) {
+      return NextResponse.json(
+        { error: "End time must be after start time" },
+        { status: 400 }
+      );
+    }
+
+    // Validate event doesn't end in the future
+    if (eventTo > new Date()) {
+      return NextResponse.json(
+        { error: "Cannot create event that ends in the future" },
+        { status: 400 }
+      );
+    }
 
     // Check for overlapping events
     // Skip running timer check - this endpoint is called by the timer after it stops,
     // so the ActiveTimer record may still briefly exist due to race condition
     await validateNoOverlap({
       userId: user.id,
-      eventStart,
-      duration,
+      eventFrom,
+      eventTo,
       skipRunningTimerCheck: true,
     });
 
@@ -79,8 +96,8 @@ export async function POST(request: NextRequest) {
       data: {
         taskId,
         name,
-        duration,
-        createdAt: eventStart,
+        from: eventFrom,
+        to: eventTo,
       },
       include: {
         task: {

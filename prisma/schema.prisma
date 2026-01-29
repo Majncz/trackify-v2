@@ -47,13 +47,13 @@ model Task {
 
 model Event {
   id        String   @id @default(uuid())
-  createdAt DateTime @default(now())
-  duration  Int      // milliseconds
+  from      DateTime @default(now())
+  to        DateTime
   name      String   @default("Time entry")
   taskId    String
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
-  @@index([taskId, createdAt])
+  @@index([taskId, from])
   @@map("trackify_event")
 }
 

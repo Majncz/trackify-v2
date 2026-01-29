@@ -9,8 +9,8 @@ import { Play, Square } from "lucide-react";
 
 interface Event {
   id: string;
-  duration: number;
-  createdAt: string;
+  from: string;
+  to: string;
 }
 
 interface Task {
@@ -36,7 +36,11 @@ export function TaskItem({
   isLoading,
 }: TaskItemProps) {
   const router = useRouter();
-  const totalTime = task.events.reduce((sum, e) => sum + e.duration, 0);
+  const totalTime = task.events.reduce((sum, e) => {
+    const fromMs = new Date(e.from).getTime();
+    const toMs = new Date(e.to).getTime();
+    return sum + (toMs - fromMs);
+  }, 0);
 
   function handleCardClick(e: React.MouseEvent) {
     // Don't navigate if clicking on buttons

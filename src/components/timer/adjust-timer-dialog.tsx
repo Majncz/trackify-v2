@@ -29,8 +29,8 @@ interface AdjustTimerDialogProps {
 
 interface Event {
   id: string;
-  createdAt: string;
-  duration: number;
+  from: string;
+  to: string;
   name: string;
   taskId: string;
 }
@@ -89,8 +89,8 @@ export function AdjustTimerDialog({
       // Check each event for overlap
       // Two events overlap if: startA < endB AND startB < endA
       for (const event of allEvents) {
-        const eventStart = new Date(event.createdAt).getTime();
-        const eventEnd = eventStart + event.duration;
+        const eventStart = new Date(event.from).getTime();
+        const eventEnd = new Date(event.to).getTime();
 
         // Check if events overlap
         if (newStart < eventEnd && eventStart < newEnd) {
@@ -112,9 +112,10 @@ export function AdjustTimerDialog({
     const overlapCheck = checkOverlap(selectedStartTime);
     if (overlapCheck.overlaps && overlapCheck.overlappingEvent) {
       const event = overlapCheck.overlappingEvent;
-      const eventStart = new Date(event.createdAt).getTime();
+      const eventStart = new Date(event.from).getTime();
+      const eventEnd = new Date(event.to).getTime();
       const overlapStart = new Date(eventStart).toLocaleString();
-      const durationMins = Math.round(event.duration / 60000);
+      const durationMins = Math.round((eventEnd - eventStart) / 60000);
       return `Overlaps with "${event.taskName}: ${event.name}" (${overlapStart}, ${durationMins}min)`;
     }
 

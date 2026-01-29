@@ -6,8 +6,8 @@ import { useEffect } from "react";
 
 interface Event {
   id: string;
-  createdAt: string;
-  duration: number;
+  from: string;
+  to: string;
   name: string;
   taskId: string;
 }

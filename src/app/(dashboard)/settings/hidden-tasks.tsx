@@ -25,10 +25,14 @@ export function HiddenTasks() {
     try {
       const res = await fetch("/api/tasks?hidden=true");
       const data = await res.json();
-      const tasks = data.map((task: { id: string; name: string; updatedAt: string; events: { duration: number }[] }) => ({
+      const tasks = data.map((task: { id: string; name: string; updatedAt: string; events: { from: string; to: string }[] }) => ({
         id: task.id,
         name: task.name,
-        totalTime: task.events.reduce((sum: number, e: { duration: number }) => sum + e.duration, 0),
+        totalTime: task.events.reduce((sum: number, e: { from: string; to: string }) => {
+          const fromMs = new Date(e.from).getTime();
+          const toMs = new Date(e.to).getTime();
+          return sum + (toMs - fromMs);
+        }, 0),
         updatedAt: new Date(task.updatedAt).getTime(),
       }));
       tasks.sort((a: HiddenTask & { updatedAt: number }, b: HiddenTask & { updatedAt: number }) => 

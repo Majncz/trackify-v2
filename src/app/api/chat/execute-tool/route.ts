@@ -9,8 +9,16 @@ function parseInTimezone(dateStr: string, timezone: string): Date {
   if (dateStr.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(dateStr)) {
     return new Date(dateStr);
   }
-  // Otherwise, interpret as user's local time
-  const localDate = new Date(dateStr);
+  
+  // Parse date components explicitly to avoid timezone ambiguity
+  // e.g., "2026-01-19T14:00:00" should be interpreted as 2pm in the user's timezone
+  const [datePart, timePart = "00:00:00"] = dateStr.split('T');
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hour = 0, minute = 0, second = 0] = timePart.split(':').map(Number);
+  
+  // Create a date object with the user's local time components
+  // then convert it to UTC considering their timezone
+  const localDate = new Date(year, month - 1, day, hour, minute, second);
   return fromZonedTime(localDate, timezone);
 }
 
@@ -22,7 +30,21 @@ export async function POST(req: Request) {
   }
 
   const userId = user.id;
-  const { toolName, args, timezone = "UTC" } = await req.json();
+  const body = await req.json();
+  
+  // Validate timezone
+  let timezone = "UTC";
+  if (body.timezone) {
+    try {
+      // Test if timezone is valid by trying to use it
+      Intl.DateTimeFormat(undefined, { timeZone: body.timezone });
+      timezone = body.timezone;
+    } catch {
+      console.warn(`Invalid timezone "${body.timezone}", falling back to UTC`);
+    }
+  }
+  
+  const { toolName, args } = body;
 
   try {
     let result;
@@ -42,11 +64,10 @@ export async function POST(req: Request) {
       }
 
       case "createEvent": {
-        const { taskId, duration, name, createdAt } = args;
+        const { taskId, from, to, name } = args;
         
-        // Validate duration
-        if (!duration || duration <= 0) {
-          result = { success: false, error: "Duration must be positive" };
+        if (!from || !to) {
+          result = { success: false, error: "Both from and to timestamps are required" };
           break;
         }
         
@@ -59,23 +80,26 @@ export async function POST(req: Request) {
           break;
         }
 
-        // Check for overlapping events
-        const now = new Date();
-        const eventStart = createdAt 
-          ? parseInTimezone(createdAt, timezone) 
-          : new Date(now.getTime() - duration);
-        const eventEnd = new Date(eventStart.getTime() + duration);
+        const eventFrom = parseInTimezone(from, timezone);
+        const eventTo = parseInTimezone(to, timezone);
+        
+        // Validate to > from
+        if (eventTo <= eventFrom) {
+          result = { success: false, error: "End time must be after start time" };
+          break;
+        }
         
         // Validate event doesn't end in the future
-        if (eventEnd > now) {
+        if (eventTo > new Date()) {
           result = { success: false, error: "Cannot create events that end in the future" };
           break;
         }
+        
         try {
           await validateNoOverlap({
             userId,
-            eventStart,
-            duration,
+            eventFrom,
+            eventTo,
           });
         } catch (err) {
           if (err instanceof OverlapError) {
@@ -89,15 +113,16 @@ export async function POST(req: Request) {
           data: {
             taskId,
             name: name || "Time entry",
-            duration,
-            createdAt: eventStart,
+            from: eventFrom,
+            to: eventTo,
           },
         });
 
-        const hours = Math.floor(duration / 3600000);
-        const minutes = Math.floor((duration % 3600000) / 60000);
+        const durationMs = event.to.getTime() - event.from.getTime();
+        const hours = Math.floor(durationMs / 3600000);
+        const minutes = Math.floor((durationMs % 3600000) / 60000);
         const durationStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-        const dateStr = event.createdAt.toLocaleDateString("en-US", { 
+        const dateStr = event.from.toLocaleDateString("en-US", { 
           weekday: "short", month: "short", day: "numeric", timeZone: timezone 
         });
 
@@ -125,10 +150,11 @@ export async function POST(req: Request) {
           break;
         }
 
-        const hours = Math.floor(event.duration / 3600000);
-        const minutes = Math.floor((event.duration % 3600000) / 60000);
+        const durationMs = event.to.getTime() - event.from.getTime();
+        const hours = Math.floor(durationMs / 3600000);
+        const minutes = Math.floor((durationMs % 3600000) / 60000);
         const durationStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-        const dateStr = event.createdAt.toLocaleDateString("en-US", { 
+        const dateStr = event.from.toLocaleDateString("en-US", { 
           weekday: "short", month: "short", day: "numeric", timeZone: timezone 
         });
 
@@ -141,16 +167,10 @@ export async function POST(req: Request) {
       }
 
       case "updateEvent": {
-        const { eventId, newDate, newDuration } = args;
+        const { eventId, newFrom, newTo } = args;
         
-        if (!newDate && !newDuration) {
-          result = { success: false, error: "Must provide newDate or newDuration (or both)" };
-          break;
-        }
-        
-        // Validate duration if provided
-        if (newDuration !== undefined && newDuration <= 0) {
-          result = { success: false, error: "Duration must be positive" };
+        if (!newFrom && !newTo) {
+          result = { success: false, error: "Must provide newFrom or newTo (or both)" };
           break;
         }
 
@@ -164,79 +184,62 @@ export async function POST(req: Request) {
           break;
         }
 
-        // Validate updated event doesn't end in the future
-        const now = new Date();
-        const finalStart = newDate ? parseInTimezone(newDate, timezone) : event.createdAt;
-        const finalDuration = newDuration ?? event.duration;
-        const finalEnd = new Date(finalStart.getTime() + finalDuration);
+        const finalFrom = newFrom ? parseInTimezone(newFrom, timezone) : event.from;
+        const finalTo = newTo ? parseInTimezone(newTo, timezone) : event.to;
         
-        if (finalEnd > now) {
+        // Validate to > from
+        if (finalTo <= finalFrom) {
+          result = { success: false, error: "End time must be after start time" };
+          break;
+        }
+        
+        // Validate updated event doesn't end in the future
+        if (finalTo > new Date()) {
           result = { success: false, error: "Cannot update event to end in the future" };
           break;
         }
 
-        const updateData: { createdAt?: Date; duration?: number } = {};
-        const changes: string[] = [];
-
-        // Handle date change
-        if (newDate) {
-          const newEventStart = parseInTimezone(newDate, timezone);
-          const durationToCheck = newDuration ?? event.duration;
-          
-          // Check for overlapping events (excluding current event)
-          try {
-            await validateNoOverlap({
-              userId,
-              eventStart: newEventStart,
-              duration: durationToCheck,
-              excludeEventId: eventId,
-            });
-          } catch (err) {
-            if (err instanceof OverlapError) {
-              result = { success: false, error: err.message };
-              break;
-            }
-            throw err;
+        // Check for overlapping events (excluding current event)
+        try {
+          await validateNoOverlap({
+            userId,
+            eventFrom: finalFrom,
+            eventTo: finalTo,
+            excludeEventId: eventId,
+          });
+        } catch (err) {
+          if (err instanceof OverlapError) {
+            result = { success: false, error: err.message };
+            break;
           }
-          
-          updateData.createdAt = newEventStart;
-          const newDateStr = newEventStart.toLocaleDateString("en-US", { 
-            weekday: "short", month: "short", day: "numeric", timeZone: timezone 
-          });
-          const oldDateStr = event.createdAt.toLocaleDateString("en-US", { 
-            weekday: "short", month: "short", day: "numeric", timeZone: timezone 
-          });
-          changes.push(`moved from ${oldDateStr} to ${newDateStr}`);
+          throw err;
         }
 
-        // Handle duration change
-        if (newDuration) {
-          // If date didn't change, still check for overlaps with new duration
-          if (!newDate) {
-            try {
-              await validateNoOverlap({
-                userId,
-                eventStart: event.createdAt,
-                duration: newDuration,
-                excludeEventId: eventId,
-              });
-            } catch (err) {
-              if (err instanceof OverlapError) {
-                result = { success: false, error: err.message };
-                break;
-              }
-              throw err;
-            }
-          }
-          
-          updateData.duration = newDuration;
-          const oldHours = Math.floor(event.duration / 3600000);
-          const oldMinutes = Math.floor((event.duration % 3600000) / 60000);
-          const oldDurationStr = oldHours > 0 ? `${oldHours}h ${oldMinutes}m` : `${oldMinutes}m`;
-          const newHours = Math.floor(newDuration / 3600000);
-          const newMinutes = Math.floor((newDuration % 3600000) / 60000);
-          const newDurationStr = newHours > 0 ? `${newHours}h ${newMinutes}m` : `${newMinutes}m`;
-          changes.push(`duration changed from ${oldDurationStr} to ${newDurationStr}`);
+        const updateData: { from?: Date; to?: Date } = {};
+        const changes: string[] = [];
+
+        // Handle from change
+        if (newFrom) {
+          updateData.from = finalFrom;
+          const newFromStr = finalFrom.toLocaleDateString("en-US", { 
+            weekday: "short", month: "short", day: "numeric", timeZone: timezone 
+          });
+          const oldFromStr = event.from.toLocaleDateString("en-US", { 
+            weekday: "short", month: "short", day: "numeric", timeZone: timezone 
+          });
+          changes.push(`start time moved from ${oldFromStr} to ${newFromStr}`);
+        }
+
+        // Handle to change
+        if (newTo) {
+          updateData.to = finalTo;
+          const newToStr = finalTo.toLocaleDateString("en-US", { 
+            weekday: "short", month: "short", day: "numeric", timeZone: timezone 
+          });
+          const oldToStr = event.to.toLocaleDateString("en-US", { 
+            weekday: "short", month: "short", day: "numeric", timeZone: timezone 
+          });
+          changes.push(`end time moved from ${oldToStr} to ${newToStr}`);
         }
 
         await prisma.event.update({

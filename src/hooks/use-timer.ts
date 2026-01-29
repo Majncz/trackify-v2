@@ -36,8 +36,8 @@ interface Event {
   id: string;
   taskId: string;
   name: string;
-  duration: number;
-  createdAt: string;
+  from: string;
+  to: string;
 }
 
 interface Task {
@@ -175,8 +175,8 @@ export function useTimer() {
     mutationFn: async (data: {
       taskId: string;
       name: string;
-      duration: number;
-      createdAt: string; // ISO timestamp of when the timer started
+      from: string; // ISO timestamp of when the timer started
+      to: string;   // ISO timestamp of when the timer ended
     }) => {
       const res = await fetch("/api/events", {
         method: "POST",
@@ -210,8 +210,8 @@ export function useTimer() {
                   id: `temp-${Date.now()}`,
                   taskId: newEvent.taskId,
                   name: newEvent.name,
-                  duration: newEvent.duration,
-                  createdAt: newEvent.createdAt,
+                  from: newEvent.from,
+                  to: newEvent.to,
                 },
               ],
             };
@@ -240,9 +240,9 @@ export function useTimer() {
     const currentState = stateRef.current;
     if (!currentState.taskId || !currentState.startTime) return;
 
-    const duration = Date.now() - currentState.startTime;
     const taskId = currentState.taskId;
     const startTime = currentState.startTime;
+    const endTime = Date.now();
 
     // IMMEDIATELY update UI - user sees instant response
     setState({
@@ -252,14 +252,15 @@ export function useTimer() {
       running: false,
     });
 
+    const duration = endTime - startTime;
     emit("timer:stop", { taskId, duration });
 
     // Save to database in background (don't block UI)
     createEvent.mutate({
       taskId,
       name: "Time entry",
-      duration,
-      createdAt: new Date(startTime).toISOString(),
+      from: new Date(startTime).toISOString(),
+      to: new Date(endTime).toISOString(),
     });
   }, [emit, createEvent]);
 

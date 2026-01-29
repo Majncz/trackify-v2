@@ -257,26 +257,22 @@ app.prepare().then(async () => {
         const overlappingEvents = await prisma.event.findMany({
           where: {
             task: { userId },
-            createdAt: { lt: new Date(now) },
+            from: { lt: new Date(now) },
+            to: { gt: new Date(newStartTime) },
           },
           include: {
             task: { select: { name: true } },
           },
         });
 
-        // Check if any events overlap with the new time range
-        for (const event of overlappingEvents) {
-          const eventStart = event.createdAt.getTime();
-          const eventEnd = eventStart + event.duration;
-          
-          // Overlap if: newStart < eventEnd AND eventStart < newEnd(now)
-          if (newStartTime < eventEnd && eventStart < now) {
-            socket.emit("timer:error", {
-              action: "update-start",
-              message: `This would overlap with "${event.task.name}: ${event.name}"`,
-            });
-            return;
-          }
+        // If any events overlap with the new time range, reject the update
+        if (overlappingEvents.length > 0) {
+          const event = overlappingEvents[0];
+          socket.emit("timer:error", {
+            action: "update-start",
+            message: `This would overlap with "${event.task.name}: ${event.name}"`,
+          });
+          return;
         }
 
         // Update in database

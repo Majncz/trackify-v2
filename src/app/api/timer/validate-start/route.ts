@@ -43,8 +43,8 @@ export async function POST(request: NextRequest) {
     // Skip running timer check since we're adjusting the running timer itself
     await validateNoOverlap({
       userId: user.id,
-      eventStart: startDate,
-      duration,
+      eventFrom: startDate,
+      eventTo: new Date(now),
       skipRunningTimerCheck: true,
     });
 

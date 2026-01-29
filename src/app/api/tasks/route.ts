@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     },
     include: {
       events: {
-        orderBy: { createdAt: "desc" },
+        orderBy: { from: "desc" },
       },
     },
     orderBy: { name: "asc" },

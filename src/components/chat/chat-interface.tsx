@@ -60,9 +60,9 @@ function formatDate(dateStr: string): string {
 function getToolDescription(name: string, args: Record<string, unknown>): string {
   if (name === "createEvent") {
     const taskName = args.taskName ? `"${args.taskName}"` : "task";
-    const duration = args.duration ? formatDuration(args.duration as number) : "";
-    const date = args.createdAt ? formatDate(args.createdAt as string) : "now";
-    return `Log ${duration} to ${taskName} on ${date}`;
+    const from = args.from ? formatDate(args.from as string) : "now";
+    const to = args.to ? formatDate(args.to as string) : "now";
+    return `Log time entry to ${taskName} from ${from} to ${to}`;
   }
   if (name === "createTask") {
     return `Create task "${args.name}"`;
@@ -199,6 +199,11 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
   }
 
   async function handleToolApproval(toolCallId: string, toolName: string, args: Record<string, unknown>) {
+    // Prevent double-execution if already executing
+    if (pendingApprovals[toolCallId] === "executing") {
+      return;
+    }
+    
     setPendingApprovals((prev) => ({ ...prev, [toolCallId]: "executing" }));
 
     try {
@@ -239,6 +244,11 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
   }
 
   async function handleToolRejection(toolCallId: string, toolName: string) {
+    // Prevent double-rejection if already executing or rejected
+    if (pendingApprovals[toolCallId] === "executing" || pendingApprovals[toolCallId] === "rejected") {
+      return;
+    }
+    
     setPendingApprovals((prev) => ({ ...prev, [toolCallId]: "rejected" }));
     await addToolOutput({ toolCallId, tool: toolName, output: { rejected: true, message: "User rejected this action" } });
     sendMessage();
@@ -270,6 +280,40 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
     }
   }, [input]);
 
+  // Find all pending tool calls that need approval
+  function getPendingToolCalls(): Array<{ toolCallId: string; toolName: string }> {
+    const pending: Array<{ toolCallId: string; toolName: string }> = [];
+    
+    for (const message of messages) {
+      if (message.role !== "assistant") continue;
+      
+      for (let idx = 0; idx < (message.parts?.length || 0); idx++) {
+        const part = message.parts?.[idx];
+        if (!part || !part.type.startsWith("tool-")) continue;
+        
+        const toolName = part.type.replace("tool-", "");
+        const toolPart = part as {
+          type: string;
+          toolCallId?: string;
+          state: string;
+        };
+        
+        const toolCallId = toolPart.toolCallId || `${message.id}-${idx}`;
+        const isWriteTool = WRITE_TOOLS.includes(toolName);
+        const approvalState = pendingApprovals[toolCallId];
+        const hasResult = toolPart.state === "output-available" || toolPart.state === "result";
+        const needsApproval = isWriteTool && !hasResult && !approvalState && 
+          (toolPart.state === "call" || toolPart.state === "input-available");
+        
+        if (needsApproval) {
+          pending.push({ toolCallId, toolName });
+        }
+      }
+    }
+    
+    return pending;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -278,6 +322,24 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
     if (!convId) {
       console.error("Failed to create conversation");
       return;
+    }
+
+    // Auto-reject any pending tool approvals when user sends a new message
+    // This handles cases like "oh, i meant 20th" where user is correcting before approving
+    const pendingToolCalls = getPendingToolCalls();
+    if (pendingToolCalls.length > 0) {
+      // Reject all pending tool calls with a message indicating user changed their mind
+      for (const { toolCallId, toolName } of pendingToolCalls) {
+        setPendingApprovals((prev) => ({ ...prev, [toolCallId]: "rejected" }));
+        await addToolOutput({ 
+          toolCallId, 
+          tool: toolName, 
+          output: { 
+            rejected: true, 
+            message: "User sent a new message instead of approving - they may want to change or correct the request" 
+          } 
+        });
+      }
     }
 
     sendMessage({ text: input });
@@ -449,6 +511,7 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
                                   variant="default"
                                   className={isSidebar ? "h-6 text-xs px-2" : "h-7 text-xs"}
                                   onClick={() => handleToolApproval(toolCallId, toolName, toolPart.input || {})}
+                                  disabled={approvalState === "executing"}
                                 >
                                   <Check className="h-3 w-3 mr-1" />
                                   Approve
@@ -458,6 +521,7 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
                                   variant="outline"
                                   className={isSidebar ? "h-6 text-xs px-2" : "h-7 text-xs"}
                                   onClick={() => handleToolRejection(toolCallId, toolName)}
+                                  disabled={approvalState === "executing"}
                                 >
                                   <X className="h-3 w-3 mr-1" />
                                   Reject

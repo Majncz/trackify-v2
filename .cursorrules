@@ -39,5 +39,13 @@
 
 Only then run: `npm run deploy "commit message"`
 
+## Database Migrations
+
+### Automatic Migration Execution
+- When database is backed up and verified, proceed with migrations automatically
+- No need to ask for confirmation if backup exists and is verified
+- Run `npx prisma migrate deploy` and `npx prisma generate` automatically after schema changes
+- User preference: "if there is not reason to be careful (which i dont think it is, the db is backed up) than just do it all yourself without my input"
+
 
 

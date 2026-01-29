@@ -45,16 +45,16 @@ function createTools(userId: string, timezone: string) {
         });
 
         return tasks.map((t) => {
-          const totalMs = t.events.reduce((sum, e) => sum + e.duration, 0);
+          const totalMs = t.events.reduce((sum, e) => sum + (e.to.getTime() - e.from.getTime()), 0);
           const lastEvent = t.events.sort((a, b) => 
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            b.from.getTime() - a.from.getTime()
           )[0];
           
           return {
             id: t.id,
             name: t.name,
             totalTime: formatDuration(totalMs),
-            lastActivity: formatDate(lastEvent?.createdAt || null, timezone),
+            lastActivity: formatDate(lastEvent?.from || null, timezone),
           };
         });
       },
@@ -100,7 +100,7 @@ function createTools(userId: string, timezone: string) {
     }),
 
     listEvents: tool({
-      description: "List time entries (events) for a task with smart filtering. Use this to find specific events to delete or review.",
+      description: "List time entries (events) for a task. Each event has a FROM time (when work began) and TO time (when work ended). Use this to find specific events to delete, update, or review.",
       inputSchema: z.object({
         taskId: z.string().optional().describe("Filter by task ID. Use findTask first to get the ID."),
         taskName: z.string().optional().describe("Filter by task name (partial match). Alternative to taskId."),
@@ -140,26 +140,32 @@ function createTools(userId: string, timezone: string) {
               hidden: false,
               ...taskFilter,
             },
-            ...(Object.keys(dateFilter).length > 0 ? { createdAt: dateFilter } : {}),
+            ...(Object.keys(dateFilter).length > 0 ? { from: dateFilter } : {}),
           },
           include: {
             task: { select: { name: true } },
           },
-          orderBy: { createdAt: orderBy === "newest" ? "desc" : "asc" },
+          orderBy: { from: orderBy === "newest" ? "desc" : "asc" },
           take: maxLimit,
         });
 
         return {
           count: events.length,
-          events: events.map((e) => ({
-            id: e.id,
-            taskName: e.task.name,
-            duration: formatDuration(e.duration),
-            durationMs: e.duration,
-            name: e.name || null,
-            date: e.createdAt.toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: timezone }),
-            time: e.createdAt.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: timezone }),
-          })),
+          events: events.map((e) => {
+            const durationMs = e.to.getTime() - e.from.getTime();
+            return {
+              id: e.id,
+              taskName: e.task.name,
+              duration: formatDuration(durationMs),
+              durationMs,
+              name: e.name || null,
+              date: e.from.toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: timezone }),
+              from: e.from.toISOString(),
+              to: e.to.toISOString(),
+              startTime: e.from.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: timezone }),
+              endTime: e.to.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: timezone }),
+            };
+          }),
         };
       },
     }),
@@ -178,9 +184,9 @@ function createTools(userId: string, timezone: string) {
       inputSchema: z.object({
         taskId: z.string().describe("The task ID to log time to"),
         taskName: z.string().describe("The task name (for display to user)"),
-        duration: z.number().describe("Duration in milliseconds"),
+        from: z.string().describe("ISO timestamp for when the event started"),
+        to: z.string().describe("ISO timestamp for when the event ended"),
         name: z.string().optional().describe("Optional description for this time entry"),
-        createdAt: z.string().optional().describe("ISO timestamp for when this event occurred (defaults to now)"),
       }),
       // No execute - requires approval
     }),
@@ -283,7 +289,7 @@ function createTools(userId: string, timezone: string) {
           include: {
             events: {
               where: { 
-                createdAt: { 
+                from: { 
                   gte: startDateUtc,
                   lte: endDateUtc,
                 } 
@@ -295,7 +301,7 @@ function createTools(userId: string, timezone: string) {
         const taskStats = tasks
           .map((t) => ({
             name: t.name,
-            totalMs: t.events.reduce((sum, e) => sum + e.duration, 0),
+            totalMs: t.events.reduce((sum, e) => sum + (e.to.getTime() - e.from.getTime()), 0),
           }))
           .filter((t) => t.totalMs > 0)
           .sort((a, b) => b.totalMs - a.totalMs);
@@ -326,11 +332,11 @@ function createTools(userId: string, timezone: string) {
     }),
 
     updateEvent: tool({
-      description: "Update a time entry - move it to a different date/time and/or change its duration. Use listEvents first to find the event ID.",
+      description: "Update a time entry - change its FROM time and/or TO time. Use listEvents first to find the event ID and current from/to times.",
       inputSchema: z.object({
         eventId: z.string().describe("The event ID to update"),
-        newDate: z.string().optional().describe("New date/time in ISO format (e.g., '2025-01-15T14:00:00'). If only date is needed, use format '2025-01-15'."),
-        newDuration: z.number().optional().describe("New duration in milliseconds (e.g., 3600000 for 1 hour)"),
+        newFrom: z.string().optional().describe("New FROM date/time in ISO format (e.g., '2025-01-15T14:00:00')"),
+        newTo: z.string().optional().describe("New TO date/time in ISO format (e.g., '2025-01-15T18:00:00')"),
       }),
       // No execute - requires approval
     }),
@@ -346,7 +352,20 @@ export async function POST(req: Request) {
 
   const userId = user.id;
   const body = await req.json();
-  const { messages, conversationId, timezone = "UTC" } = body;
+  
+  // Validate timezone
+  let timezone = "UTC";
+  if (body.timezone) {
+    try {
+      // Test if timezone is valid by trying to use it
+      Intl.DateTimeFormat(undefined, { timeZone: body.timezone });
+      timezone = body.timezone;
+    } catch {
+      console.warn(`Invalid timezone "${body.timezone}", falling back to UTC`);
+    }
+  }
+  
+  const { messages, conversationId } = body;
 
   const conversation = conversationId ? await prisma.conversation.findFirst({
     where: { id: conversationId, userId },
@@ -423,23 +442,31 @@ Use custom date ranges for specific periods:
 - "March 2025" → startDate: "2025-03-01", endDate: "2025-03-31"
 - "2023" → startDate: "2023-01-01", endDate: "2023-12-31"
 
+**Event data model (CRITICAL):**
+- Each event has a FROM time (when work started) and a TO time (when work ended)
+- Both FROM and TO are stored as ISO timestamps
+- Duration is computed: TO - FROM (in milliseconds)
+- When user says "end at 18:00", set newTo to that time
+- When user says "start at 14:00", set newFrom to that time
+
 **When logging time:**
 - Parse natural language dates/times (e.g. "yesterday 3 hours", "last Monday 9am-12pm")
-- Duration in milliseconds (1h = 3600000ms), dates in ISO format
-- Use findTask first to get taskId, then createEvent
-- Events cannot end in the future. When logging "now", the event ends at current time (starts at now - duration)
+- Dates in ISO format (e.g., "2025-01-15T14:00:00Z")
+- Use findTask first to get taskId, then createEvent with from and to timestamps
+- Events cannot end in the future. When logging "now", the event ends at current time
 
 **When finding/deleting/updating events:**
 - Use listEvents with filters: taskName, date range, limit (default 10)
-- Show event ID, task, duration, date in a table
+- Show event ID, task, from/to times, duration in a table
 - To delete, use deleteEvent with the event ID
-- To move or change duration, use updateEvent with the event ID
+- To move or change times, use updateEvent with the event ID
 
-**When updating events (moving or changing duration):**
-- Use listEvents first to find the event ID
-- Use updateEvent with eventId and optionally newDate (ISO format) and/or newDuration (milliseconds)
-- Example: move "yesterday's entry to today" → updateEvent with newDate: "2025-01-13T14:00:00"
-- Example: change 2h to 3h → updateEvent with newDuration: 10800000
+**When updating events (moving or changing times):**
+- Use listEvents first to find the event ID, from, and to times
+- Use updateEvent with eventId and optionally newFrom (ISO format) and/or newTo (ISO format)
+- Example: move "yesterday's entry to today" → updateEvent with newFrom: "2025-01-13T14:00:00Z", newTo: "2025-01-13T18:00:00Z"
+- Example: change end time to 18:00 → updateEvent with newTo: "2025-01-15T18:00:00Z"
+- Example: change start time to 14:00 → updateEvent with newFrom: "2025-01-15T14:00:00Z"
 
 Use markdown: **bold** for emphasis, tables for data, keep responses concise.`,
     messages: modelMessages,

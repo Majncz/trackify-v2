@@ -37,13 +37,13 @@ export async function GET(request: NextRequest) {
   });
 
   const stats = tasks.map((task) => {
-    const totalTime = task.events.reduce((sum, e) => sum + e.duration, 0);
+    const totalTime = task.events.reduce((sum, e) => sum + (e.to.getTime() - e.from.getTime()), 0);
     const todayTime = task.events
       .filter(
         (e) =>
-          e.createdAt >= todayStartUtc && e.createdAt <= todayEndUtc
+          e.from >= todayStartUtc && e.from <= todayEndUtc
       )
-      .reduce((sum, e) => sum + e.duration, 0);
+      .reduce((sum, e) => sum + (e.to.getTime() - e.from.getTime()), 0);
 
     return {
       taskId: task.id,

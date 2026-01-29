@@ -52,8 +52,8 @@ export function TaskList() {
       
       // Then: sort by most recent event (most recent first)
       if (aHasEvents && bHasEvents) {
-        const aMostRecent = Math.max(...a.events.map((e) => new Date(e.createdAt).getTime()));
-        const bMostRecent = Math.max(...b.events.map((e) => new Date(e.createdAt).getTime()));
+        const aMostRecent = Math.max(...a.events.map((e) => new Date(e.from).getTime()));
+        const bMostRecent = Math.max(...b.events.map((e) => new Date(e.from).getTime()));
         return bMostRecent - aMostRecent;
       }
       
