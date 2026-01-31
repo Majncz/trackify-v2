@@ -143,12 +143,20 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
   const isLoading = status === "streaming" || status === "submitted";
 
   // Load messages when conversation changes
+  const prevConversationId = useRef<string | null>(null);
   useEffect(() => {
     setPendingApprovals({});
 
     if (!conversationId) {
       setMessages([]);
       return;
+    }
+
+    // If switching to a different conversation, clear messages immediately
+    const isNewConversation = prevConversationId.current !== conversationId;
+    if (isNewConversation) {
+      setMessages([]);
+      prevConversationId.current = conversationId;
     }
 
     let cancelled = false;
@@ -160,7 +168,7 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
         if (res.ok) {
           const dbMessages = await res.json();
           if (cancelled) return;
-          // Don't clear messages if DB has none - preserves optimistic UI messages
+          // If no messages in DB, keep it empty (already cleared above)
           if (dbMessages.length === 0) return;
           const uiMessages = dbMessages.map((msg: { id: string; role: string; content: string; parts?: unknown[] }) => ({
             id: msg.id,

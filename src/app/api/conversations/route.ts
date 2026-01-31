@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
       updatedAt: true,
       createdAt: true,
     },
-    orderBy: { updatedAt: "desc" },
+    orderBy: { updatedAt: "asc" },
   });
 
   return NextResponse.json(conversations);

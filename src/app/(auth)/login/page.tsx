@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -12,8 +12,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function LoginPage() {
   const router = useRouter();
-  const emailRef = useRef<HTMLInputElement>(null);
-  const passwordRef = useRef<HTMLInputElement>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -21,9 +21,6 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     setLoading(true);
-
-    const email = emailRef.current?.value || "";
-    const password = passwordRef.current?.value || "";
 
     try {
       const result = await signIn("credentials", {
@@ -74,7 +71,8 @@ export default function LoginPage() {
               id="email"
               name="email"
               type="email"
-              ref={emailRef}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               required
               placeholder="you@example.com"
             />
@@ -83,7 +81,10 @@ export default function LoginPage() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="password">Password</Label>
-              <Link href="/forgot-password" className="text-sm text-primary hover:underline">
+              <Link 
+                href={`/forgot-password${email ? `?email=${encodeURIComponent(email)}` : ''}`}
+                className="text-sm text-primary hover:underline"
+              >
                 Forgot password?
               </Link>
             </div>
@@ -91,7 +92,9 @@ export default function LoginPage() {
               id="password"
               name="password"
               type="password"
-              ref={passwordRef}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSubmit(e)}
               required
               placeholder="Enter your password"
             />
