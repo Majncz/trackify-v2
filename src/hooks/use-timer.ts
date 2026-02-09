@@ -104,7 +104,13 @@ export function useTimer() {
     });
 
     const unsubStop = on("timer:stopped", () => {
-      setPendingConfirmation(false);
+      // Don't clear pendingConfirmation here if we're saving an event
+      // The REST createEvent.onSettled will clear pendingSaveTaskId
+      if (!stateRef.current.running) {
+        // Already stopped locally (optimistic), wait for REST to confirm
+      } else {
+        setPendingConfirmation(false);
+      }
       setState({
         taskId: null,
         startTime: null,
