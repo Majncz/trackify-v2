@@ -36,6 +36,19 @@
   .animate-pulse-dot-slow {
     animation: pulse-dot-slow 2s ease-in-out infinite;
   }
+
+  @keyframes pending-pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.4;
+    }
+  }
+
+  .animate-pending-pulse {
+    animation: pending-pulse 1.5s ease-in-out infinite;
+  }
 }
 
 

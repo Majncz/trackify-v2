@@ -26,6 +26,7 @@ interface TaskItemProps {
   onStart: () => void;
   onStop: () => void;
   isLoading?: boolean;
+  pendingConfirmation?: boolean;
 }
 
 export function TaskItem({
@@ -34,6 +35,7 @@ export function TaskItem({
   onStart,
   onStop,
   isLoading,
+  pendingConfirmation,
 }: TaskItemProps) {
   const router = useRouter();
   const totalTime = task.events.reduce((sum, e) => {
@@ -69,7 +71,8 @@ export function TaskItem({
     <Card
       className={cn(
         "transition-all h-full flex flex-col cursor-pointer",
-        isActive && "border-primary ring-1 ring-primary"
+        isActive && "border-primary ring-1 ring-primary",
+        isActive && pendingConfirmation && "animate-pending-pulse"
       )}
       onClick={handleCardClick}
     >
@@ -95,7 +98,7 @@ export function TaskItem({
               className="w-full"
                 >
                   <Square className="h-4 w-4 mr-1" />
-                  {isLoading ? "Saving..." : "Stop"}
+                  {isLoading ? "Saving..." : pendingConfirmation ? "Syncing..." : "Stop"}
                 </Button>
             ) : (
             <Button onClick={handleStartClick} size="sm" className="w-full">

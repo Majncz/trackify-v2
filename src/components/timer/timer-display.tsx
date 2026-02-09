@@ -8,9 +8,10 @@ interface TimerDisplayProps {
   size?: "sm" | "md" | "lg" | "xl";
   onClick?: () => void;
   clickable?: boolean;
+  pending?: boolean;
 }
 
-export function TimerDisplay({ milliseconds, size = "md", onClick, clickable = false }: TimerDisplayProps) {
+export function TimerDisplay({ milliseconds, size = "md", onClick, clickable = false, pending = false }: TimerDisplayProps) {
   const formatted = formatDuration(milliseconds);
 
   const sizeClasses = {
@@ -26,9 +27,10 @@ export function TimerDisplay({ milliseconds, size = "md", onClick, clickable = f
       className={cn(
         "font-mono tabular-nums font-bold",
         sizeClasses[size],
-        clickable && onClick && "cursor-pointer hover:opacity-80 transition-opacity"
+        clickable && onClick && "cursor-pointer hover:opacity-80 transition-opacity",
+        pending && "animate-pending-pulse"
       )}
-      title={clickable ? "Click to adjust start time" : undefined}
+      title={clickable ? "Click to adjust start time" : pending ? "Syncing with server..." : undefined}
     >
       {formatted}
     </span>

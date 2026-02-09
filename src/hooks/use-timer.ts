@@ -54,6 +54,7 @@ export function useTimer() {
     running: false,
   });
   const [socketError, setSocketError] = useState<string | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState(false);
 
   const intervalRef = useRef<NodeJS.Timeout>();
   const stateRef = useRef(state);
@@ -88,6 +89,7 @@ export function useTimer() {
   useEffect(() => {
     const unsubStart = on("timer:started", (data) => {
       const { taskId, startTime } = data as TimerStartedData;
+      setPendingConfirmation(false);
       // Only update if not already running this task (avoids overwriting local state)
       if (stateRef.current.taskId === taskId && stateRef.current.running) {
         return;
@@ -101,6 +103,7 @@ export function useTimer() {
     });
 
     const unsubStop = on("timer:stopped", () => {
+      setPendingConfirmation(false);
       setState({
         taskId: null,
         startTime: null,
@@ -245,6 +248,7 @@ export function useTimer() {
     const endTime = Date.now();
 
     // IMMEDIATELY update UI - user sees instant response
+    setPendingConfirmation(true);
     setState({
       taskId: null,
       startTime: null,
@@ -272,6 +276,7 @@ export function useTimer() {
       }
 
       const startTime = Date.now();
+      setPendingConfirmation(true);
       emit("timer:start", { taskId });
       setState({
         taskId,
@@ -349,6 +354,7 @@ export function useTimer() {
 
   return {
     ...state,
+    pendingConfirmation,
     startTimer,
     stopTimer,
     adjustStartTime,

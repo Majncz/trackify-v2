@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useTasks } from "@/hooks/use-tasks";
 import { useTimer } from "@/hooks/use-timer";
 import { TaskItem } from "./task-item";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -25,6 +26,7 @@ export function TaskList() {
     startTimer,
     stopTimer,
     adjustStartTime,
+    pendingConfirmation,
     isCreatingEvent,
     createEventError,
     isAdjustingStartTime,
@@ -119,12 +121,15 @@ export function TaskList() {
 
       {/* Active Timer Banner */}
       {running && taskId && (
-        <Card className="border-primary bg-primary/5">
+        <Card className={cn(
+          "border-primary bg-primary/5",
+          pendingConfirmation && "animate-pending-pulse"
+        )}>
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-primary font-medium">
-                  Currently tracking
+                  {pendingConfirmation ? "Syncing..." : "Currently tracking"}
                 </p>
                 <p className="text-lg font-semibold">
                   {tasks.find((t) => t.id === taskId)?.name}
@@ -136,6 +141,7 @@ export function TaskList() {
                   size="lg"
                   onClick={() => setIsAdjustDialogOpen(true)}
                   clickable={true}
+                  pending={pendingConfirmation}
                 />
                 <Button
                   onClick={stopTimer}
@@ -172,6 +178,7 @@ export function TaskList() {
               onStart={() => startTimer(task.id)}
               onStop={stopTimer}
               isLoading={isCreatingEvent && taskId === task.id}
+              pendingConfirmation={pendingConfirmation && taskId === task.id}
             />
               ))}
             </div>
