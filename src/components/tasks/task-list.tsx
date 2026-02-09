@@ -27,6 +27,7 @@ export function TaskList() {
     stopTimer,
     adjustStartTime,
     pendingConfirmation,
+    pendingSaveTaskId,
     isCreatingEvent,
     createEventError,
     isAdjustingStartTime,
@@ -177,8 +178,8 @@ export function TaskList() {
               isActive={taskId === task.id && running}
               onStart={() => startTimer(task.id)}
               onStop={stopTimer}
-              isLoading={isCreatingEvent && taskId === task.id}
-              pendingConfirmation={pendingConfirmation && taskId === task.id}
+              isLoading={isCreatingEvent && (taskId === task.id || pendingSaveTaskId === task.id)}
+              pendingConfirmation={(pendingConfirmation && taskId === task.id) || pendingSaveTaskId === task.id}
             />
               ))}
             </div>

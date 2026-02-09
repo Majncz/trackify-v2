@@ -55,6 +55,7 @@ export function useTimer() {
   });
   const [socketError, setSocketError] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState(false);
+  const [pendingSaveTaskId, setPendingSaveTaskId] = useState<string | null>(null);
 
   const intervalRef = useRef<NodeJS.Timeout>();
   const stateRef = useRef(state);
@@ -233,6 +234,7 @@ export function useTimer() {
     },
     onSettled: () => {
       // Sync with server after mutation completes
+      setPendingSaveTaskId(null);
       queryClient.invalidateQueries({ queryKey: ["events"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
@@ -249,6 +251,7 @@ export function useTimer() {
 
     // IMMEDIATELY update UI - user sees instant response
     setPendingConfirmation(true);
+    setPendingSaveTaskId(taskId);
     setState({
       taskId: null,
       startTime: null,
@@ -355,6 +358,7 @@ export function useTimer() {
   return {
     ...state,
     pendingConfirmation,
+    pendingSaveTaskId,
     startTimer,
     stopTimer,
     adjustStartTime,

@@ -72,7 +72,7 @@ export function TaskItem({
       className={cn(
         "transition-all h-full flex flex-col cursor-pointer",
         isActive && "border-primary ring-1 ring-primary",
-        isActive && pendingConfirmation && "animate-pending-pulse"
+        pendingConfirmation && "animate-pending-pulse border-yellow-500 ring-1 ring-yellow-500"
       )}
       onClick={handleCardClick}
     >
