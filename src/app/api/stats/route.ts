@@ -38,12 +38,22 @@ export async function GET(request: NextRequest) {
 
   const stats = tasks.map((task) => {
     const totalTime = task.events.reduce((sum, e) => sum + (e.to.getTime() - e.from.getTime()), 0);
-    const todayTime = task.events
-      .filter(
-        (e) =>
-          e.from >= todayStartUtc && e.from <= todayEndUtc
-      )
-      .reduce((sum, e) => sum + (e.to.getTime() - e.from.getTime()), 0);
+    
+    // Calculate today's time by checking overlap with today's window
+    const todayTime = task.events.reduce((sum, e) => {
+      // Check if event overlaps with today
+      if (e.to <= todayStartUtc || e.from >= todayEndUtc) {
+        // No overlap
+        return sum;
+      }
+      
+      // Calculate the overlapping portion
+      const overlapStart = Math.max(e.from.getTime(), todayStartUtc.getTime());
+      const overlapEnd = Math.min(e.to.getTime(), todayEndUtc.getTime());
+      const overlapDuration = overlapEnd - overlapStart;
+      
+      return sum + Math.max(0, overlapDuration);
+    }, 0);
 
     return {
       taskId: task.id,
