@@ -52,8 +52,9 @@ export async function PUT(
         );
       }
 
-      // Validate that event doesn't end in the future
-      if (finalTo > new Date()) {
+      // Validate that event doesn't end in the future (5s tolerance for clock skew)
+      const futureThreshold = new Date(Date.now() + 5000);
+      if (finalTo > futureThreshold) {
         return NextResponse.json(
           { error: "Cannot update event to end in the future" },
           { status: 400 }

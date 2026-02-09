@@ -74,8 +74,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate event doesn't end in the future
-    if (eventTo > new Date()) {
+    // Validate event doesn't end in the future (5s tolerance for clock skew)
+    const futureThreshold = new Date(Date.now() + 5000);
+    if (eventTo > futureThreshold) {
       return NextResponse.json(
         { error: "Cannot create event that ends in the future" },
         { status: 400 }
