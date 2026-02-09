@@ -42,7 +42,7 @@ export async function PUT(
     // Validate no overlap if from or to is being changed
     if (data.from !== undefined || data.to !== undefined) {
       const finalFrom = data.from ? new Date(data.from) : event.from;
-      const finalTo = data.to ? new Date(data.to) : event.to;
+      let finalTo = data.to ? new Date(data.to) : event.to;
       
       // Validate to > from
       if (finalTo <= finalFrom) {
@@ -52,13 +52,10 @@ export async function PUT(
         );
       }
 
-      // Validate that event doesn't end in the future (5s tolerance for clock skew)
-      const futureThreshold = new Date(Date.now() + 5000);
-      if (finalTo > futureThreshold) {
-        return NextResponse.json(
-          { error: "Cannot update event to end in the future" },
-          { status: 400 }
-        );
+      // Clamp end time to now if it's in the future (clock skew)
+      const now = new Date();
+      if (finalTo > now) {
+        finalTo = now;
       }
 
       await validateNoOverlap({

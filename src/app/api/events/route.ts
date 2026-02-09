@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
 
     // Parse dates
     const eventFrom = new Date(from);
-    const eventTo = new Date(to);
+    let eventTo = new Date(to);
 
     // Validate to > from
     if (eventTo <= eventFrom) {
@@ -74,13 +74,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate event doesn't end in the future (5s tolerance for clock skew)
-    const futureThreshold = new Date(Date.now() + 5000);
-    if (eventTo > futureThreshold) {
-      return NextResponse.json(
-        { error: "Cannot create event that ends in the future" },
-        { status: 400 }
-      );
+    // Clamp end time to now if it's in the future (clock skew)
+    const now = new Date();
+    if (eventTo > now) {
+      eventTo = now;
     }
 
     // Check for overlapping events
