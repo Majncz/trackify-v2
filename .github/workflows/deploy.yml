@@ -22,8 +22,9 @@ jobs:
             # Backup database before deploy
             docker exec trackify-database pg_dump -U trackify trackify > backups/pre_deploy_$(date +%Y%m%d_%H%M%S).sql
             
-            # Pull latest changes
-            git pull origin master
+            # Reset to match remote (prevents dirty working dir from blocking deploys)
+            git fetch origin master
+            git reset --hard origin/master
             
             # Install dependencies
             npm ci
