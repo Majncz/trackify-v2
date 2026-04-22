@@ -1,8 +1,36 @@
+use keyring::{Entry, Error as KeyringError};
 use tauri::{menu::{Menu, MenuItem}, tray::TrayIconBuilder, Manager};
 
+const AUTH_SERVICE: &str = "co.bitterlemon.trackify";
+const AUTH_ACCOUNT: &str = "desktop-auth-token";
+
+fn auth_entry() -> Result<Entry, String> {
+    Entry::new(AUTH_SERVICE, AUTH_ACCOUNT).map_err(|error| error.to_string())
+}
+
 #[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}!", name)
+fn save_auth_token(token: String) -> Result<(), String> {
+    let entry = auth_entry()?;
+    entry.set_password(&token).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn load_auth_token() -> Result<Option<String>, String> {
+    let entry = auth_entry()?;
+    match entry.get_password() {
+        Ok(token) => Ok(Some(token)),
+        Err(KeyringError::NoEntry) => Ok(None),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+#[tauri::command]
+fn clear_auth_token() -> Result<(), String> {
+    let entry = auth_entry()?;
+    match entry.delete_credential() {
+        Ok(()) | Err(KeyringError::NoEntry) => Ok(()),
+        Err(error) => Err(error.to_string()),
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -36,7 +64,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![save_auth_token, load_auth_token, clear_auth_token])
         .run(tauri::generate_context!())
         .expect("error while running trackify desktop app");
 }

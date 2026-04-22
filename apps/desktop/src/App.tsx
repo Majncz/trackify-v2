@@ -1,41 +1,85 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { TrackifyApiClient } from "@trackify/api-client";
+import type { ProjectSummary, TaskSummary, TimeEntry } from "@trackify/shared-types";
 import { formatDuration, secondsSince } from "./lib/time";
+import { loadAuthToken, saveAuthToken } from "./lib/auth";
+import { OfflineQueue } from "./state/offlineQueue";
 
-const defaultProjects = [
+const fallbackProjects: ProjectSummary[] = [
   { id: "project-1", name: "Trackify Platform" },
   { id: "project-2", name: "Client Work" },
 ];
 
-const defaultTasks = [
+const fallbackTasks: TaskSummary[] = [
   { id: "task-1", projectId: "project-1", name: "Desktop app" },
   { id: "task-2", projectId: "project-1", name: "API integration" },
   { id: "task-3", projectId: "project-2", name: "Meeting" },
 ];
 
+function makeClient(getToken: () => Promise<string | null>) {
+  const baseUrl =
+    localStorage.getItem("trackify.desktop.apiBaseUrl")?.trim() || "http://localhost:3000";
+
+  return new TrackifyApiClient({
+    baseUrl,
+    getToken,
+  });
+}
+
 export function App() {
-  const [projectId, setProjectId] = useState(defaultProjects[0].id);
+  const [projects, setProjects] = useState<ProjectSummary[]>(fallbackProjects);
+  const [tasks, setTasks] = useState<TaskSummary[]>(fallbackTasks);
+  const [projectId, setProjectId] = useState(fallbackProjects[0]?.id ?? "");
   const [taskId, setTaskId] = useState<string | undefined>(undefined);
   const [note, setNote] = useState("");
-  const [startedAt, setStartedAt] = useState<string | null>(null);
-
+  const [runningEntry, setRunningEntry] = useState<TimeEntry | null>(null);
   const [elapsed, setElapsed] = useState(0);
-  const running = Boolean(startedAt);
+  const [todayTotal, setTodayTotal] = useState(0);
+  const [status, setStatus] = useState("Loading...");
+  const [error, setError] = useState<string | null>(null);
+  const [tokenInput, setTokenInput] = useState("");
+
+  const queueRef = useRef(new OfflineQueue());
+  const tokenRef = useRef<string | null>(null);
+  const clientRef = useRef<TrackifyApiClient | null>(null);
+
+  const running = Boolean(runningEntry?.startedAt);
 
   useEffect(() => {
-    if (!startedAt) {
+    const boot = async () => {
+      try {
+        tokenRef.current = await loadAuthToken();
+      } catch {
+        tokenRef.current = null;
+      }
+
+      clientRef.current = makeClient(async () => tokenRef.current);
+      await reloadFromApi();
+      setStatus("Ready");
+    };
+
+    boot().catch((bootError) => {
+      setStatus("Ready (offline mode)");
+      setError(bootError instanceof Error ? bootError.message : "Failed to load data");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!runningEntry?.startedAt) {
       setElapsed(0);
       return;
     }
 
-    const tick = () => setElapsed(secondsSince(startedAt));
+    const tick = () => setElapsed(secondsSince(runningEntry.startedAt));
     tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [startedAt]);
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [runningEntry?.startedAt]);
 
   const filteredTasks = useMemo(
-    () => defaultTasks.filter((task) => task.projectId === projectId),
-    [projectId],
+    () => tasks.filter((task) => task.projectId === projectId),
+    [tasks, projectId],
   );
 
   useEffect(() => {
@@ -44,7 +88,124 @@ export function App() {
     }
   }, [filteredTasks, taskId]);
 
-  const todayTotal = running ? elapsed : 0;
+  const reloadFromApi = async () => {
+    const client = clientRef.current;
+    if (!client) return;
+
+    try {
+      const [apiProjects, runningSnapshot] = await Promise.all([
+        client.getProjects(),
+        client.getRunningTimer(),
+      ]);
+
+      if (apiProjects.length > 0) {
+        setProjects(apiProjects);
+        setProjectId((current) =>
+          current && apiProjects.some((project) => project.id === current)
+            ? current
+            : apiProjects[0]!.id,
+        );
+      }
+
+      setRunningEntry(runningSnapshot.entry ?? null);
+      setTodayTotal(runningSnapshot.todayTotalSeconds ?? 0);
+
+      if (projectId) {
+        const apiTasks = await client.getTasks(projectId);
+        if (apiTasks.length > 0) setTasks(apiTasks);
+      }
+
+      setError(null);
+    } catch (apiError) {
+      setStatus("Ready (offline mode)");
+      setError(apiError instanceof Error ? apiError.message : "API unavailable");
+    }
+  };
+
+  const queueSync = async () => {
+    const client = clientRef.current;
+    if (!client) return;
+
+    const actions = queueRef.current.list();
+    if (actions.length === 0) return;
+
+    try {
+      const result = await client.syncQueue(actions);
+      const failed = new Set(result.failed);
+      for (const action of actions) {
+        if (!failed.has(action.id)) queueRef.current.removeById(action.id);
+      }
+      setStatus(queueRef.current.size() > 0 ? "Sync pending" : "Ready");
+    } catch {
+      setStatus("Offline sync pending");
+    }
+  };
+
+  const startTimer = async () => {
+    const startedAt = new Date().toISOString();
+    const client = clientRef.current;
+    if (!client) return;
+
+    setStatus("Starting timer...");
+    setError(null);
+
+    try {
+      const entry = await client.startTimer({
+        projectId,
+        taskId,
+        note: note || undefined,
+        startedAt,
+      });
+      setRunningEntry(entry);
+      setStatus("Running");
+    } catch {
+      const optimisticId = `local-${crypto.randomUUID()}`;
+      queueRef.current.enqueue({
+        id: optimisticId,
+        type: "START_TIMER",
+        payload: { projectId, taskId, note, startedAt },
+        createdAt: startedAt,
+      });
+      setRunningEntry({ id: optimisticId, projectId, taskId, note, startedAt });
+      setStatus("Running (offline queued)");
+    }
+  };
+
+  const stopTimer = async () => {
+    const client = clientRef.current;
+    if (!client || !runningEntry?.id) return;
+
+    setStatus("Stopping timer...");
+
+    try {
+      const stopped = await client.stopTimer(runningEntry.id);
+      const duration = stopped.durationSeconds ?? elapsed;
+      setTodayTotal((value) => value + duration);
+      setRunningEntry(null);
+      setStatus("Ready");
+    } catch {
+      queueRef.current.enqueue({
+        id: `local-${crypto.randomUUID()}`,
+        type: "STOP_TIMER",
+        payload: { entryId: runningEntry.id, stoppedAt: new Date().toISOString() },
+        createdAt: new Date().toISOString(),
+      });
+      setTodayTotal((value) => value + elapsed);
+      setRunningEntry(null);
+      setStatus("Ready (stop queued)");
+    }
+
+    queueSync().catch(() => undefined);
+  };
+
+  const handleSaveToken = async () => {
+    if (!tokenInput.trim()) return;
+    await saveAuthToken(tokenInput.trim());
+    tokenRef.current = tokenInput.trim();
+    setTokenInput("");
+    await reloadFromApi();
+    setStatus("Ready");
+  };
 
   return (
     <div className="panel-root">
@@ -57,6 +218,7 @@ export function App() {
         <div>
           <div className="status-label">Current</div>
           <div className="status-value">{running ? "Running" : "Idle"}</div>
+          <div className="status-label">{status}</div>
         </div>
         <div className="clock">{formatDuration(elapsed)}</div>
       </div>
@@ -64,8 +226,8 @@ export function App() {
       <div className="form-grid">
         <label>
           Project
-          <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-            {defaultProjects.map((project) => (
+          <select value={projectId} onChange={(event) => setProjectId(event.target.value)}>
+            {projects.map((project) => (
               <option key={project.id} value={project.id}>
                 {project.name}
               </option>
@@ -77,7 +239,7 @@ export function App() {
           Task
           <select
             value={taskId ?? ""}
-            onChange={(e) => setTaskId(e.target.value || undefined)}
+            onChange={(event) => setTaskId(event.target.value || undefined)}
           >
             <option value="">No specific task</option>
             {filteredTasks.map((task) => (
@@ -93,26 +255,41 @@ export function App() {
           <textarea
             placeholder="What are you working on?"
             value={note}
-            onChange={(e) => setNote(e.target.value)}
+            onChange={(event) => setNote(event.target.value)}
           />
         </label>
+
+        <label>
+          API token (stored in OS keychain)
+          <input
+            type="password"
+            value={tokenInput}
+            onChange={(event) => setTokenInput(event.target.value)}
+            placeholder="Paste access token"
+          />
+        </label>
+        <button className="button-primary" onClick={handleSaveToken}>
+          Save token
+        </button>
       </div>
 
       <div className="actions">
         {!running ? (
-          <button className="button-primary" onClick={() => setStartedAt(new Date().toISOString())}>
+          <button className="button-primary" onClick={startTimer}>
             Start timer
           </button>
         ) : (
-          <button className="button-danger" onClick={() => setStartedAt(null)}>
+          <button className="button-danger" onClick={stopTimer}>
             Stop timer
           </button>
         )}
       </div>
 
+      {error ? <div className="status-label">⚠ {error}</div> : null}
+
       <footer>
         <span>Today total</span>
-        <strong>{formatDuration(todayTotal)}</strong>
+        <strong>{formatDuration(running ? todayTotal + elapsed : todayTotal)}</strong>
       </footer>
     </div>
   );

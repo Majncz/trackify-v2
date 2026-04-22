@@ -77,7 +77,8 @@ label {
 }
 
 select,
-textarea {
+textarea,
+input {
   border: 1px solid hsl(0 0% 89.8%);
   border-radius: 8px;
   padding: 8px 10px;
@@ -89,6 +90,10 @@ textarea {
 textarea {
   resize: vertical;
   min-height: 72px;
+}
+
+input {
+  height: 36px;
 }
 
 .actions {
