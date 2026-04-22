@@ -96,6 +96,19 @@ input {
   height: 36px;
 }
 
+input[type="checkbox"] {
+  height: 16px;
+  width: 16px;
+  margin: 0;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: hsl(0 0% 9%);
+}
+
 .actions {
   display: flex;
 }

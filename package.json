@@ -19,6 +19,8 @@
     "desktop:dev": "npm run dev --workspace @trackify/desktop",
     "desktop:build": "npm run build --workspace @trackify/desktop",
     "desktop:test": "npm run test --workspace @trackify/desktop",
+    "desktop:bundle": "npm run tauri:build --workspace @trackify/desktop",
+    "desktop:artifacts": "node scripts/collect-desktop-bundles.mjs",
     "progress:chunk": "bash scripts/chunk_done.sh"
   },
   "dependencies": {

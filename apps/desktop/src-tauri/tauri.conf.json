@@ -16,8 +16,8 @@
         "width": 380,
         "height": 540,
         "resizable": false,
-        "visible": true,
-        "alwaysOnTop": true
+        "visible": false,
+        "alwaysOnTop": false
       }
     ],
     "security": {

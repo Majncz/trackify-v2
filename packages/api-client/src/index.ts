@@ -12,6 +12,16 @@ export interface ApiClientOptions {
   getToken: () => Promise<string | null>;
 }
 
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export class TrackifyApiClient {
   constructor(private readonly options: ApiClientOptions) {}
 
@@ -28,48 +38,52 @@ export class TrackifyApiClient {
     });
 
     if (!response.ok) {
-      throw new Error(`API ${response.status}: ${await response.text()}`);
+      throw new ApiError(response.status, `API ${response.status}: ${await response.text()}`);
     }
 
     return response.json() as Promise<T>;
   }
 
-  getProjects() {
-    return this.request<ProjectSummary[]>("/api/projects");
+  getProjects(signal?: AbortSignal) {
+    return this.request<ProjectSummary[]>("/api/projects", { signal });
   }
 
-  getTasks(projectId: string) {
-    return this.request<TaskSummary[]>(`/api/projects/${projectId}/tasks`);
+  getTasks(projectId: string, signal?: AbortSignal) {
+    return this.request<TaskSummary[]>(`/api/projects/${projectId}/tasks`, { signal });
   }
 
-  getRunningTimer() {
-    return this.request<RunningTimerSnapshot>("/api/time/running");
+  getRunningTimer(signal?: AbortSignal) {
+    return this.request<RunningTimerSnapshot>("/api/time/running", { signal });
   }
 
-  startTimer(input: TimeEntryInput) {
+  startTimer(input: TimeEntryInput, signal?: AbortSignal) {
     return this.request<TimeEntry>("/api/time/start", {
       method: "POST",
       body: JSON.stringify(input),
+      signal,
     });
   }
 
-  stopTimer(entryId: string) {
+  stopTimer(entryId: string, signal?: AbortSignal) {
     return this.request<TimeEntry>(`/api/time/${entryId}/stop`, {
       method: "POST",
+      signal,
     });
   }
 
-  updateNote(entryId: string, note: string) {
+  updateNote(entryId: string, note: string, signal?: AbortSignal) {
     return this.request<TimeEntry>(`/api/time/${entryId}/note`, {
       method: "PATCH",
       body: JSON.stringify({ note }),
+      signal,
     });
   }
 
-  syncQueue(actions: QueueAction[]) {
+  syncQueue(actions: QueueAction[], signal?: AbortSignal) {
     return this.request<{ synced: number; failed: string[] }>("/api/time/sync", {
       method: "POST",
       body: JSON.stringify({ actions }),
+      signal,
     });
   }
 }

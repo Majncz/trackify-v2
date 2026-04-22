@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { TrackifyApiClient } from "@trackify/api-client";
+import { ApiError, TrackifyApiClient } from "@trackify/api-client";
 import type { ProjectSummary, TaskSummary, TimeEntry } from "@trackify/shared-types";
 import { formatDuration, secondsSince } from "./lib/time";
-import { loadAuthToken, saveAuthToken } from "./lib/auth";
+import { clearAuthToken, loadAuthToken, saveAuthToken } from "./lib/auth";
+import {
+  DEFAULT_API_BASE_URL,
+  loadDesktopPreferences,
+  saveDesktopPreferences,
+} from "./lib/preferences";
+import { readLaunchAtLoginEnabled, setLaunchAtLoginEnabled } from "./lib/startup";
+import { listenForTrayActions, updateTrayState } from "./lib/tray";
 import { OfflineQueue, parseQueueSnapshot } from "./state/offlineQueue";
 
 const fallbackProjects: ProjectSummary[] = [
@@ -18,10 +25,11 @@ const fallbackTasks: TaskSummary[] = [
   { id: "task-3", projectId: "project-2", name: "Meeting" },
 ];
 
-function makeClient(getToken: () => Promise<string | null>) {
-  const baseUrl =
-    localStorage.getItem("trackify.desktop.apiBaseUrl")?.trim() || "http://localhost:3000";
+function isAuthError(error: unknown): error is ApiError {
+  return error instanceof ApiError && (error.status === 401 || error.status === 403);
+}
 
+function makeClient(baseUrl: string, getToken: () => Promise<string | null>) {
   return new TrackifyApiClient({
     baseUrl,
     getToken,
@@ -40,10 +48,22 @@ export function App() {
   const [status, setStatus] = useState("Loading...");
   const [error, setError] = useState<string | null>(null);
   const [tokenInput, setTokenInput] = useState("");
+  const [apiBaseUrl, setApiBaseUrl] = useState(DEFAULT_API_BASE_URL);
+  const [launchAtLoginEnabled, setLaunchAtLoginState] = useState(false);
+  const [settingsBusy, setSettingsBusy] = useState(false);
 
   const queueRef = useRef(new OfflineQueue());
   const tokenRef = useRef<string | null>(null);
   const clientRef = useRef<TrackifyApiClient | null>(null);
+  const taskRequestIdRef = useRef(0);
+  const authGenerationRef = useRef(0);
+  const syncInFlightRef = useRef<Promise<void> | null>(null);
+  const reloadAbortControllerRef = useRef<AbortController | null>(null);
+  const syncAbortControllerRef = useRef<AbortController | null>(null);
+  const startMutationAbortControllerRef = useRef<AbortController | null>(null);
+  const stopMutationAbortControllerRef = useRef<AbortController | null>(null);
+  const startTimerActionRef = useRef<(() => Promise<void>) | null>(null);
+  const stopTimerActionRef = useRef<(() => Promise<void>) | null>(null);
 
   const running = Boolean(runningEntry?.startedAt);
 
@@ -51,8 +71,187 @@ export function App() {
     localStorage.setItem(QUEUE_STORAGE_KEY, queueRef.current.serialize());
   };
 
+  const handleSessionExpired = async (message = "Session expired. Please sign in again.") => {
+    authGenerationRef.current += 1;
+    reloadAbortControllerRef.current?.abort();
+    syncAbortControllerRef.current?.abort();
+    startMutationAbortControllerRef.current?.abort();
+    stopMutationAbortControllerRef.current?.abort();
+
+    try {
+      await clearAuthToken();
+    } catch {
+      // best effort: still reset local auth/session state below
+    }
+
+    tokenRef.current = null;
+    clientRef.current = makeClient(apiBaseUrl, async () => null);
+    queueRef.current.hydrate([]);
+    persistQueue();
+    setProjects(fallbackProjects);
+    setTasks(fallbackTasks.filter((task) => task.projectId === fallbackProjects[0]?.id));
+    setProjectId(fallbackProjects[0]?.id ?? "");
+    setTaskId(undefined);
+    setRunningEntry(null);
+    setTodayTotal(0);
+    setNote("");
+    setStatus(message);
+    setError(message);
+  };
+
+  const refreshTasks = async (
+    nextProjectId: string,
+    authGeneration = authGenerationRef.current,
+    signal?: AbortSignal,
+  ) => {
+    const client = clientRef.current;
+    if (!client || !nextProjectId) return;
+
+    const requestId = ++taskRequestIdRef.current;
+    const fallbackForProject = fallbackTasks.filter((task) => task.projectId === nextProjectId);
+
+    try {
+      const apiTasks = await client.getTasks(nextProjectId, signal);
+      if (signal?.aborted || authGeneration !== authGenerationRef.current || requestId !== taskRequestIdRef.current) return;
+      setTasks(apiTasks.length > 0 ? apiTasks : fallbackForProject);
+    } catch (taskError) {
+      if (signal?.aborted || authGeneration !== authGenerationRef.current || requestId !== taskRequestIdRef.current) return;
+      if (isAuthError(taskError)) {
+        await handleSessionExpired();
+        return;
+      }
+      setTasks(fallbackForProject);
+    }
+  };
+
+  const reloadFromApi = async (preferredProjectId?: string) => {
+    const client = clientRef.current;
+    if (!client) return false;
+
+    const authGeneration = authGenerationRef.current;
+    const abortController = new AbortController();
+    reloadAbortControllerRef.current?.abort();
+    reloadAbortControllerRef.current = abortController;
+
+    try {
+      const [apiProjects, runningSnapshot] = await Promise.all([
+        client.getProjects(abortController.signal),
+        client.getRunningTimer(abortController.signal),
+      ]);
+
+      if (abortController.signal.aborted || authGeneration !== authGenerationRef.current) {
+        return false;
+      }
+
+      let resolvedProjectId = preferredProjectId ?? projectId;
+      if (apiProjects.length > 0) {
+        setProjects(apiProjects);
+        resolvedProjectId =
+          resolvedProjectId && apiProjects.some((project) => project.id === resolvedProjectId)
+            ? resolvedProjectId
+            : apiProjects[0]!.id;
+        setProjectId(resolvedProjectId);
+      }
+
+      setRunningEntry(runningSnapshot.entry ?? null);
+      setTodayTotal(runningSnapshot.todayTotalSeconds ?? 0);
+
+      if (resolvedProjectId) {
+        await refreshTasks(resolvedProjectId, authGeneration, abortController.signal);
+      }
+
+      if (abortController.signal.aborted || authGeneration !== authGenerationRef.current) {
+        return false;
+      }
+
+      setError(null);
+      return true;
+    } catch (apiError) {
+      if (abortController.signal.aborted || authGeneration !== authGenerationRef.current) {
+        return false;
+      }
+
+      if (isAuthError(apiError)) {
+        await handleSessionExpired();
+        return false;
+      }
+
+      setStatus("Ready (offline mode)");
+      const message = apiError instanceof Error ? apiError.message : "API unavailable";
+      setError(message);
+      throw apiError instanceof Error ? apiError : new Error(message);
+    } finally {
+      if (reloadAbortControllerRef.current === abortController) {
+        reloadAbortControllerRef.current = null;
+      }
+    }
+  };
+
+  const queueSync = async () => {
+    const work = (async () => {
+      const client = clientRef.current;
+      if (!client) return;
+
+      const actions = queueRef.current.list();
+      if (actions.length === 0) return;
+
+      const authGeneration = authGenerationRef.current;
+      const abortController = new AbortController();
+      syncAbortControllerRef.current?.abort();
+      syncAbortControllerRef.current = abortController;
+
+      try {
+        const result = await client.syncQueue(actions, abortController.signal);
+        if (abortController.signal.aborted || authGeneration !== authGenerationRef.current) {
+          return;
+        }
+
+        const failed = new Set(result.failed);
+        for (const action of actions) {
+          if (!failed.has(action.id)) queueRef.current.removeById(action.id);
+        }
+        persistQueue();
+
+        if (result.synced > 0) {
+          await reloadFromApi(projectId || fallbackProjects[0]?.id);
+        }
+
+        if (abortController.signal.aborted || authGeneration !== authGenerationRef.current) {
+          return;
+        }
+
+        setStatus(queueRef.current.size() > 0 ? `Sync pending (${queueRef.current.size()})` : "Ready");
+      } catch (syncError) {
+        if (abortController.signal.aborted || authGeneration !== authGenerationRef.current) {
+          return;
+        }
+        if (isAuthError(syncError)) {
+          await handleSessionExpired();
+          return;
+        }
+        setStatus("Offline sync pending");
+      } finally {
+        if (syncAbortControllerRef.current === abortController) {
+          syncAbortControllerRef.current = null;
+        }
+      }
+    })();
+
+    syncInFlightRef.current = work;
+    try {
+      await work;
+    } finally {
+      if (syncInFlightRef.current === work) {
+        syncInFlightRef.current = null;
+      }
+    }
+  };
+
   useEffect(() => {
     const boot = async () => {
+      const preferences = loadDesktopPreferences();
+      setApiBaseUrl(preferences.apiBaseUrl);
+
       const queueSnapshot = parseQueueSnapshot(localStorage.getItem(QUEUE_STORAGE_KEY));
       queueRef.current.hydrate(queueSnapshot);
       if (queueSnapshot.length > 0) {
@@ -65,9 +264,22 @@ export function App() {
         tokenRef.current = null;
       }
 
-      clientRef.current = makeClient(async () => tokenRef.current);
-      await reloadFromApi();
+      try {
+        setLaunchAtLoginState(await readLaunchAtLoginEnabled());
+      } catch {
+        setLaunchAtLoginState(false);
+      }
+
+      clientRef.current = makeClient(preferences.apiBaseUrl, async () => tokenRef.current);
+      const authGeneration = authGenerationRef.current;
+      await reloadFromApi(preferences.apiBaseUrl ? projectId : undefined);
+      if (authGeneration !== authGenerationRef.current) {
+        return;
+      }
       await queueSync();
+      if (authGeneration !== authGenerationRef.current) {
+        return;
+      }
       setStatus(queueRef.current.size() > 0 ? `Sync pending (${queueRef.current.size()})` : "Ready");
     };
 
@@ -101,6 +313,14 @@ export function App() {
     () => tasks.filter((task) => task.projectId === projectId),
     [tasks, projectId],
   );
+  const selectedProject = useMemo(
+    () => projects.find((project) => project.id === projectId) ?? null,
+    [projectId, projects],
+  );
+  const selectedTask = useMemo(
+    () => tasks.find((task) => task.id === taskId) ?? null,
+    [taskId, tasks],
+  );
 
   useEffect(() => {
     if (taskId && !filteredTasks.some((task) => task.id === taskId)) {
@@ -108,78 +328,85 @@ export function App() {
     }
   }, [filteredTasks, taskId]);
 
-  const reloadFromApi = async () => {
-    const client = clientRef.current;
-    if (!client) return;
+  useEffect(() => {
+    if (!projectId) return;
+    refreshTasks(projectId).catch(() => undefined);
+  }, [projectId]);
 
-    try {
-      const [apiProjects, runningSnapshot] = await Promise.all([
-        client.getProjects(),
-        client.getRunningTimer(),
-      ]);
+  useEffect(() => {
+    let active = true;
+    let unlisten: (() => void) | undefined;
 
-      if (apiProjects.length > 0) {
-        setProjects(apiProjects);
-        setProjectId((current) =>
-          current && apiProjects.some((project) => project.id === current)
-            ? current
-            : apiProjects[0]!.id,
-        );
+    listenForTrayActions((action) => {
+      if (action === "start") {
+        void startTimerActionRef.current?.();
+      } else if (action === "stop") {
+        void stopTimerActionRef.current?.();
       }
+    })
+      .then((cleanup) => {
+        if (!active) {
+          cleanup();
+          return;
+        }
+        unlisten = cleanup;
+      })
+      .catch(() => undefined);
 
-      setRunningEntry(runningSnapshot.entry ?? null);
-      setTodayTotal(runningSnapshot.todayTotalSeconds ?? 0);
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, []);
 
-      if (projectId) {
-        const apiTasks = await client.getTasks(projectId);
-        if (apiTasks.length > 0) setTasks(apiTasks);
-      }
+  useEffect(() => {
+    const parts = [selectedProject?.name, selectedTask?.name, note.trim() || undefined].filter(Boolean);
+    const detail = parts.join(" · ") || undefined;
 
-      setError(null);
-    } catch (apiError) {
-      setStatus("Ready (offline mode)");
-      setError(apiError instanceof Error ? apiError.message : "API unavailable");
-    }
-  };
-
-  const queueSync = async () => {
-    const client = clientRef.current;
-    if (!client) return;
-
-    const actions = queueRef.current.list();
-    if (actions.length === 0) return;
-
-    try {
-      const result = await client.syncQueue(actions);
-      const failed = new Set(result.failed);
-      for (const action of actions) {
-        if (!failed.has(action.id)) queueRef.current.removeById(action.id);
-      }
-      persistQueue();
-      setStatus(queueRef.current.size() > 0 ? `Sync pending (${queueRef.current.size()})` : "Ready");
-    } catch {
-      setStatus("Offline sync pending");
-    }
-  };
+    updateTrayState({
+      detail,
+      running,
+      status,
+    }).catch(() => undefined);
+  }, [note, running, selectedProject?.name, selectedTask?.name, status]);
 
   const startTimer = async () => {
     const startedAt = new Date().toISOString();
     const client = clientRef.current;
     if (!client) return;
 
+    const authGeneration = authGenerationRef.current;
+    const abortController = new AbortController();
+    startMutationAbortControllerRef.current?.abort();
+    startMutationAbortControllerRef.current = abortController;
+
     setStatus("Starting timer...");
     setError(null);
 
     try {
-      const entry = await client.startTimer({
-        projectId,
-        taskId,
-        note: note || undefined,
-        startedAt,
-      });
+      const entry = await client.startTimer(
+        {
+          projectId,
+          taskId,
+          note: note || undefined,
+          startedAt,
+        },
+        abortController.signal,
+      );
+      if (abortController.signal.aborted || authGeneration !== authGenerationRef.current) {
+        return;
+      }
       setRunningEntry(entry);
       setStatus("Running");
-    } catch {
+    } catch (timerError) {
+      if (abortController.signal.aborted || authGeneration !== authGenerationRef.current) {
+        return;
+      }
+      if (isAuthError(timerError)) {
+        await handleSessionExpired();
+        return;
+      }
+
       const optimisticId = `local-${crypto.randomUUID()}`;
       queueRef.current.enqueue({
         id: optimisticId,
@@ -190,22 +417,43 @@ export function App() {
       persistQueue();
       setRunningEntry({ id: optimisticId, projectId, taskId, note, startedAt });
       setStatus(`Running (offline queued: ${queueRef.current.size()})`);
+    } finally {
+      if (startMutationAbortControllerRef.current === abortController) {
+        startMutationAbortControllerRef.current = null;
+      }
     }
   };
+  startTimerActionRef.current = startTimer;
 
   const stopTimer = async () => {
     const client = clientRef.current;
     if (!client || !runningEntry?.id) return;
 
+    const authGeneration = authGenerationRef.current;
+    const abortController = new AbortController();
+    stopMutationAbortControllerRef.current?.abort();
+    stopMutationAbortControllerRef.current = abortController;
+
     setStatus("Stopping timer...");
 
     try {
-      const stopped = await client.stopTimer(runningEntry.id);
+      const stopped = await client.stopTimer(runningEntry.id, abortController.signal);
+      if (abortController.signal.aborted || authGeneration !== authGenerationRef.current) {
+        return;
+      }
       const duration = stopped.durationSeconds ?? elapsed;
       setTodayTotal((value) => value + duration);
       setRunningEntry(null);
       setStatus("Ready");
-    } catch {
+    } catch (timerError) {
+      if (abortController.signal.aborted || authGeneration !== authGenerationRef.current) {
+        return;
+      }
+      if (isAuthError(timerError)) {
+        await handleSessionExpired();
+        return;
+      }
+
       queueRef.current.enqueue({
         id: `local-${crypto.randomUUID()}`,
         type: "STOP_TIMER",
@@ -216,18 +464,100 @@ export function App() {
       setTodayTotal((value) => value + elapsed);
       setRunningEntry(null);
       setStatus(`Ready (stop queued: ${queueRef.current.size()})`);
+    } finally {
+      if (stopMutationAbortControllerRef.current === abortController) {
+        stopMutationAbortControllerRef.current = null;
+      }
     }
 
     queueSync().catch(() => undefined);
   };
+  stopTimerActionRef.current = stopTimer;
 
   const handleSaveToken = async () => {
     if (!tokenInput.trim()) return;
-    await saveAuthToken(tokenInput.trim());
-    tokenRef.current = tokenInput.trim();
-    setTokenInput("");
-    await reloadFromApi();
-    setStatus("Ready");
+
+    try {
+      authGenerationRef.current += 1;
+      const authGeneration = authGenerationRef.current;
+      queueRef.current.hydrate([]);
+      persistQueue();
+      await saveAuthToken(tokenInput.trim());
+      tokenRef.current = tokenInput.trim();
+      setTokenInput("");
+      await reloadFromApi(projectId);
+      if (authGeneration !== authGenerationRef.current) {
+        return;
+      }
+      await queueSync();
+      if (authGeneration !== authGenerationRef.current) {
+        return;
+      }
+      setStatus(queueRef.current.size() > 0 ? `Sync pending (${queueRef.current.size()})` : "Ready");
+      setError(null);
+    } catch (tokenError) {
+      setError(tokenError instanceof Error ? tokenError.message : "Failed to save token");
+    }
+  };
+
+  const handleClearToken = async () => {
+    try {
+      authGenerationRef.current += 1;
+      reloadAbortControllerRef.current?.abort();
+      syncAbortControllerRef.current?.abort();
+      await clearAuthToken();
+      tokenRef.current = null;
+      clientRef.current = makeClient(apiBaseUrl, async () => null);
+      queueRef.current.hydrate([]);
+      persistQueue();
+      setProjects(fallbackProjects);
+      setTasks(fallbackTasks.filter((task) => task.projectId === fallbackProjects[0]?.id));
+      setProjectId(fallbackProjects[0]?.id ?? "");
+      setTaskId(undefined);
+      setRunningEntry(null);
+      setTodayTotal(0);
+      setNote("");
+      setError(null);
+      setStatus("Token cleared");
+    } catch (tokenError) {
+      setError(tokenError instanceof Error ? tokenError.message : "Failed to clear token");
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    setSettingsBusy(true);
+    setError(null);
+
+    try {
+      const preferences = saveDesktopPreferences({ apiBaseUrl });
+      const authGeneration = authGenerationRef.current;
+      setApiBaseUrl(preferences.apiBaseUrl);
+      clientRef.current = makeClient(preferences.apiBaseUrl, async () => tokenRef.current);
+      await reloadFromApi(projectId);
+      if (authGeneration !== authGenerationRef.current) {
+        return;
+      }
+      setStatus("Settings saved");
+    } catch (settingsError) {
+      setError(settingsError instanceof Error ? settingsError.message : "Failed to save settings");
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
+  const handleLaunchAtLoginChange = async (enabled: boolean) => {
+    setSettingsBusy(true);
+    setError(null);
+
+    try {
+      await setLaunchAtLoginEnabled(enabled);
+      setLaunchAtLoginState(enabled);
+      setStatus(enabled ? "Launch at login enabled" : "Launch at login disabled");
+    } catch (startupError) {
+      setError(startupError instanceof Error ? startupError.message : "Failed to update launch at login");
+    } finally {
+      setSettingsBusy(false);
+    }
   };
 
   return (
@@ -283,6 +613,16 @@ export function App() {
         </label>
 
         <label>
+          API base URL
+          <input
+            type="url"
+            value={apiBaseUrl}
+            onChange={(event) => setApiBaseUrl(event.target.value)}
+            placeholder={DEFAULT_API_BASE_URL}
+          />
+        </label>
+
+        <label>
           API token (stored in OS keychain)
           <input
             type="password"
@@ -291,8 +631,25 @@ export function App() {
             placeholder="Paste access token"
           />
         </label>
+
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={launchAtLoginEnabled}
+            onChange={(event) => handleLaunchAtLoginChange(event.target.checked)}
+            disabled={settingsBusy}
+          />
+          Launch Trackify at login
+        </label>
+
         <button className="button-primary" onClick={handleSaveToken}>
           Save token
+        </button>
+        <button className="button-primary" onClick={handleSaveSettings} disabled={settingsBusy}>
+          Save settings
+        </button>
+        <button className="button-danger" onClick={handleClearToken}>
+          Clear token
         </button>
       </div>
 
