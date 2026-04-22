@@ -1,5 +1,9 @@
 use keyring::{Entry, Error as KeyringError};
-use tauri::{menu::{Menu, MenuItem}, tray::TrayIconBuilder, Manager};
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::TrayIconBuilder,
+    Manager, WindowEvent,
+};
 
 const AUTH_SERVICE: &str = "co.bitterlemon.trackify";
 const AUTH_ACCOUNT: &str = "desktop-auth-token";
@@ -51,8 +55,13 @@ pub fn run() {
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "show" => {
                         if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
+                            let visible = window.is_visible().unwrap_or(false);
+                            if visible {
+                                let _ = window.hide();
+                            } else {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
                         }
                     }
                     "quit" => {
@@ -63,6 +72,12 @@ pub fn run() {
                 .build(app)?;
 
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
         })
         .invoke_handler(tauri::generate_handler![save_auth_token, load_auth_token, clear_auth_token])
         .run(tauri::generate_context!())
