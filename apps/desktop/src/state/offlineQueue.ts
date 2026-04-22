@@ -7,8 +7,22 @@ export class OfflineQueue {
     this.actions.push({ ...action, attempts: 0 });
   }
 
+  hydrate(actions: QueueAction[]) {
+    this.actions.length = 0;
+    this.actions.push(
+      ...actions.map((action) => ({
+        ...action,
+        attempts: Number.isFinite(action.attempts) ? action.attempts : 0,
+      })),
+    );
+  }
+
   list() {
     return [...this.actions];
+  }
+
+  serialize() {
+    return JSON.stringify(this.actions);
   }
 
   size() {
@@ -27,6 +41,25 @@ export class OfflineQueue {
 
   clear() {
     this.actions.length = 0;
+  }
+}
+
+export function parseQueueSnapshot(raw: string | null | undefined): QueueAction[] {
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw) as QueueAction[];
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed.filter(
+      (action) =>
+        typeof action?.id === "string" &&
+        typeof action?.type === "string" &&
+        typeof action?.createdAt === "string" &&
+        typeof action?.attempts === "number",
+    );
+  } catch {
+    return [];
   }
 }
 

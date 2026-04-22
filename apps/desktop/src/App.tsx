@@ -3,12 +3,14 @@ import { TrackifyApiClient } from "@trackify/api-client";
 import type { ProjectSummary, TaskSummary, TimeEntry } from "@trackify/shared-types";
 import { formatDuration, secondsSince } from "./lib/time";
 import { loadAuthToken, saveAuthToken } from "./lib/auth";
-import { OfflineQueue } from "./state/offlineQueue";
+import { OfflineQueue, parseQueueSnapshot } from "./state/offlineQueue";
 
 const fallbackProjects: ProjectSummary[] = [
   { id: "project-1", name: "Trackify Platform" },
   { id: "project-2", name: "Client Work" },
 ];
+
+const QUEUE_STORAGE_KEY = "trackify.desktop.offlineQueue";
 
 const fallbackTasks: TaskSummary[] = [
   { id: "task-1", projectId: "project-1", name: "Desktop app" },
@@ -45,8 +47,18 @@ export function App() {
 
   const running = Boolean(runningEntry?.startedAt);
 
+  const persistQueue = () => {
+    localStorage.setItem(QUEUE_STORAGE_KEY, queueRef.current.serialize());
+  };
+
   useEffect(() => {
     const boot = async () => {
+      const queueSnapshot = parseQueueSnapshot(localStorage.getItem(QUEUE_STORAGE_KEY));
+      queueRef.current.hydrate(queueSnapshot);
+      if (queueSnapshot.length > 0) {
+        setStatus(`Sync pending (${queueSnapshot.length})`);
+      }
+
       try {
         tokenRef.current = await loadAuthToken();
       } catch {
@@ -55,13 +67,21 @@ export function App() {
 
       clientRef.current = makeClient(async () => tokenRef.current);
       await reloadFromApi();
-      setStatus("Ready");
+      await queueSync();
+      setStatus(queueRef.current.size() > 0 ? `Sync pending (${queueRef.current.size()})` : "Ready");
     };
 
     boot().catch((bootError) => {
       setStatus("Ready (offline mode)");
       setError(bootError instanceof Error ? bootError.message : "Failed to load data");
     });
+
+    const onOnline = () => {
+      queueSync().catch(() => undefined);
+    };
+
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -135,7 +155,8 @@ export function App() {
       for (const action of actions) {
         if (!failed.has(action.id)) queueRef.current.removeById(action.id);
       }
-      setStatus(queueRef.current.size() > 0 ? "Sync pending" : "Ready");
+      persistQueue();
+      setStatus(queueRef.current.size() > 0 ? `Sync pending (${queueRef.current.size()})` : "Ready");
     } catch {
       setStatus("Offline sync pending");
     }
@@ -166,8 +187,9 @@ export function App() {
         payload: { projectId, taskId, note, startedAt },
         createdAt: startedAt,
       });
+      persistQueue();
       setRunningEntry({ id: optimisticId, projectId, taskId, note, startedAt });
-      setStatus("Running (offline queued)");
+      setStatus(`Running (offline queued: ${queueRef.current.size()})`);
     }
   };
 
@@ -190,9 +212,10 @@ export function App() {
         payload: { entryId: runningEntry.id, stoppedAt: new Date().toISOString() },
         createdAt: new Date().toISOString(),
       });
+      persistQueue();
       setTodayTotal((value) => value + elapsed);
       setRunningEntry(null);
-      setStatus("Ready (stop queued)");
+      setStatus(`Ready (stop queued: ${queueRef.current.size()})`);
     }
 
     queueSync().catch(() => undefined);

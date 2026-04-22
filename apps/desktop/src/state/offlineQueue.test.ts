@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { OfflineQueue, computeBackoffMs } from "./offlineQueue";
+import { OfflineQueue, computeBackoffMs, parseQueueSnapshot } from "./offlineQueue";
 
 describe("OfflineQueue", () => {
   it("enqueues and removes actions", () => {
@@ -29,6 +29,39 @@ describe("OfflineQueue", () => {
 
     queue.markAttempt("2");
     expect(queue.list()[0]?.attempts).toBe(1);
+  });
+
+  it("hydrates from snapshot", () => {
+    const queue = new OfflineQueue();
+    queue.hydrate([
+      {
+        id: "x1",
+        type: "STOP_TIMER",
+        payload: { entryId: "e2" },
+        createdAt: new Date().toISOString(),
+        attempts: 2,
+      },
+    ]);
+
+    expect(queue.size()).toBe(1);
+    expect(queue.serialize()).toContain("x1");
+  });
+
+  it("parses safe snapshot", () => {
+    const parsed = parseQueueSnapshot(
+      JSON.stringify([
+        {
+          id: "x2",
+          type: "START_TIMER",
+          payload: {},
+          createdAt: new Date().toISOString(),
+          attempts: 0,
+        },
+      ]),
+    );
+
+    expect(parsed).toHaveLength(1);
+    expect(parseQueueSnapshot("not-json")).toHaveLength(0);
   });
 
   it("computes exponential backoff", () => {
