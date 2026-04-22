@@ -2,6 +2,10 @@
   "name": "trackify",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "apps/desktop",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "NEXTAUTH_URL=https://dev.time.ranajakub.com PORT=3002 npx tsx server/index.ts",
     "dev:start": "bash scripts/dev.sh",
@@ -11,7 +15,10 @@
     "start": "NODE_ENV=production PORT=3000 node dist/server/index.js",
     "deploy": "bash scripts/deploy.sh",
     "lint": "next lint",
-    "migrate": "tsx scripts/migrate-data.ts"
+    "migrate": "tsx scripts/migrate-data.ts",
+    "desktop:dev": "npm run dev --workspace @trackify/desktop",
+    "desktop:build": "npm run build --workspace @trackify/desktop",
+    "desktop:test": "npm run test --workspace @trackify/desktop"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.9",

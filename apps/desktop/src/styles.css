@@ -1,0 +1,131 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
+    "Apple Color Emoji", "Segoe UI Emoji";
+  color: hsl(0 0% 3.9%);
+  background: hsl(0 0% 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f8fafc;
+}
+
+#root {
+  padding: 12px;
+}
+
+.panel-root {
+  width: 360px;
+  background: white;
+  border: 1px solid hsl(0 0% 89.8%);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 10px 30px rgba(2, 6, 23, 0.07);
+  display: grid;
+  gap: 12px;
+}
+
+header .label {
+  color: hsl(0 0% 45.1%);
+  font-size: 12px;
+}
+
+header h1 {
+  margin: 2px 0 0;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.status-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid hsl(0 0% 89.8%);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.status-label {
+  font-size: 12px;
+  color: hsl(0 0% 45.1%);
+}
+
+.status-value {
+  font-weight: 600;
+}
+
+.clock {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 20px;
+  letter-spacing: 0.02em;
+}
+
+.form-grid {
+  display: grid;
+  gap: 10px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: hsl(0 0% 45.1%);
+}
+
+select,
+textarea {
+  border: 1px solid hsl(0 0% 89.8%);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+  color: hsl(0 0% 9%);
+  background: white;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.actions {
+  display: flex;
+}
+
+.button-primary,
+.button-danger {
+  border: 0;
+  border-radius: 8px;
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 10px 14px;
+  width: 100%;
+  cursor: pointer;
+}
+
+.button-primary {
+  background: hsl(221 83% 53%);
+}
+
+.button-danger {
+  background: hsl(0 84.2% 60.2%);
+}
+
+footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid hsl(0 0% 89.8%);
+  font-size: 13px;
+  color: hsl(0 0% 45.1%);
+}
+
+footer strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: hsl(0 0% 9%);
+}
