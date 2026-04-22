@@ -18,7 +18,8 @@
     "migrate": "tsx scripts/migrate-data.ts",
     "desktop:dev": "npm run dev --workspace @trackify/desktop",
     "desktop:build": "npm run build --workspace @trackify/desktop",
-    "desktop:test": "npm run test --workspace @trackify/desktop"
+    "desktop:test": "npm run test --workspace @trackify/desktop",
+    "progress:chunk": "bash scripts/chunk_done.sh"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.9",
