@@ -38,3 +38,9 @@ next-env.d.ts
 /src/generated/prisma
 .env
 dist/
+
+# Local SQLite dev DB (npm run setup:sqlite)
+/prisma/dev.db
+/prisma/dev.db-journal
+# Accidental nested prisma cwd / local SQLite
+/prisma/prisma/

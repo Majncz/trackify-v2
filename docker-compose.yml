@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "5435:5432"
+    environment:
+      POSTGRES_USER: trackify
+      POSTGRES_PASSWORD: trackify_dev
+      POSTGRES_DB: trackify
+    volumes:
+      - trackify_pg_data:/var/lib/postgresql/data
+
+volumes:
+  trackify_pg_data:

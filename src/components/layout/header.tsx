@@ -10,8 +10,8 @@ export function Header() {
   const { isConnected } = useSocket();
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
-      <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b pt-[env(safe-area-inset-top,0px)]">
+      <div className="max-w-4xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between">
         <Link href="/" className="font-bold text-lg flex items-center gap-2">
           Trackify
           <span

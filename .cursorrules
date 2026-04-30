@@ -6,6 +6,9 @@
 - Only run `npm run deploy` when the user explicitly says "deploy", "deploy it", "push to prod", etc.
 - Never deploy automatically after completing a feature
 
+### 1b. NEVER push to default branch (`master` / `main`) unless the user explicitly asks
+- Commit and push work on a named feature branch (e.g. `taryk`), never `git push origin master` unless they clearly say to update main/master.
+
 ### 2. NEVER build or restart dev server for code changes  
 - Hot reload is active - just save files and refresh browser
 - DO NOT run `npm run build` during development
@@ -44,7 +47,7 @@ Only then run: `npm run deploy "commit message"`
 ### Automatic Migration Execution
 - When database is backed up and verified, proceed with migrations automatically
 - No need to ask for confirmation if backup exists and is verified
-- Run `npx prisma migrate deploy` and `npx prisma generate` automatically after schema changes
+- Run `npm run setup:postgres` (or `npm run db:migrate`) and regenerate the client automatically after **Postgres** schema changes (`prisma/schema.prisma`). For SQLite-only dev use `npm run setup:sqlite` instead — never run Postgres migrations against the SQLite file.
 - User preference: "if there is not reason to be careful (which i dont think it is, the db is backed up) than just do it all yourself without my input"
 
 

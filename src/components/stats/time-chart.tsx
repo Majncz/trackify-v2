@@ -11,7 +11,7 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
+  Tooltip as RechartsTooltip,
   ResponsiveContainer,
   Legend,
 } from "recharts";
@@ -25,7 +25,13 @@ import {
   eachDayOfInterval,
   addHours,
   addDays,
+  addMinutes,
 } from "date-fns";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 
 // Curated color palette
 const TASK_COLORS = [
@@ -39,6 +45,148 @@ const TASK_COLORS = [
 
 const OTHER_COLOR = "#6b7280"; // gray for "Other"
 const MAX_TASKS = 5;
+
+/** Duration from fractional minutes — exact, explicit units (no "< …" shorthand). */
+function formatHeatMinutes(totalMinutes: number): string {
+  if (!Number.isFinite(totalMinutes) || totalMinutes <= 0) return "0s";
+
+  const secExact = totalMinutes * 60;
+  const roundedWhole = Math.round(secExact);
+
+  if (roundedWhole === 0 && secExact > 0) {
+    const digits = secExact >= 0.1 ? 2 : secExact >= 0.01 ? 3 : 4;
+    return `${parseFloat(secExact.toFixed(digits))}s`;
+  }
+
+  if (roundedWhole === 0) return "0s";
+
+  const h = Math.floor(roundedWhole / 3600);
+  const m = Math.floor((roundedWhole % 3600) / 60);
+  const s = roundedWhole % 60;
+
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+function weeklySlotRange(
+  day: Date,
+  hour: number,
+  sqIdx: number,
+  squaresPerHour: number
+): { start: Date; end: Date } {
+  const base = addHours(startOfDay(day), hour);
+  const sliceMinutes = 60 / squaresPerHour;
+  const start = addMinutes(base, sqIdx * sliceMinutes);
+  const end = addMinutes(base, (sqIdx + 1) * sliceMinutes);
+  return { start, end };
+}
+
+function WeeklyHeatTooltipBody({
+  day,
+  hour,
+  sqIdx,
+  squaresPerHour,
+  cell,
+  taskColors,
+}: {
+  day: Date;
+  hour: number;
+  sqIdx: number;
+  squaresPerHour: number;
+  cell: { totalMinutes: number; taskMinutes: Record<string, number> };
+  taskColors: Record<string, string>;
+}) {
+  const { start, end } = weeklySlotRange(day, hour, sqIdx, squaresPerHour);
+  const dateStr = format(day, "EEEE, MMMM d, yyyy");
+  const rangeStr = `${format(start, "HH:mm:ss")} – ${format(end, "HH:mm:ss")}`;
+  const entries = Object.entries(cell.taskMinutes).sort((a, b) => b[1] - a[1]);
+
+  return (
+    <div className="space-y-2 max-w-[260px] text-left">
+      <div>
+        <p className="text-sm font-semibold leading-tight">{dateStr}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{rangeStr}</p>
+      </div>
+      <div className="border-t border-border pt-2 space-y-1.5">
+        <p className="text-xs font-medium text-foreground">
+          {formatHeatMinutes(cell.totalMinutes)} total
+        </p>
+        <ul className="space-y-1">
+          {entries.map(([name, mins]) => (
+            <li key={name} className="flex items-start gap-2 text-xs">
+              <span
+                className="mt-1 h-2 w-2 shrink-0 rounded-[2px]"
+                style={{
+                  backgroundColor: taskColors[name] ?? OTHER_COLOR,
+                }}
+              />
+              <span className="min-w-0 leading-snug">
+                <span className="font-medium text-foreground">{name}</span>
+                <span className="text-muted-foreground">
+                  {" "}
+                  · {formatHeatMinutes(mins)}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function YearlyHeatTooltipBody({
+  day,
+  minutes,
+  taskMinutes,
+  taskColors,
+}: {
+  day: Date;
+  minutes: number;
+  taskMinutes: Record<string, number>;
+  taskColors: Record<string, string>;
+}) {
+  const dateStr = format(day, "EEEE, MMMM d, yyyy");
+  const entries = Object.entries(taskMinutes).sort((a, b) => b[1] - a[1]);
+
+  return (
+    <div className="space-y-2 max-w-[260px] text-left">
+      <div>
+        <p className="text-sm font-semibold leading-tight">{dateStr}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Total for this calendar day
+        </p>
+      </div>
+      <div className="border-t border-border pt-2 space-y-1.5">
+        <p className="text-xs font-medium text-foreground">
+          {formatHeatMinutes(minutes)} total
+        </p>
+        {entries.length > 0 && (
+          <ul className="space-y-1">
+            {entries.map(([name, mins]) => (
+              <li key={name} className="flex items-start gap-2 text-xs">
+                <span
+                  className="mt-1 h-2 w-2 shrink-0 rounded-[2px]"
+                  style={{
+                    backgroundColor: taskColors[name] ?? OTHER_COLOR,
+                  }}
+                />
+                <span className="min-w-0 leading-snug">
+                  <span className="font-medium text-foreground">{name}</span>
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · {formatHeatMinutes(mins)}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
 
 type Duration = "weekly" | "yearly";
 
@@ -75,6 +223,14 @@ export function TimeChart() {
     () => tasks.filter((t) => !t.hidden),
     [tasks]
   );
+
+  const yearlyTaskColors = useMemo(() => {
+    const m: Record<string, string> = {};
+    visibleTasks.forEach((t, i) => {
+      m[t.name] = TASK_COLORS[i % TASK_COLORS.length];
+    });
+    return m;
+  }, [visibleTasks]);
 
   // Calculate max Y value for weekly view (not used for yearly)
   const maxYWeekly = useMemo(() => {
@@ -344,19 +500,24 @@ export function TimeChart() {
       currentWeekStart = addDays(weekEnd, 1);
     }
 
-    // Calculate total minutes per day
+    // Calculate total & per-task minutes per day
     const dayMinutes = new Map<string, number>();
+    const dayTaskMinutes = new Map<string, Record<string, number>>();
     allDays.forEach((day) => {
       const dayKey = format(day, "yyyy-MM-dd");
       const dayEvents = eventsByDate.get(dayKey) || [];
+      const byTask: Record<string, number> = {};
       let totalMinutes = 0;
-      dayEvents.forEach(({ from, to }) => {
+      dayEvents.forEach(({ taskName, from, to }) => {
         const dayStart = startOfDay(day);
         const dayEnd = endOfDay(day);
         const overlap = getOverlapDuration(from, to, dayStart, dayEnd);
-        totalMinutes += overlap / 60000;
+        const mins = overlap / 60000;
+        totalMinutes += mins;
+        byTask[taskName] = (byTask[taskName] || 0) + mins;
       });
       dayMinutes.set(dayKey, totalMinutes);
+      dayTaskMinutes.set(dayKey, byTask);
     });
 
     // Build grid: 7 rows (Mon-Sun) x N columns (weeks)
@@ -386,6 +547,7 @@ export function TimeChart() {
       maxMinutes: maxMinutes || 1,
       startDate,
       endDate,
+      dayTaskMinutes,
     };
   }, [duration, eventsByDate, visibleTasks]);
 
@@ -467,10 +629,10 @@ export function TimeChart() {
 
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <CardTitle className="text-base">Time Spent</CardTitle>
-          <div className="flex items-center gap-2">
+      <CardHeader className="pb-2 space-y-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <CardTitle className="text-base shrink-0">Time Spent</CardTitle>
+          <div className="flex flex-wrap items-center gap-2">
             {durations.map((d) => (
               <Button
                 key={d}
@@ -537,7 +699,11 @@ export function TimeChart() {
             scrollRef={weeklyScrollRef}
           />
         ) : duration === "yearly" && yearlyViewData ? (
-          <YearlyCalendarView data={yearlyViewData} scrollRef={yearlyScrollRef} />
+          <YearlyCalendarView
+            data={yearlyViewData}
+            scrollRef={yearlyScrollRef}
+            taskColors={yearlyTaskColors}
+          />
         ) : (
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
@@ -558,7 +724,7 @@ export function TimeChart() {
                   tickFormatter={(value) => `${value}h`}
                   className="text-muted-foreground"
                 />
-                <Tooltip
+                <RechartsTooltip
                   contentStyle={{
                     backgroundColor: "hsl(var(--background))",
                     border: "1px solid hsl(var(--border))",
@@ -709,16 +875,18 @@ function WeekCalendarView({ data, taskColors, hasOther, scrollRef }: WeekCalenda
   const cellSize = Math.max(WEEKLY_SQUARE_SIZE, actualSquareSize);
 
   return (
-    <div className="space-y-3 w-full" ref={containerRef}>
+    <div className="space-y-3 w-full min-w-0" ref={containerRef}>
       {/* Hour labels */}
       <div
-        className="grid"
-        style={{ gridTemplateColumns: `${WEEKLY_LABEL_WIDTH}px 1fr` }}
+        className="grid min-w-0"
+        style={{
+          gridTemplateColumns: `${WEEKLY_LABEL_WIDTH}px minmax(0, 1fr)`,
+        }}
       >
         <div />
         <div
-          className="grid"
-          style={{ 
+          className="grid min-w-0"
+          style={{
             gridTemplateColumns: `repeat(24, ${cellSize * squaresPerHour + (squaresPerHour - 1) * WEEKLY_GAP}px)`,
             gap: `${WEEKLY_GAP}px`,
           }}
@@ -751,8 +919,8 @@ function WeekCalendarView({ data, taskColors, hasOther, scrollRef }: WeekCalenda
                 <div
                   key={day.toISOString()}
                   className="grid items-center"
-                  style={{ 
-                    gridTemplateColumns: `${WEEKLY_LABEL_WIDTH}px 1fr`, 
+                  style={{
+                    gridTemplateColumns: `${WEEKLY_LABEL_WIDTH}px minmax(0, 1fr)`,
                     height: rowHeight,
                     gap: `${WEEKLY_GAP}px`,
                   }}
@@ -761,8 +929,8 @@ function WeekCalendarView({ data, taskColors, hasOther, scrollRef }: WeekCalenda
                     {format(day, "MMM d")}
                   </span>
                   <div
-                    className="grid"
-                    style={{ 
+                    className="grid min-w-0"
+                    style={{
                       gridTemplateColumns: `repeat(${totalSquaresPerRow}, ${cellSize}px)`,
                       gap: `${WEEKLY_GAP}px`,
                     }}
@@ -776,21 +944,54 @@ function WeekCalendarView({ data, taskColors, hasOther, scrollRef }: WeekCalenda
                         (dominantTask ? OTHER_COLOR : "hsl(var(--muted))");
 
                       // Render multiple squares per hour based on squaresPerHour
-                      return Array.from({ length: squaresPerHour }, (_, sqIdx) => (
-                        <div
-                          key={`${globalIdx}-${hour}-${sqIdx}`}
-                          className="rounded-sm"
-                          style={{
-                            width: cellSize,
-                            height: cellSize,
-                            backgroundColor: baseColor,
-                            opacity: getOpacity(cell.totalMinutes, data.maxMinutes),
-                          }}
-                          title={`${format(day, "EEE MMM d")} ${hour}:00 • ${Math.round(
-                            cell.totalMinutes
-                          )} min`}
-                        />
-                      ));
+                      return Array.from({ length: squaresPerHour }, (_, sqIdx) => {
+                        const hasTime = cell.totalMinutes > 0;
+                        const cubeStyle = {
+                          width: cellSize,
+                          height: cellSize,
+                          backgroundColor: baseColor,
+                          opacity: getOpacity(
+                            cell.totalMinutes,
+                            data.maxMinutes
+                          ),
+                        };
+
+                        if (!hasTime) {
+                          return (
+                            <div
+                              key={`${globalIdx}-${hour}-${sqIdx}`}
+                              className="rounded-sm"
+                              style={cubeStyle}
+                            />
+                          );
+                        }
+
+                        return (
+                          <Tooltip key={`${globalIdx}-${hour}-${sqIdx}`}>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                className="rounded-sm border-0 p-0 cursor-default outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                                style={cubeStyle}
+                                aria-label="Time slot details"
+                              />
+                            </TooltipTrigger>
+                            <TooltipContent
+                              side="top"
+                              className="border-border bg-popover p-3 shadow-lg"
+                            >
+                              <WeeklyHeatTooltipBody
+                                day={day}
+                                hour={hour}
+                                sqIdx={sqIdx}
+                                squaresPerHour={squaresPerHour}
+                                cell={cell}
+                                taskColors={taskColors}
+                              />
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      });
                     })}
                   </div>
                 </div>
@@ -830,15 +1031,21 @@ interface YearlyCalendarViewProps {
     maxMinutes: number;
     startDate: Date;
     endDate: Date;
+    dayTaskMinutes: Map<string, Record<string, number>>;
   };
   scrollRef: React.RefObject<HTMLDivElement>;
+  taskColors: Record<string, string>;
 }
 
 const CELL_SIZE = 12; // Size of each day cell in pixels
 const GAP_SIZE = 2; // Gap between cells
 const COLUMN_WIDTH = CELL_SIZE + GAP_SIZE; // Total width per week column
 
-function YearlyCalendarView({ data, scrollRef }: YearlyCalendarViewProps) {
+function YearlyCalendarView({
+  data,
+  scrollRef,
+  taskColors,
+}: YearlyCalendarViewProps) {
   const totalColumns = data.weeks.length;
   const totalWidth = totalColumns * COLUMN_WIDTH;
 
@@ -943,22 +1150,60 @@ function YearlyCalendarView({ data, scrollRef }: YearlyCalendarViewProps) {
                 return Array.from({ length: totalColumns }, (_, colIdx) => {
                   const minutes = data.grid[rowIdx]?.[colIdx] ?? 0;
                   const day = data.weeks[colIdx]?.[rowIdx];
+                  const dayKey = day ? format(day, "yyyy-MM-dd") : "";
+                  const taskMinutes = day
+                    ? data.dayTaskMinutes.get(dayKey) ?? {}
+                    : {};
+
+                  const cellStyle = {
+                    width: CELL_SIZE,
+                    height: CELL_SIZE,
+                    backgroundColor: "#10b981" as const,
+                    opacity: getOpacity(minutes, data.maxMinutes),
+                  };
+
+                  if (!day) {
+                    return (
+                      <div
+                        key={`${colIdx}-${rowIdx}`}
+                        className="rounded-sm"
+                        style={cellStyle}
+                      />
+                    );
+                  }
+
+                  if (minutes <= 0) {
+                    return (
+                      <div
+                        key={`${colIdx}-${rowIdx}`}
+                        className="rounded-sm"
+                        style={cellStyle}
+                      />
+                    );
+                  }
+
                   return (
-                    <div
-                      key={`${colIdx}-${rowIdx}`}
-                      className="rounded-sm"
-                      style={{
-                        width: CELL_SIZE,
-                        height: CELL_SIZE,
-                        backgroundColor: "#10b981",
-                        opacity: getOpacity(minutes, data.maxMinutes),
-                      }}
-                      title={
-                        day
-                          ? `${format(day, "EEE MMM d")} • ${Math.round(minutes)} min`
-                          : ""
-                      }
-                    />
+                    <Tooltip key={`${colIdx}-${rowIdx}`}>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="rounded-sm border-0 p-0 cursor-default outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                          style={cellStyle}
+                          aria-label={format(day, "MMMM d, yyyy")}
+                        />
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="top"
+                        className="border-border bg-popover p-3 shadow-lg"
+                      >
+                        <YearlyHeatTooltipBody
+                          day={day}
+                          minutes={minutes}
+                          taskMinutes={taskMinutes}
+                          taskColors={taskColors}
+                        />
+                      </TooltipContent>
+                    </Tooltip>
                   );
                 });
               })}

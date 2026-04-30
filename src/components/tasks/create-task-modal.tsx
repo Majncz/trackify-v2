@@ -33,8 +33,8 @@ export function CreateTaskModal() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" className="gap-1.5">
-          <Plus className="h-4 w-4" />
+        <Button size="sm" className="w-full gap-1.5 sm:w-auto">
+          <Plus className="h-4 w-4 shrink-0" />
           New Task
         </Button>
       </DialogTrigger>

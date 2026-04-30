@@ -1,4 +1,5 @@
 import { getAuthUser } from "@/lib/api-auth";
+import { chatMessagePartsFromDb } from "@/lib/database-mode";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
@@ -30,5 +31,10 @@ export async function GET(
     orderBy: { createdAt: "asc" },
   });
 
-  return NextResponse.json(messages);
+  const normalized = messages.map((m) => ({
+    ...m,
+    parts: chatMessagePartsFromDb(m.parts),
+  }));
+
+  return NextResponse.json(normalized);
 }

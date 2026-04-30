@@ -1,5 +1,4 @@
-// Load environment variables before any other imports
-import "dotenv/config";
+import "./load-env";
 
 import { createServer } from "http";
 import { parse } from "url";

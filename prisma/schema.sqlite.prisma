@@ -1,10 +1,12 @@
+// SQLite schema for local development without PostgreSQL/Docker.
+// Sync DB with: npm run setup:sqlite
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -77,8 +79,9 @@ model ChatMessage {
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   role           String
-  content        String       @db.Text
-  parts          Json?
+  content        String
+  // Prisma 5 SQLite has no Json — store AI SDK payload as JSON text (see chatMessagePartsForDb)
+  parts          String?
   createdAt      DateTime     @default(now())
 
   @@map("trackify_chat_message")

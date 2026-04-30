@@ -1,3 +1,4 @@
+import { chatMessagePartsForDb } from "@/lib/database-mode";
 import { anthropic } from "@ai-sdk/anthropic";
 import { streamText, tool, stepCountIs, convertToModelMessages } from "ai";
 import { z } from "zod";
@@ -390,7 +391,7 @@ export async function POST(req: Request) {
         conversationId: conversation.id,
         role: "user",
         content: userMessageText,
-        parts: lastMessage.parts || null,
+        parts: chatMessagePartsForDb(lastMessage.parts ?? null) as never,
       },
     });
 
@@ -512,7 +513,9 @@ Use markdown: **bold** for emphasis, tables for data, keep responses concise.`,
             conversationId: conversation.id,
             role: "assistant",
             content: text || "",
-            parts: assistantParts.length > 0 ? assistantParts : undefined,
+            parts: chatMessagePartsForDb(
+              assistantParts.length > 0 ? assistantParts : undefined
+            ) as never,
           },
         });
 
