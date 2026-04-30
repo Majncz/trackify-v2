@@ -48,3 +48,14 @@ export interface QueueAction {
   createdAt: string;
   attempts: number;
 }
+
+export interface QueueSyncFailure {
+  id: string;
+  permanent?: boolean;
+  message?: string;
+}
+
+export interface QueueSyncResult {
+  synced: number;
+  failed: QueueSyncFailure[];
+}

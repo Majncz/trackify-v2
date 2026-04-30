@@ -9,15 +9,22 @@ import {
   saveDesktopPreferences,
 } from "./lib/preferences";
 import { readLaunchAtLoginEnabled, setLaunchAtLoginEnabled } from "./lib/startup";
+import {
+  clearEntityCache,
+  loadEntityCache,
+  loadQueueSnapshot,
+  loadRunningEntrySnapshot,
+  saveEntityCache,
+  saveQueueSnapshot,
+  saveRunningEntrySnapshot,
+} from "./lib/offlineState";
 import { listenForTrayActions, updateTrayState } from "./lib/tray";
-import { OfflineQueue, parseQueueSnapshot } from "./state/offlineQueue";
+import { OfflineQueue, computeBackoffMs } from "./state/offlineQueue";
 
 const fallbackProjects: ProjectSummary[] = [
   { id: "project-1", name: "Trackify Platform" },
   { id: "project-2", name: "Client Work" },
 ];
-
-const QUEUE_STORAGE_KEY = "trackify.desktop.offlineQueue";
 
 const fallbackTasks: TaskSummary[] = [
   { id: "task-1", projectId: "project-1", name: "Desktop app" },
@@ -29,6 +36,10 @@ function isAuthError(error: unknown): error is ApiError {
   return error instanceof ApiError && (error.status === 401 || error.status === 403);
 }
 
+function isSyncConflictError(error: unknown): error is ApiError {
+  return error instanceof ApiError && (error.status === 404 || error.status === 409);
+}
+
 function makeClient(baseUrl: string, getToken: () => Promise<string | null>) {
   return new TrackifyApiClient({
     baseUrl,
@@ -37,12 +48,18 @@ function makeClient(baseUrl: string, getToken: () => Promise<string | null>) {
 }
 
 export function App() {
-  const [projects, setProjects] = useState<ProjectSummary[]>(fallbackProjects);
-  const [tasks, setTasks] = useState<TaskSummary[]>(fallbackTasks);
-  const [projectId, setProjectId] = useState(fallbackProjects[0]?.id ?? "");
-  const [taskId, setTaskId] = useState<string | undefined>(undefined);
-  const [note, setNote] = useState("");
-  const [runningEntry, setRunningEntry] = useState<TimeEntry | null>(null);
+  const initialEntityCache = useRef(loadEntityCache()).current;
+  const initialRunningEntry = useRef(loadRunningEntrySnapshot()).current;
+  const initialProjects = initialEntityCache.projects.length > 0 ? initialEntityCache.projects : fallbackProjects;
+  const initialProjectId = initialRunningEntry?.projectId ?? initialProjects[0]?.id ?? "";
+  const initialTasks = initialEntityCache.tasks.length > 0 ? initialEntityCache.tasks : fallbackTasks;
+
+  const [projects, setProjects] = useState<ProjectSummary[]>(initialProjects);
+  const [tasks, setTasks] = useState<TaskSummary[]>(initialTasks);
+  const [projectId, setProjectId] = useState(initialProjectId);
+  const [taskId, setTaskId] = useState<string | undefined>(initialRunningEntry?.taskId);
+  const [note, setNote] = useState(initialRunningEntry?.note ?? "");
+  const [runningEntry, setRunningEntry] = useState<TimeEntry | null>(initialRunningEntry);
   const [elapsed, setElapsed] = useState(0);
   const [todayTotal, setTodayTotal] = useState(0);
   const [status, setStatus] = useState("Loading...");
@@ -55,9 +72,11 @@ export function App() {
   const queueRef = useRef(new OfflineQueue());
   const tokenRef = useRef<string | null>(null);
   const clientRef = useRef<TrackifyApiClient | null>(null);
+  const entityCacheRef = useRef(initialEntityCache);
   const taskRequestIdRef = useRef(0);
   const authGenerationRef = useRef(0);
   const syncInFlightRef = useRef<Promise<void> | null>(null);
+  const syncRetryTimeoutRef = useRef<number | null>(null);
   const reloadAbortControllerRef = useRef<AbortController | null>(null);
   const syncAbortControllerRef = useRef<AbortController | null>(null);
   const startMutationAbortControllerRef = useRef<AbortController | null>(null);
@@ -67,12 +86,54 @@ export function App() {
 
   const running = Boolean(runningEntry?.startedAt);
 
+  const shouldResetSession = (error: unknown) => Boolean(tokenRef.current) && isAuthError(error);
+
   const persistQueue = () => {
-    localStorage.setItem(QUEUE_STORAGE_KEY, queueRef.current.serialize());
+    saveQueueSnapshot(queueRef.current.serialize());
+  };
+
+  const persistEntityCache = (
+    nextProjects: ProjectSummary[],
+    nextTasks: TaskSummary[],
+    replaceProjectId?: string,
+  ) => {
+    const mergedTasks = replaceProjectId
+      ? [
+          ...entityCacheRef.current.tasks.filter((task) => task.projectId !== replaceProjectId),
+          ...nextTasks,
+        ]
+      : nextTasks;
+    const nextCache = { projects: nextProjects, tasks: mergedTasks };
+    entityCacheRef.current = nextCache;
+    saveEntityCache(nextCache);
+  };
+
+  const clearSyncRetry = () => {
+    if (syncRetryTimeoutRef.current !== null) {
+      window.clearTimeout(syncRetryTimeoutRef.current);
+      syncRetryTimeoutRef.current = null;
+    }
+  };
+
+  const scheduleQueueRetry = () => {
+    const actions = queueRef.current.list();
+    if (actions.length === 0) {
+      clearSyncRetry();
+      return;
+    }
+
+    clearSyncRetry();
+    const highestAttempt = Math.max(...actions.map((action) => action.attempts));
+    const retryInMs = computeBackoffMs(highestAttempt);
+    syncRetryTimeoutRef.current = window.setTimeout(() => {
+      syncRetryTimeoutRef.current = null;
+      queueSync().catch(() => undefined);
+    }, retryInMs);
   };
 
   const handleSessionExpired = async (message = "Session expired. Please sign in again.") => {
     authGenerationRef.current += 1;
+    clearSyncRetry();
     reloadAbortControllerRef.current?.abort();
     syncAbortControllerRef.current?.abort();
     startMutationAbortControllerRef.current?.abort();
@@ -88,6 +149,9 @@ export function App() {
     clientRef.current = makeClient(apiBaseUrl, async () => null);
     queueRef.current.hydrate([]);
     persistQueue();
+    clearEntityCache();
+    entityCacheRef.current = { projects: [], tasks: [] };
+    saveRunningEntrySnapshot(null);
     setProjects(fallbackProjects);
     setTasks(fallbackTasks.filter((task) => task.projectId === fallbackProjects[0]?.id));
     setProjectId(fallbackProjects[0]?.id ?? "");
@@ -103,24 +167,31 @@ export function App() {
     nextProjectId: string,
     authGeneration = authGenerationRef.current,
     signal?: AbortSignal,
+    projectsForCache: ProjectSummary[] = projects,
   ) => {
     const client = clientRef.current;
     if (!client || !nextProjectId) return;
 
     const requestId = ++taskRequestIdRef.current;
-    const fallbackForProject = fallbackTasks.filter((task) => task.projectId === nextProjectId);
+    const cachedTasksForProject = entityCacheRef.current.tasks.filter((task) => task.projectId === nextProjectId);
+    const demoFallbackForProject = fallbackTasks.filter((task) => task.projectId === nextProjectId);
+    const fallbackForProject = cachedTasksForProject.length > 0 ? cachedTasksForProject : demoFallbackForProject;
 
     try {
       const apiTasks = await client.getTasks(nextProjectId, signal);
       if (signal?.aborted || authGeneration !== authGenerationRef.current || requestId !== taskRequestIdRef.current) return;
-      setTasks(apiTasks.length > 0 ? apiTasks : fallbackForProject);
+      const nextTasks = apiTasks.length > 0 ? apiTasks : fallbackForProject;
+      const tasksToPersist = apiTasks.length > 0 ? apiTasks : cachedTasksForProject;
+      setTasks(nextTasks);
+      persistEntityCache(projectsForCache, tasksToPersist, nextProjectId);
     } catch (taskError) {
       if (signal?.aborted || authGeneration !== authGenerationRef.current || requestId !== taskRequestIdRef.current) return;
-      if (isAuthError(taskError)) {
+      if (shouldResetSession(taskError)) {
         await handleSessionExpired();
         return;
       }
       setTasks(fallbackForProject);
+      persistEntityCache(projectsForCache, cachedTasksForProject, nextProjectId);
     }
   };
 
@@ -144,6 +215,7 @@ export function App() {
       }
 
       let resolvedProjectId = preferredProjectId ?? projectId;
+      const projectsForCache = apiProjects.length > 0 ? apiProjects : entityCacheRef.current.projects;
       if (apiProjects.length > 0) {
         setProjects(apiProjects);
         resolvedProjectId =
@@ -155,9 +227,12 @@ export function App() {
 
       setRunningEntry(runningSnapshot.entry ?? null);
       setTodayTotal(runningSnapshot.todayTotalSeconds ?? 0);
+      setStatus(runningSnapshot.entry ? "Running" : "Ready");
 
       if (resolvedProjectId) {
-        await refreshTasks(resolvedProjectId, authGeneration, abortController.signal);
+        await refreshTasks(resolvedProjectId, authGeneration, abortController.signal, projectsForCache);
+      } else if (projectsForCache.length > 0) {
+        persistEntityCache(projectsForCache, entityCacheRef.current.tasks);
       }
 
       if (abortController.signal.aborted || authGeneration !== authGenerationRef.current) {
@@ -171,7 +246,7 @@ export function App() {
         return false;
       }
 
-      if (isAuthError(apiError)) {
+      if (shouldResetSession(apiError)) {
         await handleSessionExpired();
         return false;
       }
@@ -188,6 +263,10 @@ export function App() {
   };
 
   const queueSync = async () => {
+    if (syncInFlightRef.current) {
+      return syncInFlightRef.current;
+    }
+
     const work = (async () => {
       const client = clientRef.current;
       if (!client) return;
@@ -206,13 +285,27 @@ export function App() {
           return;
         }
 
-        const failed = new Set(result.failed);
+        const failuresById = new Map(result.failed.map((failure) => [failure.id, failure]));
+        const permanentFailures = result.failed.filter((failure) => failure.permanent);
+        const transientFailures = result.failed.filter((failure) => !failure.permanent);
+
         for (const action of actions) {
-          if (!failed.has(action.id)) queueRef.current.removeById(action.id);
+          const failure = failuresById.get(action.id);
+          if (!failure) {
+            queueRef.current.removeById(action.id);
+            continue;
+          }
+
+          if (failure.permanent) {
+            queueRef.current.removeById(action.id);
+            continue;
+          }
+
+          queueRef.current.markAttempt(action.id);
         }
         persistQueue();
 
-        if (result.synced > 0) {
+        if (result.synced > 0 || permanentFailures.length > 0) {
           await reloadFromApi(projectId || fallbackProjects[0]?.id);
         }
 
@@ -220,15 +313,30 @@ export function App() {
           return;
         }
 
+        if (permanentFailures.length > 0) {
+          const message = permanentFailures.map((failure) => failure.message).find(Boolean) ?? "Offline sync conflict";
+          setError(message);
+        }
+
+        if (transientFailures.length > 0) {
+          scheduleQueueRetry();
+        } else {
+          clearSyncRetry();
+        }
         setStatus(queueRef.current.size() > 0 ? `Sync pending (${queueRef.current.size()})` : "Ready");
       } catch (syncError) {
         if (abortController.signal.aborted || authGeneration !== authGenerationRef.current) {
           return;
         }
-        if (isAuthError(syncError)) {
+        if (shouldResetSession(syncError)) {
           await handleSessionExpired();
           return;
         }
+        for (const action of actions) {
+          queueRef.current.markAttempt(action.id);
+        }
+        persistQueue();
+        scheduleQueueRetry();
         setStatus("Offline sync pending");
       } finally {
         if (syncAbortControllerRef.current === abortController) {
@@ -252,10 +360,30 @@ export function App() {
       const preferences = loadDesktopPreferences();
       setApiBaseUrl(preferences.apiBaseUrl);
 
-      const queueSnapshot = parseQueueSnapshot(localStorage.getItem(QUEUE_STORAGE_KEY));
+      const queueSnapshot = loadQueueSnapshot();
       queueRef.current.hydrate(queueSnapshot);
       if (queueSnapshot.length > 0) {
         setStatus(`Sync pending (${queueSnapshot.length})`);
+      }
+
+      const cachedEntityState = loadEntityCache();
+      entityCacheRef.current = cachedEntityState;
+      if (cachedEntityState.projects.length > 0) {
+        setProjects(cachedEntityState.projects);
+      }
+      if (cachedEntityState.tasks.length > 0) {
+        setTasks(cachedEntityState.tasks);
+      }
+
+      const cachedRunningEntry = loadRunningEntrySnapshot();
+      if (cachedRunningEntry) {
+        setRunningEntry(cachedRunningEntry);
+        setProjectId(cachedRunningEntry.projectId);
+        setTaskId(cachedRunningEntry.taskId);
+        setNote(cachedRunningEntry.note ?? "");
+        if (queueSnapshot.length === 0) {
+          setStatus("Recovered running timer");
+        }
       }
 
       try {
@@ -271,6 +399,18 @@ export function App() {
       }
 
       clientRef.current = makeClient(preferences.apiBaseUrl, async () => tokenRef.current);
+
+      const hasPersistedOfflineState =
+        queueSnapshot.length > 0 ||
+        Boolean(cachedRunningEntry) ||
+        cachedEntityState.projects.length > 0 ||
+        cachedEntityState.tasks.length > 0;
+
+      if (!tokenRef.current && hasPersistedOfflineState) {
+        setStatus(queueSnapshot.length > 0 ? `Sync pending (${queueSnapshot.length})` : cachedRunningEntry ? "Recovered running timer" : "Ready (offline mode)");
+        return;
+      }
+
       const authGeneration = authGenerationRef.current;
       await reloadFromApi(preferences.apiBaseUrl ? projectId : undefined);
       if (authGeneration !== authGenerationRef.current) {
@@ -293,7 +433,10 @@ export function App() {
     };
 
     window.addEventListener("online", onOnline);
-    return () => window.removeEventListener("online", onOnline);
+    return () => {
+      clearSyncRetry();
+      window.removeEventListener("online", onOnline);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -308,6 +451,10 @@ export function App() {
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
   }, [runningEntry?.startedAt]);
+
+  useEffect(() => {
+    saveRunningEntrySnapshot(runningEntry);
+  }, [runningEntry]);
 
   const filteredTasks = useMemo(
     () => tasks.filter((task) => task.projectId === projectId),
@@ -325,6 +472,11 @@ export function App() {
   useEffect(() => {
     if (taskId && !filteredTasks.some((task) => task.id === taskId)) {
       setTaskId(undefined);
+      return;
+    }
+
+    if (!taskId && filteredTasks.length > 0) {
+      setTaskId(filteredTasks[0]!.id);
     }
   }, [filteredTasks, taskId]);
 
@@ -371,6 +523,12 @@ export function App() {
   }, [note, running, selectedProject?.name, selectedTask?.name, status]);
 
   const startTimer = async () => {
+    if (!taskId) {
+      setError("No task available for timer start.");
+      setStatus("Ready");
+      return;
+    }
+
     const startedAt = new Date().toISOString();
     const client = clientRef.current;
     if (!client) return;
@@ -402,8 +560,14 @@ export function App() {
       if (abortController.signal.aborted || authGeneration !== authGenerationRef.current) {
         return;
       }
-      if (isAuthError(timerError)) {
+      if (shouldResetSession(timerError)) {
         await handleSessionExpired();
+        return;
+      }
+      if (isSyncConflictError(timerError)) {
+        await reloadFromApi(projectId);
+        setError(timerError.message);
+        setStatus("Ready");
         return;
       }
 
@@ -417,6 +581,7 @@ export function App() {
       persistQueue();
       setRunningEntry({ id: optimisticId, projectId, taskId, note, startedAt });
       setStatus(`Running (offline queued: ${queueRef.current.size()})`);
+      queueSync().catch(() => undefined);
     } finally {
       if (startMutationAbortControllerRef.current === abortController) {
         startMutationAbortControllerRef.current = null;
@@ -449,15 +614,26 @@ export function App() {
       if (abortController.signal.aborted || authGeneration !== authGenerationRef.current) {
         return;
       }
-      if (isAuthError(timerError)) {
+      if (shouldResetSession(timerError)) {
         await handleSessionExpired();
+        return;
+      }
+      if (isSyncConflictError(timerError)) {
+        await reloadFromApi(projectId);
+        setError(timerError.message);
+        setStatus("Ready");
         return;
       }
 
       queueRef.current.enqueue({
         id: `local-${crypto.randomUUID()}`,
         type: "STOP_TIMER",
-        payload: { entryId: runningEntry.id, stoppedAt: new Date().toISOString() },
+        payload: {
+          entryId: runningEntry.id,
+          taskId: runningEntry.taskId,
+          startedAt: runningEntry.startedAt,
+          stoppedAt: new Date().toISOString(),
+        },
         createdAt: new Date().toISOString(),
       });
       persistQueue();
@@ -480,8 +656,6 @@ export function App() {
     try {
       authGenerationRef.current += 1;
       const authGeneration = authGenerationRef.current;
-      queueRef.current.hydrate([]);
-      persistQueue();
       await saveAuthToken(tokenInput.trim());
       tokenRef.current = tokenInput.trim();
       setTokenInput("");
@@ -503,6 +677,7 @@ export function App() {
   const handleClearToken = async () => {
     try {
       authGenerationRef.current += 1;
+      clearSyncRetry();
       reloadAbortControllerRef.current?.abort();
       syncAbortControllerRef.current?.abort();
       await clearAuthToken();
@@ -510,6 +685,9 @@ export function App() {
       clientRef.current = makeClient(apiBaseUrl, async () => null);
       queueRef.current.hydrate([]);
       persistQueue();
+      clearEntityCache();
+      entityCacheRef.current = { projects: [], tasks: [] };
+      saveRunningEntrySnapshot(null);
       setProjects(fallbackProjects);
       setTasks(fallbackTasks.filter((task) => task.projectId === fallbackProjects[0]?.id));
       setProjectId(fallbackProjects[0]?.id ?? "");

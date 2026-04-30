@@ -1,11 +1,25 @@
 import type {
   ProjectSummary,
   QueueAction,
+  QueueSyncResult,
   RunningTimerSnapshot,
   TaskSummary,
   TimeEntry,
   TimeEntryInput,
 } from "@trackify/shared-types";
+
+const DESKTOP_PROJECT_ID = "desktop-workspace";
+const DESKTOP_PROJECT_NAME = "Trackify";
+
+interface BackendTask {
+  id: string;
+  name: string;
+  hidden?: boolean;
+}
+
+interface BackendStatsResponse {
+  todayTotal: number;
+}
 
 export interface ApiClientOptions {
   baseUrl: string;
@@ -44,16 +58,26 @@ export class TrackifyApiClient {
     return response.json() as Promise<T>;
   }
 
-  getProjects(signal?: AbortSignal) {
-    return this.request<ProjectSummary[]>("/api/projects", { signal });
+  getProjects(_signal?: AbortSignal) {
+    return Promise.resolve<ProjectSummary[]>([
+      { id: DESKTOP_PROJECT_ID, name: DESKTOP_PROJECT_NAME },
+    ]);
   }
 
-  getTasks(projectId: string, signal?: AbortSignal) {
-    return this.request<TaskSummary[]>(`/api/projects/${projectId}/tasks`, { signal });
+  async getTasks(_projectId: string, signal?: AbortSignal) {
+    const tasks = await this.request<BackendTask[]>("/api/tasks", { signal });
+    return tasks
+      .filter((task) => !task.hidden)
+      .map((task) => ({
+        id: task.id,
+        name: task.name,
+        projectId: DESKTOP_PROJECT_ID,
+      } satisfies TaskSummary));
   }
 
-  getRunningTimer(signal?: AbortSignal) {
-    return this.request<RunningTimerSnapshot>("/api/time/running", { signal });
+  getRunningTimer(signal?: AbortSignal): Promise<RunningTimerSnapshot> {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    return this.request<RunningTimerSnapshot>(`/api/time/running?timezone=${encodeURIComponent(timezone)}`, { signal });
   }
 
   startTimer(input: TimeEntryInput, signal?: AbortSignal) {
@@ -80,7 +104,7 @@ export class TrackifyApiClient {
   }
 
   syncQueue(actions: QueueAction[], signal?: AbortSignal) {
-    return this.request<{ synced: number; failed: string[] }>("/api/time/sync", {
+    return this.request<QueueSyncResult>("/api/time/sync", {
       method: "POST",
       body: JSON.stringify({ actions }),
       signal,
