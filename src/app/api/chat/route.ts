@@ -71,7 +71,7 @@ function createTools(userId: string, timezone: string) {
           where: {
             userId,
             hidden: false,
-            name: { contains: query, mode: "insensitive" },
+            name: { contains: query },
           },
           select: { id: true, name: true },
         });

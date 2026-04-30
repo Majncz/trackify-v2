@@ -17,6 +17,7 @@ model User {
   conversations  Conversation[]
   activeTimers   ActiveTimer[]
   apiTokens      ApiToken[]
+  taskGroups     TaskGroup[]
 
   @@map("trackify_user")
 }
@@ -94,6 +95,19 @@ model ActiveTimer {
   createdAt DateTime @default(now())
 
   @@map("trackify_active_timer")
+}
+
+model TaskGroup {
+  id        String   @id @default(uuid())
+  name      String
+  taskIds   String   // JSON-encoded array of task IDs
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("trackify_task_group")
 }
 
 model ApiToken {
