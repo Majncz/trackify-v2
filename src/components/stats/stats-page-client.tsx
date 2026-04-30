@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback } from "react";
 import { useTasks } from "@/hooks/use-tasks";
 import { useGroups } from "@/hooks/use-groups";
 import type { TaskGroup } from "@/hooks/use-groups";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -28,7 +28,6 @@ import {
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
   CartesianGrid,
-  Cell,
 } from "recharts";
 import {
   ChevronDown,
@@ -39,10 +38,6 @@ import {
   Plus,
   Check,
   X,
-  Clock,
-  TrendingUp,
-  Layers,
-  ListChecks,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -63,37 +58,6 @@ interface Task {
 }
 
 type RangeType = "today" | "week" | "month" | "alltime" | "custom";
-
-// ─── Design tokens ───────────────────────────────────────────────────────────
-
-/** Hex values used for inline styles (borders, chart cells) where Tailwind can't be dynamic */
-const GROUP_HEX = [
-  "#3b82f6", // blue
-  "#f97316", // orange
-  "#10b981", // emerald
-  "#8b5cf6", // violet
-  "#ec4899", // pink
-  "#14b8a6", // teal
-  "#eab308", // yellow
-  "#ef4444", // red
-];
-
-const GROUP_BG_OPACITY = [
-  "bg-blue-500/8",
-  "bg-orange-500/8",
-  "bg-emerald-500/8",
-  "bg-violet-500/8",
-  "bg-pink-500/8",
-  "bg-teal-500/8",
-  "bg-yellow-500/8",
-  "bg-red-500/8",
-];
-
-const RANK_STYLE: Record<number, string> = {
-  0: "bg-amber-400/20 text-amber-600 dark:text-amber-400 ring-1 ring-amber-400/30",
-  1: "bg-slate-400/20 text-slate-500 dark:text-slate-400 ring-1 ring-slate-400/30",
-  2: "bg-orange-400/20 text-orange-600 dark:text-orange-400 ring-1 ring-orange-400/30",
-};
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -122,29 +86,17 @@ function fmtMs(ms: number): string {
   return `${s}s`;
 }
 
-// ─── Subcomponents ───────────────────────────────────────────────────────────
+const DOT_COLORS = [
+  "bg-blue-500", "bg-orange-500", "bg-emerald-500",
+  "bg-violet-500", "bg-pink-500", "bg-teal-500",
+  "bg-yellow-500", "bg-red-500",
+];
 
-function SectionHeader({
-  icon: Icon,
-  title,
-  action,
-}: {
-  icon: React.ElementType;
-  title: string;
-  action?: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between mb-3">
-      <div className="flex items-center gap-2">
-        <div className="p-1.5 rounded-md bg-muted">
-          <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-        </div>
-        <h2 className="text-sm font-semibold">{title}</h2>
-      </div>
-      {action}
-    </div>
-  );
-}
+const BAR_COLORS = [
+  "bg-blue-500/80", "bg-orange-500/80", "bg-emerald-500/80",
+  "bg-violet-500/80", "bg-pink-500/80", "bg-teal-500/80",
+  "bg-yellow-500/80", "bg-red-500/80",
+];
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -161,7 +113,7 @@ export function StatsPageClient() {
     () => format(endOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd")
   );
 
-  // Group UI
+  // Group UI state
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -173,17 +125,25 @@ export function StatsPageClient() {
   const [savingGroup, setSavingGroup] = useState(false);
   const [saveName, setSaveName] = useState("");
 
-  // ─── Date range computation ───────────────────────────────────────────────
+  // ─── Computed date range ──────────────────────────────────────────────────
 
   const { from, to, label } = useMemo(() => {
     const now = new Date();
     switch (rangeType) {
       case "today":
-        return { from: startOfDay(now), to: endOfDay(now), label: format(now, "MMM d, yyyy") };
+        return {
+          from: startOfDay(now),
+          to: endOfDay(now),
+          label: format(now, "MMM d, yyyy"),
+        };
       case "week": {
         const s = startOfWeek(now, { weekStartsOn: 1 });
         const e = endOfWeek(now, { weekStartsOn: 1 });
-        return { from: s, to: e, label: `${format(s, "MMM d")} – ${format(e, "MMM d, yyyy")}` };
+        return {
+          from: s,
+          to: e,
+          label: `${format(s, "MMM d")} – ${format(e, "MMM d, yyyy")}`,
+        };
       }
       case "month": {
         const s = startOfMonth(now);
@@ -193,48 +153,69 @@ export function StatsPageClient() {
       case "alltime":
         return { from: null, to: null, label: "All time" };
       case "custom": {
-        const s = customFrom ? startOfDay(parseISO(customFrom)) : startOfDay(now);
+        const s = customFrom
+          ? startOfDay(parseISO(customFrom))
+          : startOfDay(now);
         const e = customTo ? endOfDay(parseISO(customTo)) : endOfDay(now);
-        return { from: s, to: e, label: `${format(s, "MMM d")} – ${format(e, "MMM d, yyyy")}` };
+        return {
+          from: s,
+          to: e,
+          label: `${format(s, "MMM d")} – ${format(e, "MMM d, yyyy")}`,
+        };
       }
     }
   }, [rangeType, customFrom, customTo]);
 
-  // ─── Stats ────────────────────────────────────────────────────────────────
+  // ─── Computed stats ───────────────────────────────────────────────────────
 
   const taskTotals = useMemo(
     () => tasks.map((t) => ({ task: t, ms: taskMs(t, from, to) })),
     [tasks, from, to]
   );
 
-  const totalMs = useMemo(() => taskTotals.reduce((s, t) => s + t.ms, 0), [taskTotals]);
-
-  const dailyAvgMs = useMemo(() => {
-    if (totalMs === 0) return 0;
-    const days = new Set<string>();
-    for (const { task } of taskTotals)
-      for (const e of task.events)
-        if (eventOverlapMs(e, from, to) > 0) days.add(format(parseISO(e.from), "yyyy-MM-dd"));
-    return days.size > 0 ? Math.round(totalMs / days.size) : totalMs;
-  }, [taskTotals, totalMs, from, to]);
-
-  const topTasks = useMemo(
-    () => [...taskTotals].filter((t) => t.ms > 0).sort((a, b) => b.ms - a.ms).slice(0, 5),
+  const totalMs = useMemo(
+    () => taskTotals.reduce((s, t) => s + t.ms, 0),
     [taskTotals]
   );
 
+  const dailyAvgMs = useMemo(() => {
+    if (totalMs === 0) return 0;
+    const activeDays = new Set<string>();
+    for (const { task } of taskTotals) {
+      for (const event of task.events) {
+        if (eventOverlapMs(event, from, to) > 0) {
+          activeDays.add(format(parseISO(event.from), "yyyy-MM-dd"));
+        }
+      }
+    }
+    return activeDays.size > 0 ? Math.round(totalMs / activeDays.size) : totalMs;
+  }, [taskTotals, totalMs, from, to]);
+
+  const topTasks = useMemo(
+    () =>
+      [...taskTotals]
+        .filter((t) => t.ms > 0)
+        .sort((a, b) => b.ms - a.ms)
+        .slice(0, 5),
+    [taskTotals]
+  );
+
+  // Trend chart data
   const trendData = useMemo(() => {
-    let chartFrom: Date, chartTo: Date;
+    let chartFrom: Date;
+    let chartTo: Date;
+
     if (from && to) {
       chartFrom = from;
       chartTo = to;
     } else {
       let earliest: Date | null = null;
-      for (const task of tasks)
-        for (const e of task.events) {
-          const d = parseISO(e.from);
+      for (const task of tasks) {
+        for (const event of task.events) {
+          const d = parseISO(event.from);
           if (!earliest || d < earliest) earliest = d;
         }
+      }
       chartFrom = earliest
         ? startOfDay(earliest)
         : startOfDay(new Date(Date.now() - 29 * 86400000));
@@ -248,27 +229,32 @@ export function StatsPageClient() {
         const dFrom = startOfDay(day);
         const dTo = endOfDay(day);
         let ms = 0;
-        for (const task of tasks)
-          for (const e of task.events) ms += eventOverlapMs(e, dFrom, dTo);
-        return { date: format(day, "MMM d"), hours: parseFloat((ms / 3600000).toFixed(2)), ms };
+        for (const task of tasks) {
+          for (const event of task.events) {
+            ms += eventOverlapMs(event, dFrom, dTo);
+          }
+        }
+        return { date: format(day, "MMM d"), hours: parseFloat((ms / 3600000).toFixed(2)) };
       });
     }
 
-    // Weekly buckets
-    const wm = new Map<string, { date: string; ms: number }>();
+    // Weekly buckets for longer ranges
+    const weekMap = new Map<string, { date: string; ms: number }>();
     for (const day of allDays) {
       const ws = startOfWeek(day, { weekStartsOn: 1 });
       const key = format(ws, "yyyy-MM-dd");
-      if (!wm.has(key)) wm.set(key, { date: format(ws, "MMM d"), ms: 0 });
+      if (!weekMap.has(key)) weekMap.set(key, { date: format(ws, "MMM d"), ms: 0 });
       const dFrom = startOfDay(day);
       const dTo = endOfDay(day);
-      for (const task of tasks)
-        for (const e of task.events) wm.get(key)!.ms += eventOverlapMs(e, dFrom, dTo);
+      for (const task of tasks) {
+        for (const event of task.events) {
+          weekMap.get(key)!.ms += eventOverlapMs(event, dFrom, dTo);
+        }
+      }
     }
-    return Array.from(wm.values()).map(({ date, ms }) => ({
+    return Array.from(weekMap.values()).map(({ date, ms }) => ({
       date,
       hours: parseFloat((ms / 3600000).toFixed(2)),
-      ms,
     }));
   }, [tasks, from, to]);
 
@@ -277,9 +263,9 @@ export function StatsPageClient() {
   const groupData = useMemo(
     () =>
       groups.map((g) => {
-        const gt = tasks.filter((t) => g.taskIds.includes(t.id));
-        const ms = gt.reduce((s, t) => s + taskMs(t, from, to), 0);
-        const perTask = gt
+        const groupTasks = tasks.filter((t) => g.taskIds.includes(t.id));
+        const ms = groupTasks.reduce((s, t) => s + taskMs(t, from, to), 0);
+        const perTask = groupTasks
           .map((t) => ({ task: t, ms: taskMs(t, from, to) }))
           .filter((t) => t.ms > 0)
           .sort((a, b) => b.ms - a.ms);
@@ -295,10 +281,11 @@ export function StatsPageClient() {
   const buildGroupText = useCallback(
     (idx: number) => {
       const { group, ms, perTask } = groupData[idx];
-      return [
+      const lines = [
         `${group.name} — ${fmtMs(ms)} (${label})`,
         ...perTask.map((t) => `  ${t.task.name}: ${fmtMs(t.ms)}`),
-      ].join("\n");
+      ];
+      return lines.join("\n");
     },
     [groupData, label]
   );
@@ -309,9 +296,10 @@ export function StatsPageClient() {
   );
 
   const copyAll = useCallback(() => {
-    navigator.clipboard
-      .writeText(groupData.map((_, i) => buildGroupText(i)).join("\n\n"))
-      .catch(() => {});
+    const text = groupData
+      .map((_, i) => buildGroupText(i))
+      .join("\n\n");
+    navigator.clipboard.writeText(text).catch(() => {});
   }, [groupData, buildGroupText]);
 
   const startEdit = useCallback((group: TaskGroup) => {
@@ -322,20 +310,30 @@ export function StatsPageClient() {
 
   const saveEdit = useCallback(async () => {
     if (!editingGroupId) return;
-    await updateGroup.mutateAsync({ id: editingGroupId, name: editName, taskIds: Array.from(editTaskIds) });
+    await updateGroup.mutateAsync({
+      id: editingGroupId,
+      name: editName,
+      taskIds: Array.from(editTaskIds),
+    });
     setEditingGroupId(null);
   }, [editingGroupId, editName, editTaskIds, updateGroup]);
 
   const saveQuickGroup = useCallback(async () => {
     if (!saveName.trim() || selectedTaskIds.size === 0) return;
-    await createGroup.mutateAsync({ name: saveName.trim(), taskIds: Array.from(selectedTaskIds) });
+    await createGroup.mutateAsync({
+      name: saveName.trim(),
+      taskIds: Array.from(selectedTaskIds),
+    });
     setSaveName("");
     setSelectedTaskIds(new Set());
     setSavingGroup(false);
   }, [saveName, selectedTaskIds, createGroup]);
 
   const quickSelectMs = useMemo(
-    () => tasks.filter((t) => selectedTaskIds.has(t.id)).reduce((s, t) => s + taskMs(t, from, to), 0),
+    () =>
+      tasks
+        .filter((t) => selectedTaskIds.has(t.id))
+        .reduce((s, t) => s + taskMs(t, from, to), 0),
     [tasks, selectedTaskIds, from, to]
   );
 
@@ -353,13 +351,13 @@ export function StatsPageClient() {
   if (tasksLoading || groupsLoading) {
     return (
       <div className="space-y-5">
-        <Skeleton className="h-10 w-full rounded-xl" />
-        <div className="grid grid-cols-2 gap-3">
-          <Skeleton className="h-24 rounded-xl" />
-          <Skeleton className="h-24 rounded-xl" />
+        <Skeleton className="h-9 w-full" />
+        <div className="grid grid-cols-2 gap-4">
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
         </div>
-        <Skeleton className="h-44 rounded-xl" />
-        <Skeleton className="h-36 rounded-xl" />
+        <Skeleton className="h-44" />
+        <Skeleton className="h-32" />
       </div>
     );
   }
@@ -375,28 +373,22 @@ export function StatsPageClient() {
   ];
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-6">
 
-      {/* ── Date range segmented control ─────────────────────────────────── */}
-      <div className="space-y-2">
-        <div className="flex bg-muted rounded-xl p-1 gap-1">
-          {RANGES.map((r) => (
-            <button
-              key={r.value}
-              onClick={() => setRangeType(r.value)}
-              className={cn(
-                "flex-1 min-w-0 px-2 py-1.5 text-xs sm:text-sm rounded-lg font-medium transition-all duration-150 truncate",
-                rangeType === r.value
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
+      {/* ── Date range filter ────────────────────────────────────────────── */}
+      <div className="flex flex-wrap gap-2">
+        {RANGES.map((r) => (
+          <Button
+            key={r.value}
+            variant={rangeType === r.value ? "default" : "outline"}
+            size="sm"
+            onClick={() => setRangeType(r.value)}
+          >
+            {r.label}
+          </Button>
+        ))}
         {rangeType === "custom" && (
-          <div className="flex items-center gap-2 flex-wrap px-1">
+          <div className="flex items-center gap-2 w-full mt-1 flex-wrap">
             <Input
               type="date"
               value={customFrom}
@@ -414,185 +406,164 @@ export function StatsPageClient() {
         )}
       </div>
 
-      {/* ── Headline metric cards ─────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-3">
-        {/* Total tracked — blue */}
-        <div className="relative rounded-xl overflow-hidden border bg-gradient-to-br from-blue-500/10 via-blue-400/5 to-transparent">
-          <div className="absolute inset-y-0 left-0 w-[3px] bg-blue-500 rounded-r-full" />
-          <div className="px-4 py-4 pl-5">
-            <p className="text-[10px] font-semibold text-blue-600/70 dark:text-blue-400/70 uppercase tracking-widest mb-1">
-              Total
-            </p>
-            <p className="text-2xl font-bold tabular-nums text-blue-700 dark:text-blue-300 leading-none">
-              {fmtMs(totalMs)}
-            </p>
-            <p className="text-[11px] text-muted-foreground mt-1.5 truncate">{label}</p>
-          </div>
-        </div>
-
-        {/* Daily average — emerald */}
-        <div className="relative rounded-xl overflow-hidden border bg-gradient-to-br from-emerald-500/10 via-emerald-400/5 to-transparent">
-          <div className="absolute inset-y-0 left-0 w-[3px] bg-emerald-500 rounded-r-full" />
-          <div className="px-4 py-4 pl-5">
-            <p className="text-[10px] font-semibold text-emerald-600/70 dark:text-emerald-400/70 uppercase tracking-widest mb-1">
-              Daily Avg
-            </p>
-            <p className="text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300 leading-none">
-              {fmtMs(dailyAvgMs)}
-            </p>
-            <p className="text-[11px] text-muted-foreground mt-1.5">per active day</p>
-          </div>
-        </div>
+      {/* ── Headline numbers ─────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Tracked</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold tabular-nums">{fmtMs(totalMs)}</p>
+            <p className="text-xs text-muted-foreground mt-1 truncate">{label}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Daily Average</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold tabular-nums">{fmtMs(dailyAvgMs)}</p>
+            <p className="text-xs text-muted-foreground mt-1">per active day</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* ── Trend chart ──────────────────────────────────────────────────── */}
       {trendData.some((d) => d.hours > 0) && (
-        <div>
-          <SectionHeader icon={TrendingUp} title="Daily Breakdown" />
-          <Card>
-            <CardContent className="px-1 pb-4 pt-3">
-              <ResponsiveContainer width="100%" height={148}>
-                <BarChart data={trendData} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#6366f1" stopOpacity={0.9} />
-                      <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.7} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    className="stroke-border"
-                    vertical={false}
-                  />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                    tickLine={false}
-                    axisLine={false}
-                    interval="preserveStartEnd"
-                  />
-                  <YAxis
-                    tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(v: number) => `${v}h`}
-                  />
-                  <RechartsTooltip
-                    formatter={(value) => [fmtMs((value as number) * 3600000), "Time"]}
-                    contentStyle={{
-                      background: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "10px",
-                      fontSize: 12,
-                      boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-                    }}
-                    cursor={{ fill: "hsl(var(--muted))", radius: 4 }}
-                  />
-                  <Bar dataKey="hours" fill="url(#trendGrad)" radius={[4, 4, 0, 0]} maxBarSize={28}>
-                    {trendData.map((entry, i) => (
-                      <Cell
-                        key={i}
-                        fill={entry.hours > 0 ? "url(#trendGrad)" : "hsl(var(--muted))"}
-                        fillOpacity={entry.hours > 0 ? 1 : 0.4}
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </div>
+        <Card>
+          <CardHeader className="pb-0">
+            <CardTitle className="text-sm font-medium">Daily Breakdown</CardTitle>
+          </CardHeader>
+          <CardContent className="px-1 pb-4 pt-2">
+            <ResponsiveContainer width="100%" height={150}>
+              <BarChart
+                data={trendData}
+                margin={{ top: 4, right: 8, left: -24, bottom: 0 }}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  className="stroke-border"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 10 }}
+                  tickLine={false}
+                  axisLine={false}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  tick={{ fontSize: 10 }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v: number) => `${v}h`}
+                />
+                <RechartsTooltip
+                  formatter={(value) => [fmtMs((value as number) * 3600000), "Time"]}
+                  contentStyle={{
+                    background: "hsl(var(--card))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: "8px",
+                    fontSize: 12,
+                  }}
+                  cursor={{ fill: "hsl(var(--muted))" }}
+                />
+                <Bar
+                  dataKey="hours"
+                  fill="hsl(var(--primary))"
+                  radius={[3, 3, 0, 0]}
+                  maxBarSize={28}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
       )}
 
       {/* ── Top tasks ────────────────────────────────────────────────────── */}
       {topTasks.length > 0 && (
-        <div>
-          <SectionHeader icon={Clock} title="Top Tasks" />
-          <Card>
-            <CardContent className="px-4 py-4 space-y-4">
-              {topTasks.map(({ task, ms }, i) => (
-                <div key={task.id} className="flex items-center gap-3">
-                  <span
-                    className={cn(
-                      "h-6 w-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0",
-                      RANK_STYLE[i] ?? "bg-muted text-muted-foreground text-xs"
-                    )}
-                  >
-                    {i + 1}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-baseline mb-1.5">
-                      <span className="text-sm truncate pr-2">{task.name}</span>
-                      <span className="text-sm font-semibold tabular-nums shrink-0 text-foreground/80">
-                        {fmtMs(ms)}
-                      </span>
-                    </div>
-                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{
-                          width: `${totalMs > 0 ? (ms / totalMs) * 100 : 0}%`,
-                          background: "linear-gradient(90deg, #3b82f6, #8b5cf6)",
-                        }}
-                      />
-                    </div>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Top Tasks</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {topTasks.map(({ task, ms }, i) => (
+              <div key={task.id} className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground w-4 shrink-0 text-right">
+                  {i + 1}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between items-baseline mb-1">
+                    <span className="text-sm truncate pr-2">{task.name}</span>
+                    <span className="text-sm font-medium tabular-nums shrink-0">
+                      {fmtMs(ms)}
+                    </span>
+                  </div>
+                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary rounded-full transition-all"
+                      style={{
+                        width: `${totalMs > 0 ? (ms / totalMs) * 100 : 0}%`,
+                      }}
+                    />
                   </div>
                 </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       )}
 
       {/* ── Saved groups ─────────────────────────────────────────────────── */}
-      <div>
-        <SectionHeader
-          icon={Layers}
-          title="Saved Groups"
-          action={
-            groups.length >= 2 ? (
-              <Button variant="ghost" size="sm" className="text-xs h-7 gap-1.5" onClick={copyAll}>
-                <Copy className="h-3 w-3" />
-                Copy all
-              </Button>
-            ) : undefined
-          }
-        />
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold">Saved Groups</h2>
+          {groups.length >= 2 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={copyAll}
+            >
+              <Copy className="h-4 w-4" />
+              Copy all
+            </Button>
+          )}
+        </div>
 
-        {/* Comparison bar */}
+        {/* Group comparison bar */}
         {groupData.filter((g) => g.ms > 0).length >= 2 && (
-          <Card className="mb-3">
-            <CardContent className="px-4 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">
-                Comparison
-              </p>
+          <Card>
+            <CardContent className="px-4 py-4">
+              <p className="text-xs text-muted-foreground mb-3 uppercase tracking-wider font-semibold">Comparison</p>
               <div className="flex h-3 rounded-full overflow-hidden gap-px">
                 {groupData
                   .filter((g) => g.ms > 0)
                   .map(({ group, ms }, i) => (
                     <div
                       key={group.id}
-                      className="h-full transition-all"
+                      className={cn("h-full", DOT_COLORS[i % DOT_COLORS.length])}
                       style={{
                         width: `${comparisonTotal > 0 ? (ms / comparisonTotal) * 100 : 0}%`,
-                        backgroundColor: GROUP_HEX[i % GROUP_HEX.length],
                       }}
                       title={`${group.name}: ${fmtMs(ms)}`}
                     />
                   ))}
               </div>
-              <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
+              <div className="flex flex-wrap gap-x-4 gap-y-2 mt-4">
                 {groupData
                   .filter((g) => g.ms > 0)
                   .map(({ group, ms }, i) => (
-                    <div key={group.id} className="flex items-center gap-1.5">
+                    <div key={group.id} className="flex items-center gap-2">
                       <div
-                        className="h-2 w-2 rounded-full shrink-0"
-                        style={{ backgroundColor: GROUP_HEX[i % GROUP_HEX.length] }}
+                        className={cn(
+                          "h-2.5 w-2.5 rounded-full shrink-0",
+                          DOT_COLORS[i % DOT_COLORS.length]
+                        )}
                       />
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-sm">
                         {group.name}{" "}
-                        <span className="font-semibold tabular-nums text-foreground">
+                        <span className="font-medium tabular-nums ml-1">
                           {fmtMs(ms)}
                         </span>
                       </span>
@@ -604,216 +575,208 @@ export function StatsPageClient() {
         )}
 
         {groups.length === 0 && (
-          <p className="text-sm text-muted-foreground py-2">
-            No saved groups yet. Use quick select below to create one.
-          </p>
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground text-sm">
+              No saved groups yet. Use quick select below to create one.
+            </CardContent>
+          </Card>
         )}
 
-        <div className="space-y-2.5">
-          {groupData.map(({ group, ms, perTask }, i) => {
-            const isExpanded = expandedGroups.has(group.id);
-            const isEditing = editingGroupId === group.id;
-            const color = GROUP_HEX[i % GROUP_HEX.length];
+        {groupData.map(({ group, ms, perTask }, i) => {
+          const isExpanded = expandedGroups.has(group.id);
+          const isEditing = editingGroupId === group.id;
 
-            return (
-              <div
-                key={group.id}
-                className={cn(
-                  "rounded-xl border overflow-hidden",
-                  GROUP_BG_OPACITY[i % GROUP_BG_OPACITY.length]
-                )}
-                style={{ borderLeftColor: color, borderLeftWidth: 3 }}
-              >
-                <div className="px-4 py-3">
-                  {isEditing ? (
-                    <div className="space-y-3">
-                      <Input
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        placeholder="Group name"
-                        className="h-8 text-sm"
-                        autoFocus
-                      />
-                      <p className="text-xs font-medium text-muted-foreground">
-                        Tasks in this group:
-                      </p>
-                      <div className="space-y-2 max-h-48 overflow-y-auto">
-                        {tasks.map((t) => (
-                          <label key={t.id} className="flex items-center gap-2 cursor-pointer">
-                            <Checkbox
-                              checked={editTaskIds.has(t.id)}
-                              onCheckedChange={(checked) => {
-                                setEditTaskIds((prev) => {
-                                  const next = new Set(prev);
-                                  if (checked) next.add(t.id);
-                                  else next.delete(t.id);
-                                  return next;
-                                });
-                              }}
-                            />
-                            <span className="text-sm">{t.name}</span>
-                          </label>
-                        ))}
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          className="h-7 gap-1"
-                          onClick={saveEdit}
-                          disabled={updateGroup.isPending || !editName.trim()}
+          return (
+            <Card key={group.id}>
+              <CardHeader className="pb-3 pt-4 px-4">
+                {isEditing ? (
+                  <div className="space-y-4">
+                    <Input
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      placeholder="Group name"
+                      className="h-9"
+                      autoFocus
+                    />
+                    <p className="text-sm font-medium">
+                      Tasks in this group:
+                    </p>
+                    <div className="space-y-3 max-h-48 overflow-y-auto">
+                      {tasks.map((t) => (
+                        <label
+                          key={t.id}
+                          className="flex items-center gap-3 cursor-pointer"
                         >
-                          <Check className="h-3 w-3" />
-                          Save
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 gap-1"
-                          onClick={() => setEditingGroupId(null)}
-                        >
-                          <X className="h-3 w-3" />
-                          Cancel
-                        </Button>
-                      </div>
+                          <Checkbox
+                            checked={editTaskIds.has(t.id)}
+                            onCheckedChange={(checked) => {
+                              setEditTaskIds((prev) => {
+                                const next = new Set(prev);
+                                if (checked) next.add(t.id);
+                                else next.delete(t.id);
+                                return next;
+                              });
+                            }}
+                          />
+                          <span className="text-sm">{t.name}</span>
+                        </label>
+                      ))}
                     </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-sm flex-1 min-w-0 truncate">
-                        {group.name}
-                      </span>
-                      <span
-                        className="text-sm font-bold tabular-nums shrink-0 mr-1"
-                        style={{ color }}
+                    <div className="flex gap-2 pt-2">
+                      <Button
+                        size="sm"
+                        className="gap-2"
+                        onClick={saveEdit}
+                        disabled={updateGroup.isPending || !editName.trim()}
                       >
-                        {fmtMs(ms)}
-                      </span>
-                      <div className="flex items-center gap-0 shrink-0">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                          onClick={() => copyGroup(i)}
-                          title="Copy"
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                          onClick={() => startEdit(group)}
-                          title="Edit"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-destructive/70 hover:text-destructive"
-                          onClick={() => deleteGroup.mutate(group.id)}
-                          title="Delete"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                          onClick={() => toggleExpanded(group.id)}
-                        >
-                          {isExpanded ? (
-                            <ChevronUp className="h-3.5 w-3.5" />
-                          ) : (
-                            <ChevronDown className="h-3.5 w-3.5" />
-                          )}
-                        </Button>
-                      </div>
+                        <Check className="h-4 w-4" />
+                        Save
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-2"
+                        onClick={() => setEditingGroupId(null)}
+                      >
+                        <X className="h-4 w-4" />
+                        Cancel
+                      </Button>
                     </div>
-                  )}
-                </div>
-
-                {isExpanded && !isEditing && (
-                  <div className="px-4 pb-3 border-t border-border/40">
-                    <div className="pt-3">
-                      {perTask.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">
-                          No time tracked in this period.
-                        </p>
-                      ) : (
-                        <div className="space-y-3">
-                          {perTask.map(({ task, ms: tMs }) => (
-                            <div key={task.id}>
-                              <div className="flex justify-between items-baseline mb-1">
-                                <span className="text-xs truncate pr-2">{task.name}</span>
-                                <span className="text-xs font-semibold tabular-nums shrink-0">
-                                  {fmtMs(tMs)}
-                                </span>
-                              </div>
-                              <div className="h-1 bg-black/8 dark:bg-white/8 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full rounded-full transition-all duration-500"
-                                  style={{
-                                    width: `${ms > 0 ? (tMs / ms) * 100 : 0}%`,
-                                    backgroundColor: color,
-                                    opacity: 0.75,
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={cn(
+                        "h-3 w-3 rounded-full shrink-0",
+                        DOT_COLORS[i % DOT_COLORS.length]
                       )}
+                    />
+                    <span className="font-semibold text-base flex-1 min-w-0 truncate">
+                      {group.name}
+                    </span>
+                    <span className="text-base font-bold tabular-nums shrink-0 mr-2">
+                      {fmtMs(ms)}
+                    </span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => copyGroup(i)}
+                        title="Copy to clipboard"
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => startEdit(group)}
+                        title="Edit group"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => deleteGroup.mutate(group.id)}
+                        title="Delete group"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => toggleExpanded(group.id)}
+                        title={isExpanded ? "Collapse" : "Expand"}
+                      >
+                        {isExpanded ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </Button>
                     </div>
                   </div>
                 )}
-              </div>
-            );
-          })}
-        </div>
+              </CardHeader>
+
+              {isExpanded && !isEditing && (
+                <CardContent className="px-4 pb-4 pt-1">
+                  {perTask.length === 0 ? (
+                    <p className="text-sm text-muted-foreground pt-2">
+                      No time tracked in this period.
+                    </p>
+                  ) : (
+                    <div className="space-y-4 pt-2">
+                      {perTask.map(({ task, ms: tMs }) => (
+                        <div key={task.id}>
+                          <div className="flex justify-between items-baseline mb-1.5">
+                            <span className="text-sm truncate pr-2">
+                              {task.name}
+                            </span>
+                            <span className="text-sm font-medium tabular-nums shrink-0">
+                              {fmtMs(tMs)}
+                            </span>
+                          </div>
+                          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className={cn(
+                                "h-full rounded-full transition-all",
+                                BAR_COLORS[i % BAR_COLORS.length]
+                              )}
+                              style={{
+                                width: `${ms > 0 ? (tMs / ms) * 100 : 0}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              )}
+            </Card>
+          );
+        })}
       </div>
 
       {/* ── Quick select ─────────────────────────────────────────────────── */}
-      <div>
+      <div className="pt-2">
         <button
-          className="flex items-center gap-2 w-full text-left mb-3 group"
+          className="flex items-center justify-between w-full p-4 rounded-lg border bg-card hover:bg-accent hover:text-accent-foreground transition-colors"
           onClick={() => setQuickOpen((o) => !o)}
         >
-          <div className="p-1.5 rounded-md bg-muted group-hover:bg-muted/70 transition-colors">
-            <ListChecks className="h-3.5 w-3.5 text-muted-foreground" />
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-sm">Quick Select</span>
+            <span className="text-sm font-normal text-muted-foreground">
+              — pick tasks to see combined time
+            </span>
           </div>
-          <span className="text-sm font-semibold">Quick Select</span>
-          <span className="text-xs font-normal text-muted-foreground">
-            — pick tasks to see combined time
-          </span>
-          <div className="ml-auto">
-            {quickOpen ? (
-              <ChevronUp className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            )}
-          </div>
+          {quickOpen ? (
+            <ChevronUp className="h-5 w-5 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="h-5 w-5 text-muted-foreground" />
+          )}
         </button>
 
         {quickOpen && (
-          <Card>
-            <CardContent className="px-4 py-2 divide-y divide-border/50">
+          <Card className="mt-3">
+            <CardContent className="p-4 space-y-2">
               {tasks.length === 0 && (
-                <p className="text-sm text-muted-foreground py-3">No tasks yet.</p>
+                <p className="text-sm text-muted-foreground py-2 text-center">
+                  No tasks yet.
+                </p>
               )}
               {tasks.map((task) => {
                 const tMs = taskMs(task, from, to);
-                const isSelected = selectedTaskIds.has(task.id);
                 return (
                   <label
                     key={task.id}
-                    className={cn(
-                      "flex items-center justify-between gap-3 py-2.5 cursor-pointer transition-colors",
-                      isSelected && "text-foreground"
-                    )}
+                    className="flex items-center justify-between gap-3 cursor-pointer py-2 px-2 rounded-md hover:bg-muted/50"
                   >
-                    <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="flex items-center gap-3 min-w-0">
                       <Checkbox
-                        checked={isSelected}
+                        checked={selectedTaskIds.has(task.id)}
                         onCheckedChange={(checked) => {
                           setSelectedTaskIds((prev) => {
                             const next = new Set(prev);
@@ -823,14 +786,9 @@ export function StatsPageClient() {
                           });
                         }}
                       />
-                      <span className="text-sm truncate">{task.name}</span>
+                      <span className="text-sm font-medium truncate">{task.name}</span>
                     </div>
-                    <span
-                      className={cn(
-                        "text-xs tabular-nums shrink-0 font-medium",
-                        tMs > 0 ? "text-foreground/70" : "text-muted-foreground"
-                      )}
-                    >
+                    <span className="text-sm text-muted-foreground tabular-nums shrink-0">
                       {fmtMs(tMs)}
                     </span>
                   </label>
@@ -843,18 +801,17 @@ export function StatsPageClient() {
 
       {/* ── Sticky quick-select summary bar ──────────────────────────────── */}
       {selectedTaskIds.size > 0 && (
-        <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:bottom-6 left-3 right-3 md:left-auto md:right-8 md:w-96 z-40">
-          <div className="rounded-xl border bg-card/95 backdrop-blur-md shadow-2xl shadow-black/10 overflow-hidden">
-            <div
-              className="h-[3px] w-full"
-              style={{ background: "linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899)" }}
-            />
-            <div className="px-4 py-3 flex items-center justify-between gap-3">
+        <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:bottom-8 left-4 right-4 md:left-auto md:right-8 md:w-[400px] z-40">
+          <Card className="shadow-lg border-2">
+            <CardContent className="px-4 py-4 flex items-center justify-between gap-4">
               <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">
-                  {selectedTaskIds.size} task{selectedTaskIds.size !== 1 ? "s" : ""} selected
+                <p className="text-sm text-muted-foreground">
+                  {selectedTaskIds.size} task
+                  {selectedTaskIds.size !== 1 ? "s" : ""} selected
                 </p>
-                <p className="text-xl font-bold tabular-nums">{fmtMs(quickSelectMs)}</p>
+                <p className="text-2xl font-bold tabular-nums">
+                  {fmtMs(quickSelectMs)}
+                </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {savingGroup ? (
@@ -863,25 +820,28 @@ export function StatsPageClient() {
                       value={saveName}
                       onChange={(e) => setSaveName(e.target.value)}
                       placeholder="Group name"
-                      className="h-8 text-sm w-28"
+                      className="h-9 text-sm w-32"
                       autoFocus
                       onKeyDown={(e) => e.key === "Enter" && saveQuickGroup()}
                     />
                     <Button
                       size="sm"
-                      className="h-8 px-2"
+                      className="px-3"
                       onClick={saveQuickGroup}
                       disabled={createGroup.isPending || !saveName.trim()}
                     >
-                      <Check className="h-3.5 w-3.5" />
+                      <Check className="h-4 w-4" />
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-8 px-2"
-                      onClick={() => { setSavingGroup(false); setSaveName(""); }}
+                      className="px-2"
+                      onClick={() => {
+                        setSavingGroup(false);
+                        setSaveName("");
+                      }}
                     >
-                      <X className="h-3.5 w-3.5" />
+                      <X className="h-4 w-4" />
                     </Button>
                   </>
                 ) : (
@@ -889,25 +849,26 @@ export function StatsPageClient() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-8 text-xs gap-1.5"
+                      className="gap-2"
                       onClick={() => setSavingGroup(true)}
                     >
-                      <Plus className="h-3 w-3" />
+                      <Plus className="h-4 w-4" />
                       Save group
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-8 px-2 text-muted-foreground"
+                      className="px-2"
                       onClick={() => setSelectedTaskIds(new Set())}
+                      title="Clear selection"
                     >
-                      <X className="h-3.5 w-3.5" />
+                      <X className="h-4 w-4" />
                     </Button>
                   </>
                 )}
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         </div>
       )}
     </div>
