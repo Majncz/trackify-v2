@@ -3,6 +3,22 @@
 @tailwind utilities;
 
 @layer utilities {
+  /**
+   * Recharts: clicking the plot can focus SVG shapes and draw a system focus ring
+   * (see `.recharts-no-focus-ring` + onMouseDown preventDefault on chart wrappers).
+   */
+  .recharts-no-focus-ring .recharts-wrapper:focus,
+  .recharts-no-focus-ring .recharts-wrapper:focus-visible {
+    outline: none;
+  }
+  .recharts-no-focus-ring svg:focus,
+  .recharts-no-focus-ring svg:focus-visible {
+    outline: none;
+  }
+  .recharts-no-focus-ring svg :is(:focus, :focus-visible) {
+    outline: none;
+  }
+
   .text-balance {
     text-wrap: balance;
   }

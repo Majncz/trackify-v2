@@ -947,9 +947,23 @@ export function TimeChart() {
             taskColors={yearlyTaskColors}
           />
         ) : (
-          <div className="h-64">
+          <div
+            className="recharts-no-focus-ring h-64"
+            onMouseDownCapture={(e) => {
+              const t = e.target;
+              if (!(t instanceof Element)) return;
+              if (t.closest(".recharts-tooltip-wrapper")) return;
+              if (t instanceof SVGElement || t.closest("svg.recharts-surface")) {
+                e.preventDefault();
+              }
+            }}
+          >
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+              <BarChart
+                data={chartData}
+                margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
+                accessibilityLayer={false}
+              >
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis
                   dataKey="label"
@@ -967,12 +981,15 @@ export function TimeChart() {
                   className="text-muted-foreground"
                 />
                 <RechartsTooltip
+                  trigger="hover"
+                  cursor={false}
                   contentStyle={{
                     backgroundColor: "hsl(var(--background))",
                     border: "1px solid hsl(var(--border))",
                     borderRadius: "8px",
                   }}
                   formatter={(value) => [`${value}h`, undefined]}
+                  wrapperStyle={{ outline: "none", pointerEvents: "none" }}
                 />
                 <Legend
                   content={({ payload }) => (
