@@ -34,6 +34,12 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
+import { formatHeatMinutes } from "@/lib/format-heat-minutes";
+import {
+  getOverlapDuration,
+  buildYearlyContributionFromEventsByDate,
+} from "@/lib/yearly-contribution-data";
+import { YearlyContributionCalendar } from "@/components/stats/yearly-contribution-calendar";
 
 // Curated color palette
 const TASK_COLORS = [
@@ -47,45 +53,6 @@ const TASK_COLORS = [
 
 const OTHER_COLOR = "#6b7280"; // gray for "Other"
 const MAX_TASKS = 5;
-
-/** Duration from fractional minutes — exact, explicit units (no "< …" shorthand). */
-function formatHeatMinutes(totalMinutes: number): string {
-  if (!Number.isFinite(totalMinutes) || totalMinutes <= 0) return "0s";
-
-  const secExact = totalMinutes * 60;
-  const roundedWhole = Math.round(secExact);
-
-  if (roundedWhole === 0 && secExact > 0) {
-    const digits = secExact >= 0.1 ? 2 : secExact >= 0.01 ? 3 : 4;
-    return `${parseFloat(secExact.toFixed(digits))}s`;
-  }
-
-  if (roundedWhole === 0) return "0s";
-
-  const h = Math.floor(roundedWhole / 3600);
-  const m = Math.floor((roundedWhole % 3600) / 60);
-  const s = roundedWhole % 60;
-
-  if (h > 0) return `${h}h ${m}m ${s}s`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
-}
-
-function getOverlapDuration(
-  eventFrom: Date,
-  eventTo: Date,
-  intervalStart: Date,
-  intervalEnd: Date
-): number {
-  if (eventTo <= intervalStart || eventFrom >= intervalEnd) {
-    return 0;
-  }
-
-  const overlapStart = eventFrom > intervalStart ? eventFrom : intervalStart;
-  const overlapEnd = eventTo < intervalEnd ? eventTo : intervalEnd;
-
-  return Math.max(0, overlapEnd.getTime() - overlapStart.getTime());
-}
 
 function weeklySlotRange(
   day: Date,
@@ -398,58 +365,6 @@ function WeeklyHeatSlideTooltipCard({
   );
 }
 
-function YearlyHeatTooltipBody({
-  day,
-  minutes,
-  taskMinutes,
-  taskColors,
-}: {
-  day: Date;
-  minutes: number;
-  taskMinutes: Record<string, number>;
-  taskColors: Record<string, string>;
-}) {
-  const dateStr = format(day, "EEEE, MMMM d, yyyy");
-  const entries = Object.entries(taskMinutes).sort((a, b) => b[1] - a[1]);
-
-  return (
-    <div className="space-y-2 max-w-[260px] text-left">
-      <div>
-        <p className="text-sm font-semibold leading-tight">{dateStr}</p>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Total for this calendar day
-        </p>
-      </div>
-      <div className="border-t border-border pt-2 space-y-1.5">
-        <p className="text-xs font-medium text-foreground">
-          {formatHeatMinutes(minutes)} total
-        </p>
-        {entries.length > 0 && (
-          <ul className="space-y-1">
-            {entries.map(([name, mins]) => (
-              <li key={name} className="flex items-start gap-2 text-xs">
-                <span
-                  className="mt-1 h-2 w-2 shrink-0 rounded-[2px]"
-                  style={{
-                    backgroundColor: taskColors[name] ?? OTHER_COLOR,
-                  }}
-                />
-                <span className="min-w-0 leading-snug">
-                  <span className="font-medium text-foreground">{name}</span>
-                  <span className="text-muted-foreground">
-                    {" "}
-                    · {formatHeatMinutes(mins)}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-}
-
 type Duration = "weekly" | "yearly";
 
 interface ChartDataPoint {
@@ -692,105 +607,8 @@ export function TimeChart() {
   // Yearly view data: group all days into weeks (GitHub calendar style)
   const yearlyViewData = useMemo(() => {
     if (duration !== "yearly") return null;
-
-    const allEvents = visibleTasks.flatMap((t) =>
-      t.events.map((e) => ({
-        ...e,
-        from: new Date(e.from),
-        to: new Date(e.to),
-      }))
-    );
-
-    if (allEvents.length === 0) {
-      return null;
-    }
-
-    // Find the earliest date
-    const eventDates = allEvents.flatMap((e) => [
-      e.from,
-      e.to,
-    ]);
-    const earliestDate = new Date(Math.min(...eventDates.map((d) => d.getTime())));
-    const today = endOfDay(new Date());
-
-    // Start from the earliest date, align to Monday
-    const startDate = startOfWeek(startOfDay(earliestDate), { weekStartsOn: 1 });
-    // End at today, align to Sunday
-    const endDate = endOfWeek(today, { weekStartsOn: 1 });
-
-    // Generate all days
-    const allDays = eachDayOfInterval({ start: startDate, end: endDate });
-
-    // Group days into weeks (columns) - ensure each week has exactly 7 days
-    const weeks: Date[][] = [];
-    let currentWeekStart = startDate;
-    
-    while (currentWeekStart <= endDate) {
-      const weekEnd = endOfWeek(currentWeekStart, { weekStartsOn: 1 });
-      const week: Date[] = [];
-      for (let i = 0; i < 7; i++) {
-        const day = addDays(currentWeekStart, i);
-        if (day <= endDate && day >= startDate) {
-          week.push(day);
-        } else {
-          // Pad with null/empty days for incomplete weeks
-          week.push(day);
-        }
-      }
-      weeks.push(week);
-      currentWeekStart = addDays(weekEnd, 1);
-    }
-
-    // Calculate total & per-task minutes per day
-    const dayMinutes = new Map<string, number>();
-    const dayTaskMinutes = new Map<string, Record<string, number>>();
-    allDays.forEach((day) => {
-      const dayKey = format(day, "yyyy-MM-dd");
-      const dayEvents = eventsByDate.get(dayKey) || [];
-      const byTask: Record<string, number> = {};
-      let totalMinutes = 0;
-      dayEvents.forEach(({ taskName, from, to }) => {
-        const dayStart = startOfDay(day);
-        const dayEnd = endOfDay(day);
-        const overlap = getOverlapDuration(from, to, dayStart, dayEnd);
-        const mins = overlap / 60000;
-        totalMinutes += mins;
-        byTask[taskName] = (byTask[taskName] || 0) + mins;
-      });
-      dayMinutes.set(dayKey, totalMinutes);
-      dayTaskMinutes.set(dayKey, byTask);
-    });
-
-    // Build grid: 7 rows (Mon-Sun) x N columns (weeks)
-    // Order: oldest week (Week 1) on the left, newest (today) on the right
-    const grid: number[][] = [];
-    let maxMinutes = 0;
-
-    // Initialize grid with 7 rows
-    for (let row = 0; row < 7; row++) {
-      grid[row] = [];
-    }
-
-    // Fill grid: weeks in chronological order (oldest to newest)
-    weeks.forEach((week, weekIdx) => {
-      week.forEach((day, dayIdx) => {
-        // dayIdx is already 0-6 (Mon-Sun)
-        const dayKey = format(day, "yyyy-MM-dd");
-        const minutes = dayMinutes.get(dayKey) || 0;
-        grid[dayIdx][weekIdx] = minutes;
-        maxMinutes = Math.max(maxMinutes, minutes);
-      });
-    });
-
-    return {
-      weeks,
-      grid,
-      maxMinutes: maxMinutes || 1,
-      startDate,
-      endDate,
-      dayTaskMinutes,
-    };
-  }, [duration, eventsByDate, visibleTasks]);
+    return buildYearlyContributionFromEventsByDate(eventsByDate);
+  }, [duration, eventsByDate]);
 
   // Scroll refs for weekly and yearly views
   const weeklyScrollRef = useRef<HTMLDivElement>(null);
@@ -941,7 +759,7 @@ export function TimeChart() {
             eventsByDate={eventsByDate}
           />
         ) : duration === "yearly" && yearlyViewData ? (
-          <YearlyCalendarView
+          <YearlyContributionCalendar
             data={yearlyViewData}
             scrollRef={yearlyScrollRef}
             taskColors={yearlyTaskColors}
@@ -1399,197 +1217,6 @@ function WeekCalendarView({
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-interface YearlyCalendarViewProps {
-  data: {
-    weeks: Date[][];
-    grid: number[][];
-    maxMinutes: number;
-    startDate: Date;
-    endDate: Date;
-    dayTaskMinutes: Map<string, Record<string, number>>;
-  };
-  scrollRef: React.RefObject<HTMLDivElement>;
-  taskColors: Record<string, string>;
-}
-
-const CELL_SIZE = 12; // Size of each day cell in pixels
-const GAP_SIZE = 2; // Gap between cells
-const COLUMN_WIDTH = CELL_SIZE + GAP_SIZE; // Total width per week column
-
-function YearlyCalendarView({
-  data,
-  scrollRef,
-  taskColors,
-}: YearlyCalendarViewProps) {
-  const totalColumns = data.weeks.length;
-  const totalWidth = totalColumns * COLUMN_WIDTH;
-
-  // Auto-scroll to right (newest/current month) on mount
-  useEffect(() => {
-    if (scrollRef.current && totalColumns > 0) {
-      const syncScroll = () => {
-        if (scrollRef.current) {
-          scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
-        }
-      };
-      requestAnimationFrame(() => {
-        requestAnimationFrame(syncScroll);
-      });
-      const t1 = setTimeout(syncScroll, 50);
-      const t2 = setTimeout(syncScroll, 200);
-      return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
-      };
-    }
-  }, [scrollRef, totalColumns]);
-
-  // Non-linear intensity scale using power function
-  // Power < 1 expands lower values for better differentiation
-  const getOpacity = (value: number, max: number) => {
-    if (value <= 0) return 0.15;
-    const intensity = value / max;
-    // Power of 0.4 gives good visual separation between low/medium/high
-    const scaled = Math.pow(intensity, 0.4);
-    return 0.2 + scaled * 0.8;
-  };
-
-  const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-  // Calculate month labels with positions
-  const monthLabels = useMemo(() => {
-    const labels: { month: string; colIdx: number }[] = [];
-    let lastMonth = "";
-    
-    data.weeks.forEach((week, colIdx) => {
-      // Get the first day of this week that exists
-      const firstDay = week[0];
-      if (firstDay) {
-        const monthName = format(firstDay, "MMM");
-        if (monthName !== lastMonth) {
-          labels.push({ month: monthName, colIdx });
-          lastMonth = monthName;
-        }
-      }
-    });
-    
-    return labels;
-  }, [data.weeks]);
-
-  return (
-    <div className="w-full">
-      <div className="grid" style={{ gridTemplateColumns: "2.5rem 1fr" }}>
-        {/* Day labels - sticky on left */}
-        <div className="flex flex-col pt-5">
-          {dayLabels.map((dayLabel, idx) => (
-            <div
-              key={dayLabel}
-              className="text-[9px] text-muted-foreground flex items-center"
-              style={{ height: COLUMN_WIDTH }}
-            >
-              {idx % 2 === 0 ? dayLabel : ""}
-            </div>
-          ))}
-        </div>
-
-        {/* Scrollable container - full width */}
-        <div
-          ref={scrollRef}
-          className="overflow-x-auto overflow-y-hidden"
-          style={{ width: "100%" }}
-        >
-          <div style={{ width: totalWidth, position: "relative" }}>
-            {/* Month labels row */}
-            <div style={{ height: 16, position: "relative" }}>
-              {monthLabels.map(({ month, colIdx }) => (
-                <span
-                  key={`${month}-${colIdx}`}
-                  className="text-[9px] text-muted-foreground absolute"
-                  style={{ left: colIdx * COLUMN_WIDTH }}
-                >
-                  {month}
-                </span>
-              ))}
-            </div>
-
-            {/* Grid of day cells */}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateRows: `repeat(7, ${CELL_SIZE}px)`,
-                gridTemplateColumns: `repeat(${totalColumns}, ${CELL_SIZE}px)`,
-                gap: `${GAP_SIZE}px`,
-              }}
-            >
-              {dayLabels.map((_, rowIdx) => {
-                return Array.from({ length: totalColumns }, (_, colIdx) => {
-                  const minutes = data.grid[rowIdx]?.[colIdx] ?? 0;
-                  const day = data.weeks[colIdx]?.[rowIdx];
-                  const dayKey = day ? format(day, "yyyy-MM-dd") : "";
-                  const taskMinutes = day
-                    ? data.dayTaskMinutes.get(dayKey) ?? {}
-                    : {};
-
-                  const cellStyle = {
-                    width: CELL_SIZE,
-                    height: CELL_SIZE,
-                    backgroundColor: "#10b981" as const,
-                    opacity: getOpacity(minutes, data.maxMinutes),
-                  };
-
-                  if (!day) {
-                    return (
-                      <div
-                        key={`${colIdx}-${rowIdx}`}
-                        className="rounded-sm"
-                        style={cellStyle}
-                      />
-                    );
-                  }
-
-                  if (minutes <= 0) {
-                    return (
-                      <div
-                        key={`${colIdx}-${rowIdx}`}
-                        className="rounded-sm"
-                        style={cellStyle}
-                      />
-                    );
-                  }
-
-                  return (
-                    <Tooltip key={`${colIdx}-${rowIdx}`}>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          className="rounded-sm border-0 p-0 cursor-default outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                          style={cellStyle}
-                          aria-label={format(day, "MMMM d, yyyy")}
-                        />
-                      </TooltipTrigger>
-                      <TooltipContent
-                        side="top"
-                        className="border-border bg-popover p-3 shadow-lg"
-                      >
-                        <YearlyHeatTooltipBody
-                          day={day}
-                          minutes={minutes}
-                          taskMinutes={taskMinutes}
-                          taskColors={taskColors}
-                        />
-                      </TooltipContent>
-                    </Tooltip>
-                  );
-                });
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

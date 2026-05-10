@@ -24,14 +24,22 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
   listTasks: "Get all your tasks",
   findTask: "Search for a task",
   listEvents: "List time entries",
+  listTaskGroups: "List task groups",
   createTask: "Create a new task",
   createEvent: "Log time to a task",
   getStats: "Get time statistics",
   deleteEvent: "Delete a time entry",
   updateEvent: "Update a time entry",
+  setTaskGroupMembership: "Add task to a group or remove from group",
 };
 
-export const WRITE_TOOLS = ["createTask", "createEvent", "deleteEvent", "updateEvent"];
+export const WRITE_TOOLS = [
+  "createTask",
+  "createEvent",
+  "deleteEvent",
+  "updateEvent",
+  "setTaskGroupMembership",
+];
 
 // Helper functions (outside component to avoid recreation)
 function formatToolName(name: string): string {
@@ -75,6 +83,11 @@ function getToolDescription(name: string, args: Record<string, unknown>): string
     if (args.newDate) changes.push(`move to ${formatDate(args.newDate as string)}`);
     if (args.newDuration) changes.push(`change duration to ${formatDuration(args.newDuration as number)}`);
     return changes.length > 0 ? changes.join(" and ") : "Update time entry";
+  }
+  if (name === "setTaskGroupMembership") {
+    const gid = args.groupId as string | null | undefined;
+    if (gid == null || gid === "") return "Remove task from its group";
+    return "Assign task to group";
   }
   return Object.entries(args)
     .filter(([k]) => !k.includes("Id"))
@@ -238,6 +251,7 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
       // Invalidate queries after successful write operations to refresh frontend data
       if (WRITE_TOOLS.includes(toolName)) {
         queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        queryClient.invalidateQueries({ queryKey: ["groups"] });
         queryClient.invalidateQueries({ queryKey: ["stats"] });
         queryClient.invalidateQueries({ queryKey: ["events"] });
       }

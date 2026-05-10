@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Settings, BarChart2 } from "lucide-react";
+import { Settings, BarChart2, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSocket } from "@/hooks/use-socket";
 import { usePathname } from "next/navigation";
@@ -35,6 +35,16 @@ export function Header() {
             >
               <BarChart2 className="h-5 w-5" />
               <span className="sr-only">Stats</span>
+            </Button>
+          </Link>
+          <Link href="/billing">
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(pathname === "/billing" && "text-primary")}
+            >
+              <DollarSign className="h-5 w-5" />
+              <span className="sr-only">Billing</span>
             </Button>
           </Link>
           <Link href="/settings">

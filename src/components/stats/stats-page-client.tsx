@@ -4,11 +4,23 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useTasks } from "@/hooks/use-tasks";
 import { useGroups } from "@/hooks/use-groups";
 import type { TaskGroup } from "@/hooks/use-groups";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { groupAccentHex, resolveGroupAccent } from "@/lib/group-accent";
+import { GROUP_COLOR_PRESETS } from "@/lib/group-color-presets";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   startOfDay,
   endOfDay,
@@ -37,8 +49,6 @@ import {
   type TooltipContentProps,
 } from "recharts";
 import {
-  ChevronDown,
-  ChevronUp,
   Copy,
   Pencil,
   Trash2,
@@ -62,6 +72,7 @@ interface Task {
   name: string;
   hidden: boolean;
   events: TaskEvent[];
+  taskGroup?: { id: string; name: string; color?: string | null } | null;
 }
 
 type RangeType = "today" | "week" | "month" | "alltime" | "custom";
@@ -91,6 +102,15 @@ function fmtMs(ms: number): string {
   if (m > 0 && s > 0) return `${m}m ${s}s`;
   if (m > 0) return `${m}m`;
   return `${s}s`;
+}
+
+function taskAllowedInGroupPicker(
+  task: Task,
+  editingGroupId: string | null
+): boolean {
+  if (!task.taskGroup) return true;
+  if (editingGroupId && task.taskGroup.id === editingGroupId) return true;
+  return false;
 }
 
 /** Same order as Time Spent / `time-chart.tsx` so colors match the main dashboard */
@@ -135,10 +155,6 @@ interface TrendRow {
   [sliceKey: string]: string | number;
 }
 
-/** Estimated popup size used only for clamping — content is `w-fit` so it can be narrower. */
-const DAILY_BREAKDOWN_TOOLTIP_EST_HEIGHT = 320;
-const DAILY_BREAKDOWN_TOOLTIP_EST_WIDTH  = 260;
-
 function DailyBreakdownChartTooltip() {
   const active = useIsTooltipActive();
   const coord   = useActiveTooltipCoordinate();
@@ -176,27 +192,10 @@ function DailyBreakdownChartTooltip() {
       : null;
     if (cx == null) return null;
 
-    const estH = DAILY_BREAKDOWN_TOOLTIP_EST_HEIGHT;
-    const estW = DAILY_BREAKDOWN_TOOLTIP_EST_WIDTH;
-    const gap  = 10;
-
-    // Vertical: popup vertically centred on the bar peak.
-    const idealTop = yTop - estH / 2;
-    const minTop   = plot.y + gap;
-    const maxTop   = plot.y + plot.height - estH - gap;
-    const ty = maxTop >= minTop
-      ? Math.min(maxTop, Math.max(minTop, idealTop))
-      : plot.y + gap;
-
-    // Horizontal: popup horizontally centred on the category band.
-    const idealLeft = cx - estW / 2;
-    const minLeft   = plot.x + gap;
-    const maxLeft   = plot.x + plot.width - estW - gap;
-    const tx = maxLeft >= minLeft
-      ? Math.min(maxLeft, Math.max(minLeft, idealLeft))
-      : plot.x + gap;
-
-    return `translate(${tx}px, ${ty}px)`;
+    const gap = 10;
+    // Bottom of the tooltip sits `gap` px above the bar top; horizontally centered on the band.
+    // Percentages are relative to the tooltip box; avoids a fixed height guess (320px sat too high).
+    return `translateX(calc(${cx}px - 50%)) translateY(calc(${yTop - gap}px - 100%))`;
   }, [coord?.x, xScale, yScale, plot, points]);
 
   // Persist the last valid transform so the exit animation doesn't jump to (0,0).
@@ -338,24 +337,52 @@ function DailyBreakdownTooltipContent({ active, payload }: TooltipContentProps) 
   );
 }
 
-const DOT_COLORS = [
-  "bg-blue-500", "bg-orange-500", "bg-emerald-500",
-  "bg-violet-500", "bg-pink-500", "bg-teal-500",
-  "bg-yellow-500", "bg-red-500",
-];
-
-const BAR_COLORS = [
-  "bg-blue-500/80", "bg-orange-500/80", "bg-emerald-500/80",
-  "bg-violet-500/80", "bg-pink-500/80", "bg-teal-500/80",
-  "bg-yellow-500/80", "bg-red-500/80",
-];
+function GroupColorPresetGrid({
+  value,
+  dimmed,
+  onPick,
+}: {
+  value: string;
+  /** Softer look in Auto mode; swatches stay clickable to pick a custom color */
+  dimmed?: boolean;
+  onPick: (hex: string) => void;
+}) {
+  return (
+    <div
+      className="flex flex-wrap gap-2 pt-0.5"
+      role="listbox"
+      aria-label="Group color presets"
+    >
+      {GROUP_COLOR_PRESETS.map((hex) => {
+        const selected = value.toLowerCase() === hex.toLowerCase();
+        return (
+          <button
+            key={hex}
+            type="button"
+            role="option"
+            aria-selected={selected}
+            title={hex}
+            className={cn(
+              "h-9 w-9 shrink-0 rounded-md border-2 transition-[transform,box-shadow] outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+              selected
+                ? "border-foreground shadow-md scale-105"
+                : "border-border/80 hover:scale-105 hover:border-foreground/50",
+              dimmed && "opacity-70 saturate-75"
+            )}
+            style={{ backgroundColor: hex }}
+            onClick={() => onPick(hex)}
+          />
+        );
+      })}
+    </div>
+  );
+}
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function StatsPageClient() {
   const { tasks, isLoading: tasksLoading } = useTasks();
   const { groups, isLoading: groupsLoading, createGroup, updateGroup, deleteGroup } = useGroups();
-
   const visibleTasks = useMemo(
     () => tasks.filter((t) => !t.hidden),
     [tasks]
@@ -371,15 +398,20 @@ export function StatsPageClient() {
   );
 
   // Group UI state
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [editDialogGroup, setEditDialogGroup] = useState<TaskGroup | null>(null);
   const [editName, setEditName] = useState("");
   const [editTaskIds, setEditTaskIds] = useState<Set<string>>(new Set());
+  const [editTaskFilter, setEditTaskFilter] = useState("");
+  const [groupDialogError, setGroupDialogError] = useState("");
+  const [editColorMode, setEditColorMode] = useState<"auto" | "custom">("custom");
+  const [editColor, setEditColor] = useState(GROUP_COLOR_PRESETS[0]!);
+  const [createColorMode, setCreateColorMode] = useState<"auto" | "custom">("custom");
+  const [createGroupColor, setCreateGroupColor] = useState(GROUP_COLOR_PRESETS[0]!);
 
-  // Quick select
-  const [quickOpen, setQuickOpen] = useState(false);
+  // New group dialog (replaces inline expand + floating bar — no page reflow)
+  const [createGroupOpen, setCreateGroupOpen] = useState(false);
+  const [createGroupFilter, setCreateGroupFilter] = useState("");
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
-  const [savingGroup, setSavingGroup] = useState(false);
   const [saveName, setSaveName] = useState("");
 
   // ─── Computed date range ──────────────────────────────────────────────────
@@ -472,6 +504,15 @@ export function StatsPageClient() {
       fill: TASK_CHART_OTHER_HEX,
     });
     return series;
+  }, [topTasks]);
+
+  /** Aligns bar colors with Daily breakdown / Time Spent (top 5 + Other). */
+  const taskChartColor = useMemo(() => {
+    const m = new Map<string, string>();
+    topTasks.forEach(({ task }, i) => {
+      m.set(task.id, TASK_CHART_HEX[i % TASK_CHART_HEX.length]);
+    });
+    return (taskId: string) => m.get(taskId) ?? TASK_CHART_OTHER_HEX;
   }, [topTasks]);
 
   // Trend chart: per-day (or week) stacked hours by top tasks + other (matches dashboard colors)
@@ -609,34 +650,61 @@ export function StatsPageClient() {
 
   // ─── Group data ───────────────────────────────────────────────────────────
 
-  const groupData = useMemo(
-    () =>
-      groups.map((g) => {
-        const groupTasks = tasks.filter((t) => g.taskIds.includes(t.id));
-        const ms = groupTasks.reduce((s, t) => s + taskMs(t, from, to), 0);
-        const perTask = groupTasks
-          .map((t) => ({ task: t, ms: taskMs(t, from, to) }))
-          .filter((t) => t.ms > 0)
-          .sort((a, b) => b.ms - a.ms);
-        return { group: g, ms, perTask };
-      }),
-    [groups, tasks, from, to]
-  );
+  const groupData = useMemo(() => {
+    const taskMap = new Map(tasks.map((t) => [t.id, t]));
+    return groups.map((g) => {
+      const orphanIds: string[] = [];
+      let ms = 0;
+      const byIdMs = new Map<string, number>();
 
-  const comparisonTotal = groupData.reduce((s, g) => s + g.ms, 0);
+      for (const id of g.taskIds) {
+        const task = taskMap.get(id);
+        if (!task) {
+          orphanIds.push(id);
+          continue;
+        }
+        const tMs = taskMs(task, from, to);
+        byIdMs.set(id, tMs);
+        ms += tMs;
+      }
+
+      const membersSorted = g.taskIds
+        .flatMap((id) => {
+          const task = taskMap.get(id);
+          if (!task) return [];
+          const tMs = byIdMs.get(id) ?? 0;
+          return [{ task, ms: tMs }];
+        })
+        .sort((a, b) => b.ms - a.ms);
+
+      return { group: g, ms, membersSorted, orphanIds };
+    });
+  }, [groups, tasks, from, to]);
+
+  const groupsWithTime = useMemo(
+    () => groupData.filter((g) => g.ms > 0),
+    [groupData]
+  );
+  const maxGroupMs = useMemo(
+    () => groupsWithTime.reduce((m, g) => Math.max(m, g.ms), 0),
+    [groupsWithTime]
+  );
 
   // ─── Actions ──────────────────────────────────────────────────────────────
 
   const buildGroupText = useCallback(
     (idx: number) => {
-      const { group, ms, perTask } = groupData[idx];
+      const { group, ms, membersSorted, orphanIds } = groupData[idx];
       const lines = [
-        `${group.name} — ${fmtMs(ms)} (${label})`,
-        ...perTask.map((t) => `  ${t.task.name}: ${fmtMs(t.ms)}`),
+        `${group.name} — ${fmtMs(ms)}`,
+        ...membersSorted.map((t) => `  · ${t.task.name}: ${fmtMs(t.ms)}`),
       ];
+      if (orphanIds.length > 0) {
+        lines.push(`  · ${orphanIds.length} removed task(s) (no longer in app)`);
+      }
       return lines.join("\n");
     },
-    [groupData, label]
+    [groupData]
   );
 
   const copyGroup = useCallback(
@@ -652,31 +720,82 @@ export function StatsPageClient() {
   }, [groupData, buildGroupText]);
 
   const startEdit = useCallback((group: TaskGroup) => {
-    setEditingGroupId(group.id);
+    setGroupDialogError("");
+    setEditDialogGroup(group);
     setEditName(group.name);
     setEditTaskIds(new Set(group.taskIds));
+    setEditTaskFilter("");
+    setEditColorMode(group.color ? "custom" : "auto");
+    setEditColor(group.color ?? groupAccentHex(group.id));
   }, []);
 
   const saveEdit = useCallback(async () => {
-    if (!editingGroupId) return;
-    await updateGroup.mutateAsync({
-      id: editingGroupId,
-      name: editName,
-      taskIds: Array.from(editTaskIds),
-    });
-    setEditingGroupId(null);
-  }, [editingGroupId, editName, editTaskIds, updateGroup]);
+    if (!editDialogGroup) return;
+    if (editColorMode === "custom" && !/^#[0-9A-Fa-f]{6}$/.test(editColor)) {
+      setGroupDialogError("Pick a preset color or switch to Auto.");
+      return;
+    }
+    setGroupDialogError("");
+    try {
+      await updateGroup.mutateAsync({
+        id: editDialogGroup.id,
+        name: editName,
+        taskIds: Array.from(editTaskIds),
+        color: editColorMode === "auto" ? null : editColor,
+      });
+      setEditDialogGroup(null);
+    } catch (e) {
+      setGroupDialogError(e instanceof Error ? e.message : "Could not save group");
+    }
+  }, [editDialogGroup, editName, editTaskIds, editColorMode, editColor, updateGroup]);
+
+  const closeCreateGroupDialog = useCallback(() => {
+    setCreateGroupOpen(false);
+    setCreateGroupFilter("");
+    setSelectedTaskIds(new Set());
+    setSaveName("");
+    setGroupDialogError("");
+    setCreateColorMode("custom");
+    setCreateGroupColor(GROUP_COLOR_PRESETS[0]!);
+  }, []);
+
+  const openCreateGroupDialog = useCallback(() => {
+    setGroupDialogError("");
+    setCreateGroupFilter("");
+    setSelectedTaskIds(new Set());
+    setSaveName("");
+    setCreateColorMode("custom");
+    setCreateGroupColor(
+      GROUP_COLOR_PRESETS[Math.floor(Math.random() * GROUP_COLOR_PRESETS.length)]!
+    );
+    setCreateGroupOpen(true);
+  }, []);
 
   const saveQuickGroup = useCallback(async () => {
     if (!saveName.trim() || selectedTaskIds.size === 0) return;
-    await createGroup.mutateAsync({
-      name: saveName.trim(),
-      taskIds: Array.from(selectedTaskIds),
-    });
-    setSaveName("");
-    setSelectedTaskIds(new Set());
-    setSavingGroup(false);
-  }, [saveName, selectedTaskIds, createGroup]);
+    if (createColorMode === "custom" && !/^#[0-9A-Fa-f]{6}$/.test(createGroupColor)) {
+      setGroupDialogError("Pick a preset color or switch to Auto.");
+      return;
+    }
+    setGroupDialogError("");
+    try {
+      await createGroup.mutateAsync({
+        name: saveName.trim(),
+        taskIds: Array.from(selectedTaskIds),
+        color: createColorMode === "auto" ? null : createGroupColor,
+      });
+      closeCreateGroupDialog();
+    } catch (e) {
+      setGroupDialogError(e instanceof Error ? e.message : "Could not create group");
+    }
+  }, [
+    saveName,
+    selectedTaskIds,
+    createColorMode,
+    createGroupColor,
+    createGroup,
+    closeCreateGroupDialog,
+  ]);
 
   const quickSelectMs = useMemo(
     () =>
@@ -686,13 +805,29 @@ export function StatsPageClient() {
     [tasks, selectedTaskIds, from, to]
   );
 
-  const toggleExpanded = useCallback((id: string) => {
-    setExpandedGroups((prev) => {
+  const tasksSortedForPicker = useMemo(
+    () => [...tasks].sort((a, b) => taskMs(b, from, to) - taskMs(a, from, to)),
+    [tasks, from, to]
+  );
+
+  const createGroupFilteredTasks = useMemo(() => {
+    const q = createGroupFilter.trim().toLowerCase();
+    if (!q) return tasksSortedForPicker;
+    return tasksSortedForPicker.filter((t) => t.name.toLowerCase().includes(q));
+  }, [tasksSortedForPicker, createGroupFilter]);
+
+  const selectAllFilteredTasks = useCallback(() => {
+    setSelectedTaskIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      for (const t of createGroupFilteredTasks) {
+        if (taskAllowedInGroupPicker(t, null)) next.add(t.id);
+      }
       return next;
     });
+  }, [createGroupFilteredTasks]);
+
+  const clearSelectedTasks = useCallback(() => {
+    setSelectedTaskIds(new Set());
   }, []);
 
   // ─── Loading ──────────────────────────────────────────────────────────────
@@ -763,7 +898,6 @@ export function StatsPageClient() {
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold tabular-nums">{fmtMs(totalMs)}</p>
-            <p className="text-xs text-muted-foreground mt-1 truncate">{label}</p>
           </CardContent>
         </Card>
         <Card>
@@ -782,10 +916,6 @@ export function StatsPageClient() {
         <Card className="rounded-xl border-border/80 shadow-sm overflow-visible">
           <CardHeader className="space-y-0.5 pb-2">
             <CardTitle className="text-sm font-medium">Daily breakdown</CardTitle>
-            <CardDescription className="text-xs leading-relaxed text-muted-foreground">
-              Stacked bars match the top tasks for this period (plus &quot;Other&quot; for the rest).
-              Colors align with the Time Spent chart on the main page.
-            </CardDescription>
           </CardHeader>
           <CardContent className="px-2 pb-5 pt-0 sm:px-4 overflow-visible">
             <div
@@ -893,366 +1023,564 @@ export function StatsPageClient() {
       )}
 
       {/* ── Saved groups ─────────────────────────────────────────────────── */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold">Saved Groups</h2>
-          {groups.length >= 2 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              onClick={copyAll}
-            >
-              <Copy className="h-4 w-4" />
-              Copy all
-            </Button>
-          )}
-        </div>
-
-        {/* Group comparison bar */}
-        {groupData.filter((g) => g.ms > 0).length >= 2 && (
-          <Card>
-            <CardContent className="px-4 py-4">
-              <p className="text-xs text-muted-foreground mb-3 uppercase tracking-wider font-semibold">Comparison</p>
-              <div
-                className="flex h-3 overflow-hidden gap-px"
-                style={{ borderRadius: STATS_BAR_RADIUS }}
+      <Card className="overflow-visible">
+        <CardHeader className="pb-2">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1 min-w-0">
+              <CardTitle className="text-base">Saved groups</CardTitle>
+            </div>
+            {groups.length >= 2 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 shrink-0 self-start sm:self-auto"
+                onClick={copyAll}
               >
-                {groupData
-                  .filter((g) => g.ms > 0)
-                  .map(({ group, ms }, i) => (
-                    <div
-                      key={group.id}
-                      className={cn("h-full", DOT_COLORS[i % DOT_COLORS.length])}
-                      style={{
-                        width: `${comparisonTotal > 0 ? (ms / comparisonTotal) * 100 : 0}%`,
-                      }}
-                      title={`${group.name}: ${fmtMs(ms)}`}
-                    />
-                  ))}
-              </div>
-              <div className="flex flex-wrap gap-x-4 gap-y-2 mt-4">
-                {groupData
-                  .filter((g) => g.ms > 0)
-                  .map(({ group, ms }, i) => (
-                    <div key={group.id} className="flex items-center gap-2">
-                      <div
-                        className={cn(
-                          "h-2.5 w-2.5 rounded-full shrink-0",
-                          DOT_COLORS[i % DOT_COLORS.length]
-                        )}
-                      />
-                      <span className="text-sm">
-                        {group.name}{" "}
-                        <span className="font-medium tabular-nums ml-1">
-                          {fmtMs(ms)}
+                <Copy className="h-4 w-4" />
+                Copy all
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {groupsWithTime.length >= 2 && maxGroupMs > 0 && (
+            <div className="rounded-lg border border-border/80 bg-muted/20 px-3 py-3">
+              <ul className="space-y-2.5">
+                {[...groupsWithTime]
+                  .sort((a, b) => b.ms - a.ms)
+                  .map(({ group, ms }) => {
+                    const gHex = resolveGroupAccent({ id: group.id, color: group.color });
+                    return (
+                    <li key={group.id}>
+                      <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+                        <span className="text-sm font-medium sm:w-[38%] min-w-0 truncate">
+                          {group.name}
                         </span>
-                      </span>
-                    </div>
-                  ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {groups.length === 0 && (
-          <Card>
-            <CardContent className="py-8 text-center text-muted-foreground text-sm">
-              No saved groups yet. Use quick select below to create one.
-            </CardContent>
-          </Card>
-        )}
-
-        {groupData.map(({ group, ms, perTask }, i) => {
-          const isExpanded = expandedGroups.has(group.id);
-          const isEditing = editingGroupId === group.id;
-
-          return (
-            <Card key={group.id}>
-              <CardHeader className="pb-3 pt-4 px-4">
-                {isEditing ? (
-                  <div className="space-y-4">
-                    <Input
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      placeholder="Group name"
-                      className="h-9"
-                      autoFocus
-                    />
-                    <p className="text-sm font-medium">
-                      Tasks in this group:
-                    </p>
-                    <div className="space-y-3 max-h-48 overflow-y-auto">
-                      {tasks.map((t) => (
-                        <label
-                          key={t.id}
-                          className="flex items-center gap-3 cursor-pointer"
-                        >
-                          <Checkbox
-                            checked={editTaskIds.has(t.id)}
-                            onCheckedChange={(checked) => {
-                              setEditTaskIds((prev) => {
-                                const next = new Set(prev);
-                                if (checked) next.add(t.id);
-                                else next.delete(t.id);
-                                return next;
-                              });
-                            }}
-                          />
-                          <span className="text-sm">{t.name}</span>
-                        </label>
-                      ))}
-                    </div>
-                    <div className="flex gap-2 pt-2">
-                      <Button
-                        size="sm"
-                        className="gap-2"
-                        onClick={saveEdit}
-                        disabled={updateGroup.isPending || !editName.trim()}
-                      >
-                        <Check className="h-4 w-4" />
-                        Save
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="gap-2"
-                        onClick={() => setEditingGroupId(null)}
-                      >
-                        <X className="h-4 w-4" />
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={cn(
-                        "h-3 w-3 rounded-full shrink-0",
-                        DOT_COLORS[i % DOT_COLORS.length]
-                      )}
-                    />
-                    <span className="font-semibold text-base flex-1 min-w-0 truncate">
-                      {group.name}
-                    </span>
-                    <span className="text-base font-bold tabular-nums shrink-0 mr-2">
-                      {fmtMs(ms)}
-                    </span>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => copyGroup(i)}
-                        title="Copy to clipboard"
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => startEdit(group)}
-                        title="Edit group"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => deleteGroup.mutate(group.id)}
-                        title="Delete group"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => toggleExpanded(group.id)}
-                        title={isExpanded ? "Collapse" : "Expand"}
-                      >
-                        {isExpanded ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : (
-                          <ChevronDown className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </CardHeader>
-
-              {isExpanded && !isEditing && (
-                <CardContent className="px-4 pb-4 pt-1">
-                  {perTask.length === 0 ? (
-                    <p className="text-sm text-muted-foreground pt-2">
-                      No time tracked in this period.
-                    </p>
-                  ) : (
-                    <div className="space-y-4 pt-2">
-                      {perTask.map(({ task, ms: tMs }) => (
-                        <div key={task.id}>
-                          <div className="flex justify-between items-baseline mb-1.5">
-                            <span className="text-sm truncate pr-2">
-                              {task.name}
-                            </span>
-                            <span className="text-sm font-medium tabular-nums shrink-0">
-                              {fmtMs(tMs)}
-                            </span>
-                          </div>
-                          <div
-                            className="h-1.5 bg-muted overflow-hidden"
-                            style={{ borderRadius: STATS_BAR_RADIUS }}
-                          >
+                        <div className="flex flex-1 items-center gap-2 min-w-0">
+                          <div className="h-2 flex-1 max-w-md rounded-full bg-muted overflow-hidden">
                             <div
-                              className={cn("h-full transition-all", BAR_COLORS[i % BAR_COLORS.length])}
+                              className="h-full rounded-full transition-[width]"
                               style={{
-                                borderRadius: STATS_BAR_RADIUS,
-                                width: `${ms > 0 ? (tMs / ms) * 100 : 0}%`,
+                                width: `${(ms / maxGroupMs) * 100}%`,
+                                backgroundColor: hexToRgba(gHex, 0.85),
                               }}
                             />
                           </div>
+                          <span className="text-sm tabular-nums text-foreground font-medium shrink-0 w-[4.75rem] text-right">
+                            {fmtMs(ms)}
+                          </span>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              )}
-            </Card>
-          );
-        })}
-      </div>
-
-      {/* ── Quick select ─────────────────────────────────────────────────── */}
-      <div className="pt-2">
-        <button
-          className="flex items-center justify-between w-full p-4 rounded-lg border bg-card hover:bg-accent hover:text-accent-foreground transition-colors"
-          onClick={() => setQuickOpen((o) => !o)}
-        >
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-sm">Quick Select</span>
-            <span className="text-sm font-normal text-muted-foreground">
-              — pick tasks to see combined time
-            </span>
-          </div>
-          {quickOpen ? (
-            <ChevronUp className="h-5 w-5 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                    </li>
+                  );})}
+              </ul>
+            </div>
           )}
-        </button>
 
-        {quickOpen && (
-          <Card className="mt-3">
-            <CardContent className="p-4 space-y-2">
-              {visibleTasks.length === 0 && (
-                <p className="text-sm text-muted-foreground py-2 text-center">
-                  No tasks yet.
-                </p>
-              )}
-              {visibleTasks.map((task) => {
-                const tMs = taskMs(task, from, to);
-                return (
-                  <label
-                    key={task.id}
-                    className="flex items-center justify-between gap-3 cursor-pointer py-2 px-2 rounded-md hover:bg-muted/50"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <Checkbox
-                        checked={selectedTaskIds.has(task.id)}
-                        onCheckedChange={(checked) => {
-                          setSelectedTaskIds((prev) => {
-                            const next = new Set(prev);
-                            if (checked) next.add(task.id);
-                            else next.delete(task.id);
-                            return next;
-                          });
-                        }}
-                      />
-                      <span className="text-sm font-medium truncate">{task.name}</span>
-                    </div>
-                    <span className="text-sm text-muted-foreground tabular-nums shrink-0">
-                      {fmtMs(tMs)}
-                    </span>
-                  </label>
-                );
-              })}
-            </CardContent>
-          </Card>
-        )}
+          {groups.length === 0 ? (
+            <div className="flex flex-col items-center gap-4 py-10 px-4 text-center">
+              <p className="text-sm text-muted-foreground">No saved groups yet.</p>
+              <Button
+                type="button"
+                className="gap-2"
+                onClick={openCreateGroupDialog}
+              >
+                <Plus className="h-4 w-4" />
+                Create a group from tasks
+              </Button>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-border/80 overflow-x-auto">
+              <table className="w-full text-sm min-w-[32rem]">
+                <thead>
+                  <tr className="border-b border-border/80 bg-muted/35 text-left text-xs font-medium text-muted-foreground">
+                    <th className="py-2.5 pl-3 pr-2 sm:pl-4 w-[min(12rem,28vw)]">Group</th>
+                    <th className="py-2.5 px-2 min-w-[14rem]">Tasks</th>
+                    <th className="py-2.5 px-2 text-right whitespace-nowrap w-[5.5rem]">Total</th>
+                    <th className="py-2.5 pr-3 pl-2 sm:pr-4 w-[7rem] text-right">
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groupData.map(({ group, ms, membersSorted, orphanIds }) => {
+                    const rowAccent = resolveGroupAccent({ id: group.id, color: group.color });
+                    return (
+                    <tr
+                      key={group.id}
+                      className="border-b border-border/50 last:border-0 bg-card hover:bg-muted/25 transition-colors"
+                    >
+                      <td className="py-3 pl-3 pr-2 sm:pl-4 min-w-0 align-middle">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className="w-1 h-7 shrink-0 rounded-full self-center"
+                            style={{ backgroundColor: rowAccent }}
+                            aria-hidden
+                          />
+                          <span className="font-semibold leading-snug line-clamp-2 break-words">{group.name}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-2 min-w-0 align-top">
+                        {group.taskIds.length === 0 ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : membersSorted.length === 0 && orphanIds.length > 0 ? (
+                          <span className="text-amber-700 dark:text-amber-400 text-xs">
+                            {orphanIds.length} missing task
+                            {orphanIds.length !== 1 ? "s" : ""}
+                          </span>
+                        ) : (
+                          <div className="max-h-44 overflow-y-auto overscroll-contain space-y-1.5 pr-0.5">
+                            {membersSorted.map(({ task: t, ms: tMs }) => {
+                              const pct = ms > 0 ? (tMs / ms) * 100 : 0;
+                              const hex = taskChartColor(t.id);
+                              return (
+                                <div
+                                  key={t.id}
+                                  className="grid w-full min-w-0 grid-cols-[10rem_minmax(0,1fr)_4.25rem] items-center gap-2 sm:grid-cols-[13.5rem_minmax(0,1fr)_4.25rem] sm:gap-3"
+                                >
+                                  <span className="min-w-0 truncate text-sm font-medium text-foreground">
+                                    {t.name}
+                                    {t.hidden ? (
+                                      <span className="text-muted-foreground font-normal">
+                                        {" "}
+                                        (hidden)
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                  <div className="min-w-0 h-1.5 w-full overflow-hidden rounded-sm bg-muted">
+                                    <div
+                                      className="h-full rounded-sm"
+                                      style={{
+                                        width: `${Math.min(100, Math.max(0, pct))}%`,
+                                        backgroundColor: hexToRgba(hex, 0.85),
+                                      }}
+                                    />
+                                  </div>
+                                  <span className="min-w-[4.25rem] text-right text-xs tabular-nums text-muted-foreground">
+                                    {fmtMs(tMs)}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                            {orphanIds.map((oid) => (
+                              <div
+                                key={oid}
+                                className="text-xs text-amber-800 dark:text-amber-300 tabular-nums"
+                              >
+                                Removed · <code className="opacity-80">{oid.slice(0, 8)}…</code>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {membersSorted.length > 0 && ms === 0 && (
+                          <p className="text-[11px] text-muted-foreground mt-1">No time in range</p>
+                        )}
+                      </td>
+                      <td className="py-3 px-2 text-right tabular-nums font-semibold whitespace-nowrap align-middle">
+                        {fmtMs(ms)}
+                      </td>
+                      <td className="py-3 pr-3 pl-2 sm:pr-4 align-middle">
+                        <div className="flex justify-end gap-0.5">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => {
+                              const idx = groupData.findIndex((r) => r.group.id === group.id);
+                              if (idx >= 0) void copyGroup(idx);
+                            }}
+                            title="Copy"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => startEdit(group)}
+                            title="Edit"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            onClick={() => deleteGroup.mutate(group.id)}
+                            title="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-end">
+        <Button
+          type="button"
+          className="w-full sm:w-auto gap-2 shadow-sm"
+          onClick={openCreateGroupDialog}
+        >
+          <Plus className="h-4 w-4 shrink-0" />
+          Create a group from tasks
+        </Button>
       </div>
 
-      {/* ── Sticky quick-select summary bar ──────────────────────────────── */}
-      {selectedTaskIds.size > 0 && (
-        <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:bottom-8 left-4 right-4 md:left-auto md:right-8 md:w-[400px] z-40">
-          <Card className="shadow-lg border-2">
-            <CardContent className="px-4 py-4 flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <p className="text-sm text-muted-foreground">
-                  {selectedTaskIds.size} task
-                  {selectedTaskIds.size !== 1 ? "s" : ""} selected
-                </p>
-                <p className="text-2xl font-bold tabular-nums">
-                  {fmtMs(quickSelectMs)}
-                </p>
+      <Dialog
+        open={editDialogGroup != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setGroupDialogError("");
+            setEditDialogGroup(null);
+          }
+        }}
+      >
+        <DialogContent className="flex h-[min(92dvh,56rem)] max-h-[92dvh] flex-col gap-0 overflow-hidden p-6 sm:max-w-xl duration-300 data-[state=open]:duration-300 data-[state=closed]:duration-200">
+          <DialogHeader className="shrink-0">
+            <DialogTitle>Edit group</DialogTitle>
+          </DialogHeader>
+          <div className="flex min-h-0 flex-1 flex-col gap-3 py-4">
+            <Input
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              placeholder="Group name"
+              className="h-10 shrink-0"
+            />
+            <div className="space-y-2 shrink-0">
+              <Label className="text-xs font-medium">Group color</Label>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={editColorMode === "auto" ? "secondary" : "outline"}
+                  onClick={() => {
+                    setEditColorMode("auto");
+                    if (editDialogGroup) {
+                      setEditColor(groupAccentHex(editDialogGroup.id));
+                    }
+                  }}
+                >
+                  Auto
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={editColorMode === "custom" ? "secondary" : "outline"}
+                  onClick={() => setEditColorMode("custom")}
+                >
+                  Custom
+                </Button>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {savingGroup ? (
-                  <>
-                    <Input
-                      value={saveName}
-                      onChange={(e) => setSaveName(e.target.value)}
-                      placeholder="Group name"
-                      className="h-9 text-sm w-32"
-                      autoFocus
-                      onKeyDown={(e) => e.key === "Enter" && saveQuickGroup()}
-                    />
-                    <Button
-                      size="sm"
-                      className="px-3"
-                      onClick={saveQuickGroup}
-                      disabled={createGroup.isPending || !saveName.trim()}
+              <GroupColorPresetGrid
+                value={
+                  editColorMode === "auto" && editDialogGroup
+                    ? groupAccentHex(editDialogGroup.id)
+                    : editColor
+                }
+                dimmed={editColorMode === "auto"}
+                onPick={(hex) => {
+                  setEditColorMode("custom");
+                  setEditColor(hex);
+                }}
+              />
+              {editColorMode === "auto" ? (
+                <p className="text-[11px] text-muted-foreground">
+                  Uses the automatic palette from the group id. Choose Custom to pick a preset.
+                </p>
+              ) : null}
+            </div>
+            <Input
+              value={editTaskFilter}
+              onChange={(e) => setEditTaskFilter(e.target.value)}
+              placeholder="Filter tasks…"
+              className="h-9 shrink-0 text-sm"
+            />
+            <Separator className="shrink-0" />
+            {groupDialogError ? (
+              <p className="shrink-0 text-sm text-destructive">{groupDialogError}</p>
+            ) : null}
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pr-1 [-webkit-overflow-scrolling:touch]">
+                <div className="space-y-1 pr-1 -mr-1">
+                  {tasks
+                .filter((t) =>
+                  editTaskFilter.trim()
+                    ? t.name.toLowerCase().includes(editTaskFilter.trim().toLowerCase())
+                    : true
+                )
+                .map((t) => {
+                  const tMs = taskMs(t, from, to);
+                  const allowed = taskAllowedInGroupPicker(
+                    t,
+                    editDialogGroup?.id ?? null
+                  );
+                  return (
+                    <label
+                      key={t.id}
+                      className={cn(
+                        "flex items-center justify-between gap-3 rounded-md py-2 px-2",
+                        allowed ? "cursor-pointer hover:bg-muted/60" : "opacity-60 cursor-not-allowed"
+                      )}
                     >
-                      <Check className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="px-2"
-                      onClick={() => {
-                        setSavingGroup(false);
-                        setSaveName("");
-                      }}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-2"
-                      onClick={() => setSavingGroup(true)}
-                    >
-                      <Plus className="h-4 w-4" />
-                      Save group
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="px-2"
-                      onClick={() => setSelectedTaskIds(new Set())}
-                      title="Clear selection"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </>
-                )}
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Checkbox
+                          checked={editTaskIds.has(t.id)}
+                          disabled={!allowed}
+                          onCheckedChange={(checked) => {
+                            if (!allowed) return;
+                            setEditTaskIds((prev) => {
+                              const next = new Set(prev);
+                              if (checked) next.add(t.id);
+                              else next.delete(t.id);
+                              return next;
+                            });
+                          }}
+                        />
+                        <span className="text-sm truncate">{t.name}</span>
+                        {t.taskGroup && !allowed ? (
+                          <span className="text-[10px] text-muted-foreground truncate shrink-0 max-w-[7rem]">
+                            {t.taskGroup.name}
+                          </span>
+                        ) : null}
+                        {t.hidden && (
+                          <Badge variant="outline" className="text-[10px] shrink-0 px-1.5 py-0">
+                            Hidden
+                          </Badge>
+                        )}
+                      </div>
+                      <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                        {fmtMs(tMs)}
+                      </span>
+                    </label>
+                  );
+                })}
+                </div>
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+            </div>
+          </div>
+          <DialogFooter className="shrink-0">
+            <Button variant="outline" onClick={() => setEditDialogGroup(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void saveEdit()}
+              disabled={updateGroup.isPending || !editName.trim()}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={createGroupOpen}
+        onOpenChange={(open) => {
+          if (!open) closeCreateGroupDialog();
+        }}
+      >
+        <DialogContent className="flex h-[min(92dvh,56rem)] max-h-[92dvh] flex-col gap-0 overflow-hidden p-6 sm:max-w-xl duration-300 data-[state=open]:duration-300 data-[state=closed]:duration-200">
+          <DialogHeader className="shrink-0">
+            <DialogTitle>Create a group from tasks</DialogTitle>
+          </DialogHeader>
+
+          <div className="flex min-h-0 flex-1 flex-col gap-3 py-4">
+            {groupDialogError ? (
+              <p className="shrink-0 text-sm text-destructive">{groupDialogError}</p>
+            ) : null}
+            <Input
+              id="new-group-name"
+              value={saveName}
+              onChange={(e) => setSaveName(e.target.value)}
+              placeholder="Group name"
+              className="h-10 shrink-0"
+              autoComplete="off"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void saveQuickGroup();
+              }}
+            />
+
+            <div className="space-y-2 shrink-0">
+              <Label className="text-xs font-medium">Group color</Label>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={createColorMode === "auto" ? "secondary" : "outline"}
+                  onClick={() => setCreateColorMode("auto")}
+                >
+                  Auto
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={createColorMode === "custom" ? "secondary" : "outline"}
+                  onClick={() => setCreateColorMode("custom")}
+                >
+                  Custom
+                </Button>
+              </div>
+              <GroupColorPresetGrid
+                value={createColorMode === "auto" ? "#94a3b8" : createGroupColor}
+                dimmed={createColorMode === "auto"}
+                onPick={(hex) => {
+                  setCreateColorMode("custom");
+                  setCreateGroupColor(hex);
+                }}
+              />
+              {createColorMode === "auto" ? (
+                <p className="text-[11px] text-muted-foreground">
+                  Color will follow the automatic palette from the group id after you save.
+                </p>
+              ) : null}
+            </div>
+
+            <Input
+              id="new-group-filter"
+              value={createGroupFilter}
+              onChange={(e) => setCreateGroupFilter(e.target.value)}
+              placeholder="Filter tasks…"
+              className="h-9 shrink-0 text-sm"
+            />
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={selectAllFilteredTasks}
+                disabled={createGroupFilteredTasks.length === 0}
+              >
+                Select all in list
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={clearSelectedTasks}
+                disabled={selectedTaskIds.size === 0}
+              >
+                Clear selection
+              </Button>
+              {createGroupFilter.trim() ? (
+                <span className="text-xs text-muted-foreground">
+                  {createGroupFilteredTasks.length} match
+                  {createGroupFilteredTasks.length !== 1 ? "es" : ""}
+                </span>
+              ) : null}
+            </div>
+            <Separator className="shrink-0" />
+
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pr-1 [-webkit-overflow-scrolling:touch]">
+                <div className="space-y-1 pr-1 -mr-1">
+                  {tasks.length === 0 ? (
+                    <p className="py-8 text-center text-sm text-muted-foreground">
+                      No tasks yet.
+                    </p>
+                  ) : createGroupFilteredTasks.length === 0 ? (
+                    <p className="py-8 text-center text-sm text-muted-foreground">
+                      No tasks match this search.
+                    </p>
+                  ) : (
+                    createGroupFilteredTasks.map((task) => {
+                      const tMs = taskMs(task, from, to);
+                      const selected = selectedTaskIds.has(task.id);
+                      const allowed = taskAllowedInGroupPicker(task, null);
+                      return (
+                        <label
+                          key={task.id}
+                          className={cn(
+                            "flex items-center justify-between gap-3 rounded-md px-2 py-2",
+                            !allowed
+                              ? "cursor-not-allowed opacity-60"
+                              : "cursor-pointer hover:bg-muted/60"
+                          )}
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            <Checkbox
+                              checked={selected}
+                              disabled={!allowed}
+                              onCheckedChange={(checked) => {
+                                if (!allowed) return;
+                                setSelectedTaskIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (checked) next.add(task.id);
+                                  else next.delete(task.id);
+                                  return next;
+                                });
+                              }}
+                            />
+                            <span className="truncate text-sm">{task.name}</span>
+                            {task.taskGroup ? (
+                              <Badge
+                                variant="secondary"
+                                className="max-w-[7rem] shrink-0 truncate px-1.5 py-0 text-[10px] font-normal"
+                                title={task.taskGroup.name}
+                              >
+                                {task.taskGroup.name}
+                              </Badge>
+                            ) : null}
+                            {task.hidden ? (
+                              <Badge
+                                variant="outline"
+                                className="shrink-0 px-1.5 py-0 text-[10px]"
+                              >
+                                Hidden
+                              </Badge>
+                            ) : null}
+                          </div>
+                          <span className="shrink-0 tabular-nums text-xs text-muted-foreground">
+                            {fmtMs(tMs)}
+                          </span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="shrink-0 space-y-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm text-muted-foreground">
+              <span>
+                <span className="font-semibold text-foreground tabular-nums">
+                  {selectedTaskIds.size}
+                </span>{" "}
+                task{selectedTaskIds.size !== 1 ? "s" : ""} selected
+              </span>
+              <span className="font-semibold tabular-nums text-foreground">
+                {fmtMs(quickSelectMs)}
+              </span>
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0 sm:justify-end">
+              <Button type="button" variant="outline" onClick={closeCreateGroupDialog}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void saveQuickGroup()}
+                disabled={
+                  createGroup.isPending ||
+                  selectedTaskIds.size === 0 ||
+                  !saveName.trim()
+                }
+              >
+                {createGroup.isPending ? "Saving…" : "Save group"}
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

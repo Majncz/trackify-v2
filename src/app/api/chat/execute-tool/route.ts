@@ -254,6 +254,67 @@ export async function POST(req: Request) {
         break;
       }
 
+      case "setTaskGroupMembership": {
+        const { taskId, groupId: rawGroupId } = args as {
+          taskId: string;
+          groupId?: string | null;
+        };
+
+        const task = await prisma.task.findFirst({
+          where: { id: taskId, userId },
+        });
+
+        if (!task) {
+          result = { success: false, error: "Task not found" };
+          break;
+        }
+
+        const clearGroup = rawGroupId == null || rawGroupId === "";
+
+        if (clearGroup) {
+          await prisma.task.update({
+            where: { id: taskId },
+            data: { taskGroupId: null },
+          });
+          result = {
+            success: true,
+            message: task.taskGroupId
+              ? `Removed "${task.name}" from its group`
+              : `"${task.name}" was not in a group`,
+          };
+          break;
+        }
+
+        const group = await prisma.taskGroup.findFirst({
+          where: { id: rawGroupId, userId },
+        });
+
+        if (!group) {
+          result = { success: false, error: "Group not found" };
+          break;
+        }
+
+        if (task.taskGroupId != null && task.taskGroupId !== rawGroupId) {
+          result = {
+            success: false,
+            error:
+              "Task is already in another group. Remove it from that group first, or use the Stats page to edit groups.",
+          };
+          break;
+        }
+
+        await prisma.task.update({
+          where: { id: taskId },
+          data: { taskGroupId: rawGroupId },
+        });
+
+        result = {
+          success: true,
+          message: `Assigned "${task.name}" to group "${group.name}"`,
+        };
+        break;
+      }
+
       default:
         return Response.json({ error: "Unknown tool" }, { status: 400 });
     }

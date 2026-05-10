@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 export interface TaskGroup {
   id: string;
   name: string;
+  color?: string | null;
   taskIds: string[];
   userId: string;
   createdAt: string;
@@ -24,32 +25,65 @@ export function useGroups() {
   });
 
   const createGroup = useMutation({
-    mutationFn: async ({ name, taskIds }: { name: string; taskIds: string[] }) => {
+    mutationFn: async ({
+      name,
+      taskIds,
+      color,
+    }: {
+      name: string;
+      taskIds: string[];
+      color?: string | null;
+    }) => {
       const res = await fetch("/api/groups", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, taskIds }),
+        body: JSON.stringify({ name, taskIds, color }),
       });
-      if (!res.ok) throw new Error("Failed to create group");
-      return res.json() as Promise<TaskGroup>;
+      const data = (await res.json()) as TaskGroup | { error?: string };
+      if (!res.ok) {
+        throw new Error(
+          typeof (data as { error?: string }).error === "string"
+            ? (data as { error: string }).error
+            : "Failed to create group"
+        );
+      }
+      return data as TaskGroup;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["groups"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["groups"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
   });
 
   const updateGroup = useMutation({
     mutationFn: async ({
       id,
       ...data
-    }: { id: string; name?: string; taskIds?: string[] }) => {
+    }: {
+      id: string;
+      name?: string;
+      taskIds?: string[];
+      color?: string | null;
+    }) => {
       const res = await fetch(`/api/groups/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      if (!res.ok) throw new Error("Failed to update group");
-      return res.json() as Promise<TaskGroup>;
+      const out = (await res.json()) as TaskGroup | { error?: string };
+      if (!res.ok) {
+        throw new Error(
+          typeof (out as { error?: string }).error === "string"
+            ? (out as { error: string }).error
+            : "Failed to update group"
+        );
+      }
+      return out as TaskGroup;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["groups"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["groups"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
   });
 
   const deleteGroup = useMutation({
@@ -58,7 +92,10 @@ export function useGroups() {
       if (!res.ok) throw new Error("Failed to delete group");
       return id;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["groups"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["groups"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
   });
 
   return {

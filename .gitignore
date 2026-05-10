@@ -44,3 +44,7 @@ dist/
 /prisma/dev.db-journal
 # Accidental nested prisma cwd / local SQLite
 /prisma/prisma/
+
+# Tauri desktop app
+apps/desktop/node_modules
+apps/desktop/src-tauri/target

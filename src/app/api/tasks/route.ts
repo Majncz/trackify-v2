@@ -7,6 +7,11 @@ const taskSchema = z.object({
   name: z.string().min(1).max(100),
 });
 
+function devErrorDetail(error: unknown): string | undefined {
+  if (process.env.NODE_ENV !== "development") return undefined;
+  return error instanceof Error ? error.message : String(error);
+}
+
 export async function GET(request: NextRequest) {
   const user = await getAuthUser(request);
 
@@ -17,20 +22,33 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const showHidden = searchParams.get("hidden") === "true";
 
-  const tasks = await prisma.task.findMany({
-    where: { 
-      userId: user.id,
-      hidden: showHidden,
-    },
-    include: {
-      events: {
-        orderBy: { from: "desc" },
+  try {
+    const tasks = await prisma.task.findMany({
+      where: {
+        userId: user.id,
+        hidden: showHidden,
       },
-    },
-    orderBy: { name: "asc" },
-  });
+      include: {
+        events: {
+          orderBy: { from: "desc" },
+        },
+        taskGroup: { select: { id: true, name: true, color: true } },
+      },
+      orderBy: { name: "asc" },
+    });
 
-  return NextResponse.json(tasks);
+    return NextResponse.json(tasks);
+  } catch (error) {
+    console.error("GET /api/tasks:", error);
+    const detail = devErrorDetail(error);
+    return NextResponse.json(
+      {
+        error: "Internal server error",
+        ...(detail ? { detail } : {}),
+      },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -51,6 +69,7 @@ export async function POST(request: NextRequest) {
       },
       include: {
         events: true,
+        taskGroup: { select: { id: true, name: true, color: true } },
       },
     });
 

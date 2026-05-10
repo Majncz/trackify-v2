@@ -9,15 +9,17 @@ datasource db {
 }
 
 model User {
-  id             String          @id @default(uuid())
-  email          String          @unique
-  password       String
-  tasks          Task[]
-  passwordResets PasswordReset[]
-  conversations  Conversation[]
-  activeTimers   ActiveTimer[]
-  apiTokens      ApiToken[]
-  taskGroups     TaskGroup[]
+  id              String           @id @default(uuid())
+  email           String           @unique
+  password        String
+  tasks           Task[]
+  passwordResets  PasswordReset[]
+  conversations   Conversation[]
+  activeTimers    ActiveTimer[]
+  apiTokens       ApiToken[]
+  taskGroups      TaskGroup[]
+  billingTasks    BillingTask[]
+  paymentRecords  PaymentRecord[]
 
   @@map("trackify_user")
 }
@@ -41,23 +43,63 @@ model Task {
   updatedAt    DateTime      @default(now()) @updatedAt
   userId       String
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskGroupId  String?
+  taskGroup    TaskGroup?    @relation(fields: [taskGroupId], references: [id], onDelete: SetNull)
   events       Event[]
   activeTimers ActiveTimer[]
+  billingTask  BillingTask?
 
   @@index([userId, hidden])
+  @@index([taskGroupId])
   @@map("trackify_task")
 }
 
 model Event {
-  id        String   @id @default(uuid())
-  from      DateTime @default(now())
-  to        DateTime
-  name      String   @default("Time entry")
-  taskId    String
-  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  id               String           @id @default(uuid())
+  from             DateTime         @default(now())
+  to               DateTime
+  name             String           @default("Time entry")
+  taskId           String
+  task             Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  paymentRecordId  String?
+  paymentRecord    PaymentRecord?   @relation(fields: [paymentRecordId], references: [id], onDelete: SetNull)
 
   @@index([taskId, from])
+  @@index([paymentRecordId])
   @@map("trackify_event")
+}
+
+model BillingTask {
+  id             String   @id @default(uuid())
+  taskId         String   @unique
+  task           Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hourlyRate     Float
+  currency       String   @default("CZK")
+  roundingMins   Int      @default(0)
+  minSessionMins Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId])
+  @@map("trackify_billing_task")
+}
+
+model PaymentRecord {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paidAt       DateTime
+  note         String?
+  totalAmount  Float
+  totalMinutes Int
+  currency     String   @default("CZK")
+  events       Event[]
+  createdAt    DateTime @default(now())
+
+  @@index([userId, paidAt])
+  @@map("trackify_payment_record")
 }
 
 model Conversation {
@@ -100,9 +142,10 @@ model ActiveTimer {
 model TaskGroup {
   id        String   @id @default(uuid())
   name      String
-  taskIds   String   // JSON-encoded array of task IDs
+  color     String?  // Custom hex e.g. #4f46e5; null = derived from id in UI
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks     Task[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -12,12 +12,13 @@ interface Event {
   taskId: string;
 }
 
-interface Task {
+export interface Task {
   id: string;
   name: string;
   hidden: boolean;
   userId: string;
   events: Event[];
+  taskGroup?: { id: string; name: string; color?: string | null } | null;
 }
 
 export function useTasks() {
