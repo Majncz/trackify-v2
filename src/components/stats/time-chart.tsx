@@ -4,7 +4,9 @@ import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { useTasks } from "@/hooks/use-tasks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from "lucide-react";
+import { createPortal } from "react-dom";
+import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Copy, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   BarChart,
   Bar,
@@ -69,6 +71,22 @@ function formatHeatMinutes(totalMinutes: number): string {
   return `${s}s`;
 }
 
+function getOverlapDuration(
+  eventFrom: Date,
+  eventTo: Date,
+  intervalStart: Date,
+  intervalEnd: Date
+): number {
+  if (eventTo <= intervalStart || eventFrom >= intervalEnd) {
+    return 0;
+  }
+
+  const overlapStart = eventFrom > intervalStart ? eventFrom : intervalStart;
+  const overlapEnd = eventTo < intervalEnd ? eventTo : intervalEnd;
+
+  return Math.max(0, overlapEnd.getTime() - overlapStart.getTime());
+}
+
 function weeklySlotRange(
   day: Date,
   hour: number,
@@ -82,55 +100,299 @@ function weeklySlotRange(
   return { start, end };
 }
 
-function WeeklyHeatTooltipBody({
+type DayEvent = { taskName: string; from: Date; to: Date };
+
+const WEEKLY_HEAT_TOOLTIP_SLIDE_BUFFER_PX = 12;
+const WEEKLY_TOOLTIP_CLOSE_DELAY_MS = 220;
+const WEEKLY_TOOLTIP_TRANSITION_MS = 200;
+
+type WeekGridCell = { totalMinutes: number; taskMinutes: Record<string, number> };
+
+type WeeklyDaySegment = {
+  startFlat: number;
+  endFlat: number;
+  taskName: string;
+  bridgedEmptySlots: number;
+};
+
+function flatToSlotRange(
+  day: Date,
+  flat: number,
+  squaresPerHour: number
+): { start: Date; end: Date } {
+  const hour = Math.floor(flat / squaresPerHour);
+  const sqIdx = flat % squaresPerHour;
+  return weeklySlotRange(day, hour, sqIdx, squaresPerHour);
+}
+
+function dominantTaskForHour(cell: WeekGridCell): string | null {
+  if (cell.totalMinutes <= 0) return null;
+  const top = Object.entries(cell.taskMinutes).sort((a, b) => b[1] - a[1])[0];
+  return top?.[0] ?? null;
+}
+
+function buildWeeklyDaySegments(
+  hourCells: WeekGridCell[],
+  squaresPerHour: number,
+  maxBridgeEmptySlots: number
+): WeeklyDaySegment[] {
+  const n = 24 * squaresPerHour;
+  const hourAt = (flat: number) => Math.floor(flat / squaresPerHour);
+  const segments: WeeklyDaySegment[] = [];
+  let i = 0;
+  while (i < n) {
+    const task = dominantTaskForHour(hourCells[hourAt(i)]);
+    if (!task) {
+      i++;
+      continue;
+    }
+    let j = i + 1;
+    let bridged = 0;
+    while (j < n) {
+      const hj = hourAt(j);
+      const tj = dominantTaskForHour(hourCells[hj]);
+      if (tj === task) {
+        j++;
+        continue;
+      }
+      if (tj !== null) break;
+      const gapStart = j;
+      let k = j;
+      while (k < n && dominantTaskForHour(hourCells[hourAt(k)]) === null) {
+        k++;
+      }
+      const gapLen = k - gapStart;
+      if (gapLen > maxBridgeEmptySlots) break;
+      if (k >= n) break;
+      if (dominantTaskForHour(hourCells[hourAt(k)]) !== task) break;
+      bridged += gapLen;
+      j = k + 1;
+    }
+    segments.push({
+      startFlat: i,
+      endFlat: j - 1,
+      taskName: task,
+      bridgedEmptySlots: bridged,
+    });
+    i = j;
+  }
+  return segments;
+}
+
+function segmentForFlat(
+  segments: WeeklyDaySegment[],
+  flat: number
+): WeeklyDaySegment | null {
+  for (const s of segments) {
+    if (flat >= s.startFlat && flat <= s.endFlat) return s;
+  }
+  return null;
+}
+
+function preciseTaskWindowInSlotRange(
+  dayEvents: DayEvent[],
+  rangeStart: Date,
+  rangeEnd: Date,
+  taskName: string
+): { start: Date; end: Date } | null {
+  const rel = dayEvents.filter(
+    (e) =>
+      e.taskName === taskName &&
+      e.to.getTime() > rangeStart.getTime() &&
+      e.from.getTime() < rangeEnd.getTime()
+  );
+  if (rel.length === 0) return null;
+  const start = Math.max(
+    rangeStart.getTime(),
+    Math.min(...rel.map((e) => e.from.getTime()))
+  );
+  const end = Math.min(
+    rangeEnd.getTime(),
+    Math.max(...rel.map((e) => e.to.getTime()))
+  );
+  if (end <= start) return null;
+  return { start: new Date(start), end: new Date(end) };
+}
+
+function minutesForTaskInRange(
+  dayEvents: DayEvent[],
+  taskName: string,
+  rangeStart: Date,
+  rangeEnd: Date
+): number {
+  let sum = 0;
+  for (const e of dayEvents) {
+    if (e.taskName !== taskName) continue;
+    sum += getOverlapDuration(e.from, e.to, rangeStart, rangeEnd) / 60000;
+  }
+  return sum;
+}
+
+function buildWeeklyHeatTooltipPlainText(opts: {
+  day: Date;
+  taskName: string;
+  minutes: number;
+  timeLine: string;
+  bridgedEmptySlots: number;
+  squaresPerHour: number;
+}): string {
+  const normalize = (s: string) =>
+    s
+      .replace(/\u2013/g, "-")
+      .replace(/\u2014/g, "-")
+      .replace(/\u2192/g, "->");
+
+  const lines = [
+    "Trackify - time segment",
+    "",
+    `Date: ${format(opts.day, "EEEE, MMMM d, yyyy")}`,
+    format(opts.day, "d.M.yyyy"),
+    "",
+    `Task: ${opts.taskName}`,
+    `Time logged: ${formatHeatMinutes(opts.minutes)}`,
+    "",
+    normalize(opts.timeLine),
+  ];
+  if (opts.bridgedEmptySlots > 0) {
+    const gapMin = opts.bridgedEmptySlots * (60 / opts.squaresPerHour);
+    lines.push("");
+    lines.push(`Streak gap (no logged time): ${formatHeatMinutes(gapMin)}`);
+  }
+  return lines.join("\n");
+}
+
+type WeeklySlideTooltipState = {
+  segKey: string;
+  day: Date;
+  globalIdx: number;
+  segment: WeeklyDaySegment;
+  rangeStart: Date;
+  rangeEnd: Date;
+  clientX: number;
+  anchorTop: number;
+};
+
+function WeeklyHeatSlideTooltipCard({
   day,
-  hour,
-  sqIdx,
-  squaresPerHour,
-  cell,
+  rangeStart,
+  rangeEnd,
+  segment,
+  taskName,
   taskColors,
+  dayEvents,
+  squaresPerHour,
+  popoverVisible,
+  onMouseEnter,
+  onMouseLeave,
 }: {
   day: Date;
-  hour: number;
-  sqIdx: number;
-  squaresPerHour: number;
-  cell: { totalMinutes: number; taskMinutes: Record<string, number> };
+  rangeStart: Date;
+  rangeEnd: Date;
+  segment: WeeklyDaySegment;
+  taskName: string;
   taskColors: Record<string, string>;
+  dayEvents: DayEvent[];
+  squaresPerHour: number;
+  popoverVisible: boolean;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
 }) {
-  const { start, end } = weeklySlotRange(day, hour, sqIdx, squaresPerHour);
-  const dateStr = format(day, "EEEE, MMMM d, yyyy");
-  const rangeStr = `${format(start, "HH:mm:ss")} – ${format(end, "HH:mm:ss")}`;
-  const entries = Object.entries(cell.taskMinutes).sort((a, b) => b[1] - a[1]);
+  const [copied, setCopied] = useState(false);
+  const precise = preciseTaskWindowInSlotRange(dayEvents, rangeStart, rangeEnd, taskName);
+  const mins = minutesForTaskInRange(dayEvents, taskName, rangeStart, rangeEnd);
+  const timeLine = precise
+    ? `${format(precise.start, "HH:mm:ss")} \u2192 ${format(precise.end, "HH:mm:ss")}`
+    : `${format(rangeStart, "HH:mm:ss")} \u2192 ${format(rangeEnd, "HH:mm:ss")} (grid)`;
+
+  const plain = buildWeeklyHeatTooltipPlainText({
+    day,
+    taskName,
+    minutes: mins,
+    timeLine,
+    bridgedEmptySlots: segment.bridgedEmptySlots,
+    squaresPerHour,
+  });
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(plain);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  const gapMinutes =
+    segment.bridgedEmptySlots > 0
+      ? segment.bridgedEmptySlots * (60 / squaresPerHour)
+      : 0;
 
   return (
-    <div className="space-y-2 max-w-[260px] text-left">
-      <div>
-        <p className="text-sm font-semibold leading-tight">{dateStr}</p>
-        <p className="text-xs text-muted-foreground mt-0.5">{rangeStr}</p>
-      </div>
-      <div className="border-t border-border pt-2 space-y-1.5">
-        <p className="text-xs font-medium text-foreground">
-          {formatHeatMinutes(cell.totalMinutes)} total
+    <div
+      className={cn(
+        "group relative w-fit max-w-[min(92vw,236px)] select-text rounded-lg border border-border bg-popover p-3 pr-9 text-left shadow-lg motion-reduce:transition-none",
+        popoverVisible
+          ? "translate-y-0 opacity-100 transition-[opacity,transform] duration-200 ease-out"
+          : "translate-y-1 opacity-0 transition-[opacity,transform] duration-200 ease-out"
+      )}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className={cn(
+          "absolute right-1.5 top-1.5 z-10 h-8 w-8 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+        )}
+        aria-label="Copy details"
+        onClick={(e) => {
+          e.stopPropagation();
+          void handleCopy();
+        }}
+      >
+        {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+      </Button>
+      <div className="space-y-1">
+        <p className="text-sm font-semibold leading-5 text-foreground">
+          {format(day, "EEEE, MMMM d, yyyy")}
         </p>
-        <ul className="space-y-1">
-          {entries.map(([name, mins]) => (
-            <li key={name} className="flex items-start gap-2 text-xs">
-              <span
-                className="mt-1 h-2 w-2 shrink-0 rounded-[2px]"
-                style={{
-                  backgroundColor: taskColors[name] ?? OTHER_COLOR,
-                }}
-              />
-              <span className="min-w-0 leading-snug">
-                <span className="font-medium text-foreground">{name}</span>
-                <span className="text-muted-foreground">
-                  {" "}
-                  · {formatHeatMinutes(mins)}
-                </span>
-              </span>
-            </li>
-          ))}
-        </ul>
+        <p className="text-xs leading-4 text-muted-foreground">{format(day, "d.M.yyyy")}</p>
+        <p className="flex min-h-5 flex-wrap items-baseline gap-x-1.5 text-xs leading-5 tabular-nums">
+          <span className="min-w-0 shrink font-medium text-foreground/90">
+            {precise
+              ? `${format(precise.start, "HH:mm:ss")} → ${format(precise.end, "HH:mm:ss")}`
+              : `${format(rangeStart, "HH:mm:ss")} → ${format(rangeEnd, "HH:mm:ss")}`}
+          </span>
+          <span className="inline-flex w-[2.75rem] shrink-0 justify-start text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            {precise ? <span className="invisible select-none" aria-hidden>(grid)</span> : "(grid)"}
+          </span>
+        </p>
+      </div>
+      <div className="mt-2 border-t border-border pt-2">
+        <div className="flex gap-2">
+          <span
+            className="mt-1 h-2.5 w-2.5 shrink-0 rounded-[2px]"
+            style={{ backgroundColor: taskColors[taskName] ?? OTHER_COLOR }}
+          />
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <p
+              className="break-words text-sm font-medium leading-5 text-foreground line-clamp-2"
+              title={taskName.length > 40 ? taskName : undefined}
+            >
+              {taskName}
+            </p>
+            <p className="mt-0.5 text-base font-semibold leading-6 tabular-nums text-foreground">
+              {formatHeatMinutes(mins)}
+            </p>
+          </div>
+        </div>
+        {segment.bridgedEmptySlots > 0 && (
+          <p className="mt-1.5 pl-[18px] text-xs leading-4 text-muted-foreground">
+            Short gap in this streak: {formatHeatMinutes(gapMinutes)} with no logged time
+          </p>
+        )}
       </div>
     </div>
   );
@@ -193,25 +455,6 @@ type Duration = "weekly" | "yearly";
 interface ChartDataPoint {
   label: string;
   [taskName: string]: number | string;
-}
-
-// Calculate how much of an event falls within a given interval
-function getOverlapDuration(
-  eventFrom: Date,
-  eventTo: Date,
-  intervalStart: Date,
-  intervalEnd: Date
-): number {
-  // No overlap if event ends before interval starts or starts after interval ends
-  if (eventTo <= intervalStart || eventFrom >= intervalEnd) {
-    return 0;
-  }
-  
-  // Calculate overlap
-  const overlapStart = eventFrom > intervalStart ? eventFrom : intervalStart;
-  const overlapEnd = eventTo < intervalEnd ? eventTo : intervalEnd;
-  
-  return Math.max(0, overlapEnd.getTime() - overlapStart.getTime());
 }
 
 export function TimeChart() {
@@ -369,8 +612,6 @@ export function TimeChart() {
     }
     return colors;
   }, [topTasks, hasOther]);
-
-  type WeekGridCell = { totalMinutes: number; taskMinutes: Record<string, number> };
 
   // Load 1000 days (~2.7 years) of history for the scrollable days view
   const DAYS_TO_LOAD = 1000;
@@ -697,6 +938,7 @@ export function TimeChart() {
             taskColors={taskColors}
             hasOther={hasOther}
             scrollRef={weeklyScrollRef}
+            eventsByDate={eventsByDate}
           />
         ) : duration === "yearly" && yearlyViewData ? (
           <YearlyCalendarView
@@ -778,13 +1020,14 @@ export function TimeChart() {
 interface WeekCalendarViewProps {
   data: {
     days: Date[];
-    grid: { totalMinutes: number; taskMinutes: Record<string, number> }[][];
+    grid: WeekGridCell[][];
     maxMinutes: number;
     hasData: boolean;
   };
   taskColors: Record<string, string>;
   hasOther: boolean;
   scrollRef: React.RefObject<HTMLDivElement>;
+  eventsByDate: Map<string, DayEvent[]>;
 }
 
 const WEEKLY_SQUARE_SIZE = 12; // Fixed square size for weekly view
@@ -793,9 +1036,64 @@ const WEEKLY_CONTAINER_HEIGHT = 240;
 const WEEKLY_BUFFER_ROWS = 5;
 const WEEKLY_LABEL_WIDTH = 56; // 3.5rem in pixels
 
-function WeekCalendarView({ data, taskColors, hasOther, scrollRef }: WeekCalendarViewProps) {
+function WeekCalendarView({
+  data,
+  taskColors,
+  hasOther,
+  scrollRef,
+  eventsByDate,
+}: WeekCalendarViewProps) {
   const displayDays = data.days;
   const displayGrid = data.grid;
+
+  const [weeklyTooltip, setWeeklyTooltip] = useState<WeeklySlideTooltipState | null>(null);
+  const [weeklyTooltipPopoverVisible, setWeeklyTooltipPopoverVisible] = useState(false);
+  const weeklyHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const weeklySlideXCommitRef = useRef<number | null>(null);
+
+  const cancelWeeklyHide = useCallback(() => {
+    if (weeklyHideTimerRef.current) {
+      clearTimeout(weeklyHideTimerRef.current);
+      weeklyHideTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleWeeklyHide = useCallback(() => {
+    cancelWeeklyHide();
+    weeklyHideTimerRef.current = setTimeout(() => {
+      setWeeklyTooltipPopoverVisible(false);
+      weeklyHideTimerRef.current = null;
+      setTimeout(() => setWeeklyTooltip(null), WEEKLY_TOOLTIP_TRANSITION_MS);
+    }, WEEKLY_TOOLTIP_CLOSE_DELAY_MS);
+  }, [cancelWeeklyHide]);
+
+  const showWeeklyTooltip = useCallback(
+    (payload: WeeklySlideTooltipState) => {
+      cancelWeeklyHide();
+      weeklySlideXCommitRef.current = payload.clientX;
+      setWeeklyTooltip(payload);
+      setWeeklyTooltipPopoverVisible(true);
+    },
+    [cancelWeeklyHide]
+  );
+
+  useEffect(() => {
+    if (!weeklyTooltip) {
+      setWeeklyTooltipPopoverVisible(false);
+      return;
+    }
+    setWeeklyTooltipPopoverVisible(false);
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setWeeklyTooltipPopoverVisible(true));
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, [weeklyTooltip?.segKey]);
+
+  useEffect(() => () => cancelWeeklyHide(), [cancelWeeklyHide]);
   
   // Measure container width to calculate how many squares fit
   const containerRef = useRef<HTMLDivElement>(null);
@@ -874,8 +1172,43 @@ function WeekCalendarView({ data, taskColors, hasOther, scrollRef }: WeekCalenda
   // Use the larger of calculated or minimum size
   const cellSize = Math.max(WEEKLY_SQUARE_SIZE, actualSquareSize);
 
+  const tooltipPortal =
+    weeklyTooltip &&
+    typeof document !== "undefined" &&
+    createPortal(
+      <div
+        className="pointer-events-none fixed inset-0 z-[200]"
+        aria-hidden={!weeklyTooltipPopoverVisible}
+      >
+        <div
+          className="pointer-events-auto absolute"
+          style={{
+            left: weeklyTooltip.clientX,
+            top: weeklyTooltip.anchorTop,
+            transform: "translate(-50%, calc(-100% - 2px))",
+          }}
+        >
+          <WeeklyHeatSlideTooltipCard
+            day={weeklyTooltip.day}
+            rangeStart={weeklyTooltip.rangeStart}
+            rangeEnd={weeklyTooltip.rangeEnd}
+            segment={weeklyTooltip.segment}
+            taskName={weeklyTooltip.segment.taskName}
+            taskColors={taskColors}
+            dayEvents={eventsByDate.get(format(weeklyTooltip.day, "yyyy-MM-dd")) ?? []}
+            squaresPerHour={squaresPerHour}
+            popoverVisible={weeklyTooltipPopoverVisible}
+            onMouseEnter={cancelWeeklyHide}
+            onMouseLeave={scheduleWeeklyHide}
+          />
+        </div>
+      </div>,
+      document.body
+    );
+
   return (
     <div className="space-y-3 w-full min-w-0" ref={containerRef}>
+      {tooltipPortal}
       {/* Hour labels */}
       <div
         className="grid min-w-0"
@@ -915,6 +1248,10 @@ function WeekCalendarView({ data, taskColors, hasOther, scrollRef }: WeekCalenda
           >
             {visibleDays.map((day, localIdx) => {
               const globalIdx = startIdx + localIdx;
+              const hourCells = visibleGrid[localIdx];
+              const bridgeCap = Math.max(squaresPerHour, 2);
+              const segments = buildWeeklyDaySegments(hourCells, squaresPerHour, bridgeCap);
+
               return (
                 <div
                   key={day.toISOString()}
@@ -935,28 +1272,35 @@ function WeekCalendarView({ data, taskColors, hasOther, scrollRef }: WeekCalenda
                       gap: `${WEEKLY_GAP}px`,
                     }}
                   >
-                    {visibleGrid[localIdx].map((cell, hour) => {
+                    {hourCells.map((cell, hour) => {
                       const dominantTask = Object.entries(cell.taskMinutes).sort(
                         (a, b) => b[1] - a[1]
                       )[0]?.[0];
-                      const baseColor =
-                        (dominantTask && taskColors[dominantTask]) ||
-                        (dominantTask ? OTHER_COLOR : "hsl(var(--muted))");
 
-                      // Render multiple squares per hour based on squaresPerHour
                       return Array.from({ length: squaresPerHour }, (_, sqIdx) => {
+                        const flat = hour * squaresPerHour + sqIdx;
+                        const seg = segmentForFlat(segments, flat);
+                        const fillTask = seg?.taskName ?? dominantTask ?? null;
+                        const baseColor =
+                          (fillTask && taskColors[fillTask]) ||
+                          (fillTask ? OTHER_COLOR : "hsl(var(--muted))");
+
                         const hasTime = cell.totalMinutes > 0;
+                        const isBridgedGap = Boolean(seg) && !hasTime;
+                        const baseOpacity = hasTime
+                          ? getOpacity(cell.totalMinutes, data.maxMinutes)
+                          : isBridgedGap
+                            ? 0.42
+                            : getOpacity(0, data.maxMinutes);
+
                         const cubeStyle = {
                           width: cellSize,
                           height: cellSize,
                           backgroundColor: baseColor,
-                          opacity: getOpacity(
-                            cell.totalMinutes,
-                            data.maxMinutes
-                          ),
+                          opacity: baseOpacity,
                         };
 
-                        if (!hasTime) {
+                        if (!seg) {
                           return (
                             <div
                               key={`${globalIdx}-${hour}-${sqIdx}`}
@@ -966,30 +1310,48 @@ function WeekCalendarView({ data, taskColors, hasOther, scrollRef }: WeekCalenda
                           );
                         }
 
+                        const rangeStart = flatToSlotRange(day, seg.startFlat, squaresPerHour).start;
+                        const rangeEnd = flatToSlotRange(day, seg.endFlat, squaresPerHour).end;
+                        const segKey = `${globalIdx}-${seg.startFlat}-${seg.endFlat}-${seg.taskName}`;
+
                         return (
-                          <Tooltip key={`${globalIdx}-${hour}-${sqIdx}`}>
-                            <TooltipTrigger asChild>
-                              <button
-                                type="button"
-                                className="rounded-sm border-0 p-0 cursor-default outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                                style={cubeStyle}
-                                aria-label="Time slot details"
-                              />
-                            </TooltipTrigger>
-                            <TooltipContent
-                              side="top"
-                              className="border-border bg-popover p-3 shadow-lg"
-                            >
-                              <WeeklyHeatTooltipBody
-                                day={day}
-                                hour={hour}
-                                sqIdx={sqIdx}
-                                squaresPerHour={squaresPerHour}
-                                cell={cell}
-                                taskColors={taskColors}
-                              />
-                            </TooltipContent>
-                          </Tooltip>
+                          <button
+                            key={`${globalIdx}-${hour}-${sqIdx}`}
+                            type="button"
+                            className="rounded-sm border-0 p-0 cursor-default outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                            style={cubeStyle}
+                            aria-label="Time segment details"
+                            onMouseEnter={(e) => {
+                              cancelWeeklyHide();
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              showWeeklyTooltip({
+                                segKey,
+                                day,
+                                globalIdx,
+                                segment: seg,
+                                rangeStart,
+                                rangeEnd,
+                                clientX: e.clientX,
+                                anchorTop: rect.top,
+                              });
+                            }}
+                            onMouseMove={(e) => {
+                              const last = weeklySlideXCommitRef.current;
+                              if (
+                                last != null &&
+                                Math.abs(e.clientX - last) <= WEEKLY_HEAT_TOOLTIP_SLIDE_BUFFER_PX
+                              ) {
+                                return;
+                              }
+                              weeklySlideXCommitRef.current = e.clientX;
+                              setWeeklyTooltip((prev) =>
+                                prev && prev.segKey === segKey
+                                  ? { ...prev, clientX: e.clientX }
+                                  : prev
+                              );
+                            }}
+                            onMouseLeave={scheduleWeeklyHide}
+                          />
                         );
                       });
                     })}
