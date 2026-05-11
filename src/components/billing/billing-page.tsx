@@ -13,6 +13,7 @@ import {
 } from "date-fns";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { focusControl } from "@/lib/focus-style";
 import { SummaryBar } from "./summary-bar";
 import {
   BillingFilters,
@@ -26,6 +27,7 @@ import { PaymentHistory } from "./payment-history";
 import { TaskEnrollmentSheet } from "./task-enrollment-sheet";
 import { CalendarHeatmap } from "./calendar-heatmap";
 import { BillingGuide } from "./billing-guide";
+import { AiToolsTab } from "./ai-tools-tab";
 import type { BillingSessionRow } from "@/lib/billing";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -103,7 +105,7 @@ function useBillingDateRange(
   }, [preset, customFrom, customTo]);
 }
 
-const BILLING_TAB_IDS = ["ledger", "history", "tasks"] as const;
+const BILLING_TAB_IDS = ["ledger", "history", "tasks", "ai_tools"] as const;
 type BillingTabId = (typeof BILLING_TAB_IDS)[number];
 
 export function BillingPage() {
@@ -131,6 +133,13 @@ export function BillingPage() {
     if (nextId === tab) return;
     setTab(nextId);
   }, [tab]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.location.hash === "#ai-tools") {
+      setTab("ai_tools");
+    }
+  }, []);
 
   const range = useBillingDateRange(preset, customFrom, customTo);
 
@@ -207,7 +216,10 @@ export function BillingPage() {
     enabled: preset === "all_time" || Boolean(range.from && range.to),
   });
 
-  const sessions = sessionsQuery.data?.sessions ?? [];
+  const sessions = useMemo(
+    () => sessionsQuery.data?.sessions ?? [],
+    [sessionsQuery.data]
+  );
 
   const toggleSelected = useCallback((id: string, next: boolean) => {
     setSelectedIds((prev) => {
@@ -234,10 +246,22 @@ export function BillingPage() {
   }, [sessions, selectedIds]);
 
   const onSelectAllUnpaidInView = useCallback(() => {
-    setSelectedIds(
-      new Set(sessions.filter((s) => !s.isPaid).map((s) => s.id))
-    );
-  }, [sessions]);
+    const unpaidIds = sessions.filter((s) => !s.isPaid).map((s) => s.id);
+    if (unpaidIds.length === 0) return;
+
+    const allUnpaidSelected =
+      unpaidIds.every((id) => selectedIds.has(id));
+
+    if (allUnpaidSelected) {
+      setSelectedIds((prev) => {
+        const n = new Set(prev);
+        for (const id of unpaidIds) n.delete(id);
+        return n;
+      });
+    } else {
+      setSelectedIds(new Set(unpaidIds));
+    }
+  }, [sessions, selectedIds]);
 
   const onMarkSuccess = useCallback(() => {
     setSelectedIds(new Set());
@@ -288,7 +312,7 @@ export function BillingPage() {
           onValueChange={goToTab}
           className="w-full min-w-0 space-y-4"
         >
-          <TabsList className="grid h-auto w-full min-w-0 grid-cols-3 rounded-lg p-1">
+          <TabsList className="grid h-auto w-full min-w-0 grid-cols-4 rounded-lg p-1">
             <TabsTrigger value="ledger" className="text-xs sm:text-sm">
               Sessions
             </TabsTrigger>
@@ -297,6 +321,9 @@ export function BillingPage() {
             </TabsTrigger>
             <TabsTrigger value="tasks" className="text-xs sm:text-sm">
               Rates
+            </TabsTrigger>
+            <TabsTrigger value="ai_tools" className="text-xs sm:text-sm">
+              AI tools
             </TabsTrigger>
           </TabsList>
 
@@ -308,26 +335,28 @@ export function BillingPage() {
                 ? "Sessions"
                 : tab === "history"
                   ? "Payment history"
-                  : "Rates and billable tasks"
+                  : tab === "tasks"
+                    ? "Rates and billable tasks"
+                    : "AI subscriptions"
             }
             className={cn(
               "mt-0 w-full min-w-0 rounded-lg outline-none isolate",
               "min-h-[min(68vh,540px)] overflow-hidden",
-              "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              focusControl,
             )}
           >
             <div
               className={cn(
-                "flex w-[300%] will-change-transform transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                "flex w-[400%] will-change-transform transition-transform duration-500 ease-billing-carousel",
                 "motion-reduce:transition-none"
               )}
               style={{
-                transform: `translate3d(calc(-${BILLING_TAB_IDS.indexOf(tab)} * 100% / 3), 0, 0)`,
+                transform: `translate3d(calc(-${BILLING_TAB_IDS.indexOf(tab)} * 100% / 4), 0, 0)`,
               }}
             >
               <div
                 className={cn(
-                  "min-w-0 shrink-0 overflow-hidden flex-[0_0_calc(100%/3)]",
+                  "min-w-0 shrink-0 overflow-hidden flex-[0_0_calc(100%/4)]",
                   tab === "ledger"
                     ? "pointer-events-auto"
                     : "pointer-events-none"
@@ -337,70 +366,66 @@ export function BillingPage() {
                 <div className="space-y-6">
                   {hasEnrolledTasks ? (
                     <>
-                      <BillingFilters
-                        preset={preset}
-                        onPresetChange={setPreset}
-                        customFrom={customFrom}
-                        customTo={customTo}
-                        onCustomFromChange={setCustomFrom}
-                        onCustomToChange={setCustomTo}
-                        taskGroupId={taskGroupId}
-                        onTaskGroupIdChange={(v) => {
-                          setTaskGroupId(v);
-                          setTaskId("all");
-                        }}
-                        taskId={taskId}
-                        onTaskIdChange={setTaskId}
-                        status={status}
-                        onStatusChange={setStatus}
-                        groupBy={groupBy}
-                        onGroupByChange={setGroupBy}
-                        enrolledTasks={enrolledTasks}
-                        taskGroups={taskGroups}
-                        hasUngroupedTasks={hasUngroupedTasks}
-                      />
-
-                      <Card>
-                        <CardHeader className="pb-3">
-                          <CardTitle
-                            id="billing-tab-ledger-label"
-                            className="text-base"
-                          >
-                            Sessions
-                          </CardTitle>
-                          <CardDescription>
-                            Billable amounts from your timer (after your rates
-                            and rounding). Use filters to narrow, then pay
-                            what&apos;s selected.
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-3 pt-0">
-                          {sessionsQuery.isLoading && (
-                            <Skeleton className="h-40 w-full rounded-lg" />
-                          )}
-                          {sessionsQuery.isError && (
-                            <p className="text-sm text-destructive">
-                              {(sessionsQuery.error as Error)?.message ??
-                                "Failed to load"}
-                            </p>
-                          )}
-                          {!sessionsQuery.isLoading &&
-                            !sessionsQuery.isError && (
-                              <SessionLedger
-                                sessions={sessions}
-                                groupBy={groupBy}
-                                statusFilter={status}
-                                selectedIds={selectedIds}
-                                onToggleSelected={toggleSelected}
-                                onSelectGroup={onSelectGroup}
-                                onSelectAllUnpaidInView={
-                                  onSelectAllUnpaidInView
-                                }
-                                onMarkPaidClick={() => setMarkOpen(true)}
-                              />
-                            )}
-                        </CardContent>
-                      </Card>
+                <Card>
+                  <CardHeader className="space-y-1 pb-2">
+                    <CardTitle
+                      id="billing-tab-ledger-label"
+                      className="text-base"
+                    >
+                      Sessions
+                    </CardTitle>
+                    <CardDescription className="text-xs leading-snug">
+                      Billable time (rates below). List is the focus — use the
+                      compact bar to select payouts.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3 pt-0">
+                    <BillingFilters
+                      preset={preset}
+                      onPresetChange={setPreset}
+                      customFrom={customFrom}
+                      customTo={customTo}
+                      onCustomFromChange={setCustomFrom}
+                      onCustomToChange={setCustomTo}
+                      taskGroupId={taskGroupId}
+                      onTaskGroupIdChange={(v) => {
+                        setTaskGroupId(v);
+                        setTaskId("all");
+                      }}
+                      taskId={taskId}
+                      onTaskIdChange={setTaskId}
+                      status={status}
+                      onStatusChange={setStatus}
+                      groupBy={groupBy}
+                      onGroupByChange={setGroupBy}
+                      enrolledTasks={enrolledTasks}
+                      taskGroups={taskGroups}
+                      hasUngroupedTasks={hasUngroupedTasks}
+                    />
+                    {sessionsQuery.isLoading && (
+                      <Skeleton className="h-40 w-full rounded-lg" />
+                    )}
+                    {sessionsQuery.isError && (
+                      <p className="text-sm text-destructive">
+                        {(sessionsQuery.error as Error)?.message ??
+                          "Failed to load"}
+                      </p>
+                    )}
+                    {!sessionsQuery.isLoading &&
+                      !sessionsQuery.isError && (
+                        <SessionLedger
+                          sessions={sessions}
+                          groupBy={groupBy}
+                          statusFilter={status}
+                          selectedIds={selectedIds}
+                          onToggleSelected={toggleSelected}
+                          onSelectGroup={onSelectGroup}
+                          onSelectAllUnpaidInView={onSelectAllUnpaidInView}
+                          onMarkPaidClick={() => setMarkOpen(true)}
+                        />
+                      )}
+                  </CardContent>
+                </Card>
 
                       <details className="group rounded-xl border bg-muted/20 open:bg-card open:shadow-sm transition-colors">
                         <summary className="cursor-pointer list-none px-4 py-3 text-left [&::-webkit-details-marker]:hidden">
@@ -454,7 +479,7 @@ export function BillingPage() {
 
               <div
                 className={cn(
-                  "min-w-0 shrink-0 overflow-hidden flex-[0_0_calc(100%/3)]",
+                  "min-w-0 shrink-0 overflow-hidden flex-[0_0_calc(100%/4)]",
                   tab === "history"
                     ? "pointer-events-auto"
                     : "pointer-events-none"
@@ -480,7 +505,7 @@ export function BillingPage() {
 
               <div
                 className={cn(
-                  "min-w-0 shrink-0 overflow-hidden flex-[0_0_calc(100%/3)]",
+                  "min-w-0 shrink-0 overflow-hidden flex-[0_0_calc(100%/4)]",
                   tab === "tasks"
                     ? "pointer-events-auto"
                     : "pointer-events-none"
@@ -502,6 +527,18 @@ export function BillingPage() {
                   </div>
                   <TaskEnrollmentSheet />
                 </div>
+              </div>
+
+              <div
+                className={cn(
+                  "min-w-0 shrink-0 overflow-hidden flex-[0_0_calc(100%/4)]",
+                  tab === "ai_tools"
+                    ? "pointer-events-auto"
+                    : "pointer-events-none"
+                )}
+                aria-hidden={tab !== "ai_tools"}
+              >
+                <AiToolsTab />
               </div>
             </div>
           </div>

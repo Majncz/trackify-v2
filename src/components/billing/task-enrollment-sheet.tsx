@@ -13,6 +13,7 @@ import { DEFAULT_BILLING_CURRENCY } from "@/lib/billing-currencies";
 import { CurrencySelect } from "@/components/billing/currency-select";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { billingSurface } from "@/lib/billing-ui";
 import {
   resolveGroupAccent,
   taskAccentHex,
@@ -26,7 +27,6 @@ type BillingTaskRow = {
   hourlyRate: number;
   currency: string;
   roundingMins: number;
-  minSessionMins: number;
   task: {
     id: string;
     name: string;
@@ -41,23 +41,16 @@ async function fetchBillingTasks(): Promise<BillingTaskRow[]> {
   return res.json();
 }
 
-const ROUNDING = [
-  { value: 0, label: "None (exact minutes)" },
-  { value: 15, label: "15 min" },
-  { value: 30, label: "30 min" },
-  { value: 60, label: "1 hour" },
-] as const;
-
 function rateRowStripeAccent(task: Task): string {
   return task.taskGroup
     ? resolveGroupAccent(task.taskGroup)
     : taskAccentHex(task.id);
 }
 
-const selectClass = cn(
-  "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors",
-  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-);
+const ratesFieldLabelClass =
+  "text-[11px] font-medium uppercase tracking-wide text-muted-foreground";
+
+const rateInputClass = "h-10 tabular-nums bg-background shadow-sm";
 
 export function TaskEnrollmentSheet() {
   const qc = useQueryClient();
@@ -97,7 +90,6 @@ export function TaskEnrollmentSheet() {
           hourlyRate: vars.hourlyRate,
           currency: vars.currency ?? DEFAULT_BILLING_CURRENCY,
           roundingMins: 0,
-          minSessionMins: 0,
         }),
       });
       if (!res.ok) {
@@ -115,7 +107,6 @@ export function TaskEnrollmentSheet() {
         hourlyRate?: number;
         currency?: string;
         roundingMins?: number;
-        minSessionMins?: number;
       };
     }) => {
       const res = await fetch(`/api/billing/tasks/${vars.id}`, {
@@ -142,11 +133,15 @@ export function TaskEnrollmentSheet() {
     onSuccess: invalidate,
   });
 
-  const visibleTasks = useMemo(
-    () =>
-      tasks.filter((t: Task) => !t.hidden).sort((a: Task, b: Task) => a.name.localeCompare(b.name)),
-    [tasks]
-  );
+  const visibleTasks = useMemo(() => {
+    const list = tasks.filter((t: Task) => !t.hidden);
+    return [...list].sort((a: Task, b: Task) => {
+      const aOn = byTaskId.has(a.id);
+      const bOn = byTaskId.has(b.id);
+      if (aOn !== bOn) return aOn ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [tasks, byTaskId]);
 
   if (tasksLoading || billingLoading) {
     return (
@@ -161,7 +156,11 @@ export function TaskEnrollmentSheet() {
 
   return (
     <div className="space-y-4 pb-2">
-      <div className="rounded-lg border border-dashed border-border/70 bg-muted/15 px-3 py-2.5 text-sm text-muted-foreground leading-relaxed">
+      <div
+        className={cn(
+          "rounded-lg border-2 border-dashed border-border bg-muted/25 px-3 py-2.5 text-sm text-muted-foreground leading-relaxed shadow-inner"
+        )}
+      >
         <span className="font-medium text-foreground">How this list works.</span>{" "}
         The left edge uses your{" "}
         <span className="text-foreground">group color</span> when the task is in
@@ -178,11 +177,10 @@ export function TaskEnrollmentSheet() {
           return (
             <div
               key={task.id}
-              className="rounded-lg border border-border/70 bg-card text-card-foreground overflow-hidden shadow-sm"
+              className={cn(billingSurface.section, "border-l-[3px]")}
               style={{
-                borderLeftWidth: 3,
                 borderLeftColor: stripe,
-                backgroundColor: groupAccentSoftBg(stripe, 0.06),
+                backgroundColor: groupAccentSoftBg(stripe, b ? 0.05 : 0.08),
               }}
             >
               <div className="p-3 sm:p-4 space-y-3">
@@ -232,16 +230,21 @@ export function TaskEnrollmentSheet() {
 
                   <div className="flex shrink-0 items-start gap-2">
                     {!b ? (
-                      <div className="flex flex-wrap items-end justify-end gap-2 sm:gap-3">
-                        <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">
+                      <div className="grid w-full max-w-lg grid-cols-1 gap-3 sm:max-w-none sm:grid-cols-[minmax(6.5rem,8.5rem)_minmax(10.5rem,1fr)_auto] sm:items-end">
+                        <div className="space-y-1.5">
+                          <Label
+                            htmlFor={`enroll-rate-${task.id}`}
+                            className={ratesFieldLabelClass}
+                          >
                             Hourly rate
                           </Label>
                           <Input
+                            id={`enroll-rate-${task.id}`}
                             type="number"
                             min={0}
                             step={0.01}
-                            className="w-28 h-9"
+                            inputMode="decimal"
+                            className={cn(rateInputClass, "w-full")}
                             value={draftRate[task.id] ?? "50"}
                             onChange={(e) =>
                               setDraftRate((m) => ({
@@ -252,11 +255,15 @@ export function TaskEnrollmentSheet() {
                             placeholder="50"
                           />
                         </div>
-                        <div className="space-y-1 min-w-[11rem]">
-                          <Label className="text-xs text-muted-foreground">
+                        <div className="min-w-0 space-y-1.5">
+                          <Label
+                            htmlFor={`enroll-cur-${task.id}`}
+                            className={ratesFieldLabelClass}
+                          >
                             Currency
                           </Label>
                           <CurrencySelect
+                            id={`enroll-cur-${task.id}`}
                             value={
                               draftCurrency[task.id] ??
                               DEFAULT_BILLING_CURRENCY
@@ -270,8 +277,9 @@ export function TaskEnrollmentSheet() {
                           />
                         </div>
                         <Button
+                          type="button"
                           size="sm"
-                          className="mt-5 sm:mt-0 sm:self-end"
+                          className="h-10 w-full shrink-0 px-4 sm:w-auto"
                           disabled={enroll.isPending}
                           onClick={() => {
                             const raw = draftRate[task.id] ?? "50";
@@ -316,17 +324,25 @@ export function TaskEnrollmentSheet() {
                 </div>
 
                 {b ? (
-                  <div className="rounded-md border border-border/60 bg-background/90 p-3 shadow-sm space-y-3">
+                  <div className={cn(billingSurface.inset, "space-y-3")}>
                     <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                       Rate &amp; rules
                     </p>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Hourly rate</Label>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="min-w-0 space-y-1.5">
+                        <Label
+                          htmlFor={`rate-edit-${b.id}`}
+                          className={ratesFieldLabelClass}
+                        >
+                          Hourly rate
+                        </Label>
                         <Input
+                          id={`rate-edit-${b.id}`}
                           type="number"
                           min={0}
                           step={0.01}
+                          inputMode="decimal"
+                          className={cn(rateInputClass, "w-full")}
                           defaultValue={b.hourlyRate}
                           key={`rate-${b.id}-${b.hourlyRate}`}
                           onBlur={(e) => {
@@ -340,8 +356,11 @@ export function TaskEnrollmentSheet() {
                           }}
                         />
                       </div>
-                      <div className="space-y-1">
-                        <Label htmlFor={`cur-${b.id}`} className="text-xs">
+                      <div className="min-w-0 space-y-1.5">
+                        <Label
+                          htmlFor={`cur-${b.id}`}
+                          className={ratesFieldLabelClass}
+                        >
                           Currency
                         </Label>
                         <CurrencySelect
@@ -351,49 +370,6 @@ export function TaskEnrollmentSheet() {
                             patch.mutate({
                               id: b.id,
                               body: { currency: c },
-                            });
-                          }}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Round duration to</Label>
-                        <select
-                          className={selectClass}
-                          defaultValue={String(b.roundingMins)}
-                          key={`rnd-${b.id}-${b.roundingMins}`}
-                          onChange={(e) => {
-                            patch.mutate({
-                              id: b.id,
-                              body: {
-                                roundingMins: Number(e.target.value),
-                              },
-                            });
-                          }}
-                        >
-                          {ROUNDING.map((r) => (
-                            <option key={r.value} value={r.value}>
-                              {r.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">
-                          Ignore sessions under (minutes)
-                        </Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          step={1}
-                          defaultValue={b.minSessionMins}
-                          key={`min-${b.id}-${b.minSessionMins}`}
-                          onBlur={(e) => {
-                            const n = Number.parseInt(e.target.value, 10);
-                            if (!Number.isFinite(n) || n < 0) return;
-                            if (n === b.minSessionMins) return;
-                            patch.mutate({
-                              id: b.id,
-                              body: { minSessionMins: n },
                             });
                           }}
                         />
@@ -456,12 +432,11 @@ function TaskTotals({
         {
           hourlyRate: billing.hourlyRate,
           roundingMins: billing.roundingMins,
-          minSessionMins: billing.minSessionMins,
           currency: billing.currency,
         },
         null
       );
-      if (row) earn += row.earnings;
+      earn += row.earnings;
     }
     return earn;
   }, [task.events, task.id, task.name, billing]);

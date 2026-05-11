@@ -65,6 +65,16 @@
   .animate-pending-pulse {
     animation: pending-pulse 1.5s ease-in-out infinite;
   }
+
+  /** Hide browser steppers on number inputs (hourly rate, amounts, etc.) */
+  .no-input-spinner[type="number"] {
+    -moz-appearance: textfield;
+  }
+  .no-input-spinner[type="number"]::-webkit-outer-spin-button,
+  .no-input-spinner[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
 }
 
 
@@ -133,10 +143,14 @@
   }
   html {
     overflow-x: hidden;
+    /* Classic scrollbar gutter: keeps layout width stable when Radix toggles overflow (dialogs, etc.). */
+    overflow-y: scroll;
     -webkit-text-size-adjust: 100%;
+    scrollbar-gutter: stable;
   }
   body {
     @apply bg-background text-foreground overflow-x-hidden;
     min-height: 100dvh;
+    scrollbar-gutter: stable;
   }
 }

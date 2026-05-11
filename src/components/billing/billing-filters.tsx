@@ -3,14 +3,9 @@
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { billingSurface } from "@/lib/billing-ui";
+import { FormSelect, type FormSelectOption } from "@/components/ui/form-select";
 
 export type BillingRangePreset =
   | "this_week"
@@ -21,10 +16,21 @@ export type BillingRangePreset =
 export type BillingStatusFilter = "all" | "unpaid" | "paid";
 export type BillingGroupBy = "day" | "week" | "month";
 
-const selectClass = cn(
-  "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors",
-  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-);
+const periodOptions: FormSelectOption[] = [
+  { value: "this_week", label: "This week" },
+  { value: "this_month", label: "This month" },
+  { value: "last_month", label: "Last month" },
+  { value: "all_time", label: "All time" },
+  { value: "custom", label: "Custom…" },
+];
+
+const statusOptions: FormSelectOption[] = [
+  { value: "unpaid", label: "Unpaid" },
+  { value: "all", label: "All" },
+  { value: "paid", label: "Paid" },
+];
+
+const labelClass = "text-[11px] font-medium uppercase tracking-wide text-muted-foreground";
 
 export type BillingFiltersProps = {
   preset: BillingRangePreset;
@@ -67,150 +73,145 @@ export function BillingFilters({
   hasUngroupedTasks,
   className,
 }: BillingFiltersProps) {
+  const groupOptions: FormSelectOption[] = [
+    { value: "all", label: "All groups" },
+    ...(hasUngroupedTasks
+      ? [{ value: "ungrouped" as const, label: "Ungrouped" }]
+      : []),
+    ...taskGroups.map((g) => ({ value: g.id, label: g.name })),
+  ];
+
+  const taskOptions: FormSelectOption[] = [
+    { value: "all", label: "All enrolled" },
+    ...enrolledTasks.map((t) => ({ value: t.taskId, label: t.name })),
+  ];
+
   return (
-    <Card className={cn("overflow-hidden", className)}>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Filters</CardTitle>
-        <CardDescription>
-          One place to scope the numbers above, the list below, and the activity
-          calendar. Filter by task group to match how you organize work.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-5 pt-0">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="space-y-2 sm:col-span-1 lg:col-span-1">
-            <Label htmlFor="billing-period">Time period</Label>
-            <select
-              id="billing-period"
-              className={selectClass}
-              value={preset}
-              onChange={(e) =>
-                onPresetChange(e.target.value as BillingRangePreset)
-              }
-            >
-              <option value="this_week">This week</option>
-              <option value="this_month">This month</option>
-              <option value="last_month">Last month</option>
-              <option value="all_time">All time</option>
-              <option value="custom">Custom range…</option>
-            </select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="billing-task-group">Task group</Label>
-            <select
-              id="billing-task-group"
-              className={selectClass}
-              value={taskGroupId}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v === "all" || v === "ungrouped") {
-                  onTaskGroupIdChange(v);
-                  return;
-                }
-                onTaskGroupIdChange(v);
-              }}
-            >
-              <option value="all">All groups</option>
-              {hasUngroupedTasks ? (
-                <option value="ungrouped">Ungrouped only</option>
-              ) : null}
-              {taskGroups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="billing-task">Task</Label>
-            <select
-              id="billing-task"
-              className={selectClass}
-              value={taskId}
-              onChange={(e) => {
-                const v = e.target.value;
-                onTaskIdChange(v === "all" ? "all" : v);
-              }}
-            >
-              <option value="all">All enrolled tasks</option>
-              {enrolledTasks.map((t) => (
-                <option key={t.taskId} value={t.taskId}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="billing-status">Payment status</Label>
-            <select
-              id="billing-status"
-              className={selectClass}
-              value={status}
-              onChange={(e) =>
-                onStatusChange(e.target.value as BillingStatusFilter)
-              }
-            >
-              <option value="unpaid">Unpaid (ready to pay)</option>
-              <option value="all">All (unpaid + paid)</option>
-              <option value="paid">Paid only (read-only)</option>
-            </select>
-          </div>
+    <div
+      className={cn(
+        billingSurface.toolbar,
+        "px-2 py-2 sm:px-3 sm:py-2.5 space-y-2.5",
+        className
+      )}
+    >
+      <div className="grid grid-cols-2 gap-x-2 gap-y-2 lg:grid-cols-4 lg:gap-x-3">
+        <div className="space-y-1">
+          <Label htmlFor="billing-period" className={labelClass}>
+            Period
+          </Label>
+          <FormSelect
+            id="billing-period"
+            size="sm"
+            className="w-full min-w-0"
+            value={preset}
+            onValueChange={(v) => onPresetChange(v as BillingRangePreset)}
+            options={periodOptions}
+          />
         </div>
 
-        {preset === "custom" && (
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end rounded-md border border-dashed bg-muted/20 p-3">
-            <div className="space-y-1 flex-1">
-              <Label htmlFor="billing-from">From</Label>
-              <Input
-                id="billing-from"
-                type="date"
-                value={customFrom}
-                onChange={(e) => onCustomFromChange(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1 flex-1">
-              <Label htmlFor="billing-to">To</Label>
-              <Input
-                id="billing-to"
-                type="date"
-                value={customTo}
-                onChange={(e) => onCustomToChange(e.target.value)}
-              />
-            </div>
-          </div>
-        )}
+        <div className="space-y-1">
+          <Label htmlFor="billing-task-group" className={labelClass}>
+            Group
+          </Label>
+          <FormSelect
+            id="billing-task-group"
+            size="sm"
+            className="w-full min-w-0"
+            value={taskGroupId}
+            onValueChange={(v) =>
+              onTaskGroupIdChange(v as "all" | "ungrouped" | string)
+            }
+            options={groupOptions}
+          />
+        </div>
 
-        <details className="rounded-lg border bg-muted/15">
-          <summary className="cursor-pointer px-3 py-2.5 text-sm font-medium text-foreground list-none flex items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
-            <span>View options</span>
-            <span className="text-xs font-normal text-muted-foreground">
-              Group sessions by day, week, or month
-            </span>
-          </summary>
-          <div className="border-t px-3 py-3 flex flex-wrap gap-2">
-            {(
-              [
-                ["day", "By day"],
-                ["week", "By week"],
-                ["month", "By month"],
-              ] as const
-            ).map(([key, label]) => (
-              <Button
-                key={key}
-                type="button"
-                size="sm"
-                variant={groupBy === key ? "secondary" : "outline"}
-                onClick={() => onGroupByChange(key)}
-              >
-                {label}
-              </Button>
-            ))}
+        <div className="space-y-1">
+          <Label htmlFor="billing-task" className={labelClass}>
+            Task
+          </Label>
+          <FormSelect
+            id="billing-task"
+            size="sm"
+            className="w-full min-w-0"
+            value={taskId}
+            onValueChange={(v) => onTaskIdChange(v === "all" ? "all" : v)}
+            options={taskOptions}
+          />
+        </div>
+
+        <div className="space-y-1">
+          <Label htmlFor="billing-status" className={labelClass}>
+            Status
+          </Label>
+          <FormSelect
+            id="billing-status"
+            size="sm"
+            className="w-full min-w-0"
+            value={status}
+            onValueChange={(v) => onStatusChange(v as BillingStatusFilter)}
+            options={statusOptions}
+          />
+        </div>
+      </div>
+
+      {preset === "custom" && (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end rounded-lg border-2 border-dashed border-border bg-muted/30 px-2 py-2 shadow-inner">
+          <div className="space-y-0.5 flex-1 min-w-0">
+            <Label htmlFor="billing-from" className={labelClass}>
+              From
+            </Label>
+            <Input
+              id="billing-from"
+              type="date"
+              className="h-8 text-xs"
+              value={customFrom}
+              onChange={(e) => onCustomFromChange(e.target.value)}
+            />
           </div>
-        </details>
-      </CardContent>
-    </Card>
+          <div className="space-y-0.5 flex-1 min-w-0">
+            <Label htmlFor="billing-to" className={labelClass}>
+              To
+            </Label>
+            <Input
+              id="billing-to"
+              type="date"
+              className="h-8 text-xs"
+              value={customTo}
+              onChange={(e) => onCustomToChange(e.target.value)}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-1.5 border-t-2 border-border pt-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+        <span id="billing-group-by-label" className={cn(labelClass, "shrink-0")}>
+          Group list by
+        </span>
+        <div
+          className="flex flex-wrap gap-1"
+          role="group"
+          aria-labelledby="billing-group-by-label"
+        >
+          {(
+            [
+              ["day", "Day"],
+              ["week", "Week"],
+              ["month", "Month"],
+            ] as const
+          ).map(([key, label]) => (
+            <Button
+              key={key}
+              type="button"
+              size="sm"
+              variant={groupBy === key ? "secondary" : "outline"}
+              className="h-7 px-2.5 text-xs"
+              onClick={() => onGroupByChange(key)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }

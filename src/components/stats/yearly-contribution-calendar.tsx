@@ -10,6 +10,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import { focusControl } from "@/lib/focus-style";
 
 const OTHER_COLOR = "#6b7280";
 
@@ -197,7 +199,10 @@ export function YearlyContributionCalendar({
             <TooltipTrigger asChild>
               <button
                 type="button"
-                className="rounded-sm border-0 p-0 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 cursor-pointer"
+                className={cn(
+                  "rounded-sm border-0 p-0 outline-none cursor-pointer",
+                  focusControl,
+                )}
                 style={cellStyle}
                 aria-label={format(day, "MMMM d, yyyy")}
                 onClick={() => onDayClick!(dayKey, day)}
@@ -219,7 +224,10 @@ export function YearlyContributionCalendar({
             {billingClick ? (
               <button
                 type="button"
-                className="rounded-sm border-0 p-0 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 cursor-pointer"
+                className={cn(
+                  "rounded-sm border-0 p-0 outline-none cursor-pointer",
+                  focusControl,
+                )}
                 style={cellStyle}
                 aria-label={format(day, "MMMM d, yyyy")}
                 onClick={() => onDayClick!(dayKey, day)}
@@ -227,7 +235,10 @@ export function YearlyContributionCalendar({
             ) : (
               <button
                 type="button"
-                className="rounded-sm border-0 p-0 cursor-default outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                className={cn(
+                  "rounded-sm border-0 p-0 cursor-default outline-none",
+                  focusControl,
+                )}
                 style={cellStyle}
                 aria-label={format(day, "MMMM d, yyyy")}
               />

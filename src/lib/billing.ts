@@ -21,18 +21,6 @@ export function durationMinutesRaw(from: Date, to: Date): number {
   return Math.max(0, Math.floor((to.getTime() - from.getTime()) / 60_000));
 }
 
-/**
- * Round duration to billing increments. 0 = no rounding (use raw minutes as float for sub-minute work — we floor raw to whole minutes first).
- */
-export function applyRoundingToMinutes(
-  rawMinutes: number,
-  roundingMins: number
-): number {
-  if (rawMinutes <= 0) return 0;
-  if (!roundingMins || roundingMins <= 0) return rawMinutes;
-  return Math.round(rawMinutes / roundingMins) * roundingMins;
-}
-
 export function computeEarnings(
   durationMinutes: number,
   hourlyRate: number
@@ -45,8 +33,8 @@ export function computeEarnings(
 
 export type BillingTaskLike = {
   hourlyRate: number;
+  /** Ignored for amounts; billing uses exact tracked whole minutes. Kept for API/DB compatibility. */
   roundingMins: number;
-  minSessionMins: number;
   currency: string;
 };
 
@@ -77,7 +65,8 @@ export type BillingSessionRow = {
 };
 
 /**
- * Map a time entry + billing config to a session row, or null if below min session threshold.
+ * Map a time entry + billing config to a session row.
+ * When an event is paid and `paidAmount` is set, earnings reflect what was recorded at mark-paid (manual adjustments).
  */
 export function eventToBillingSession(
   event: {
@@ -87,17 +76,20 @@ export function eventToBillingSession(
     name: string;
     taskId: string;
     paymentRecordId: string | null;
+    paidAmount?: number | null;
   },
   taskName: string,
   billing: BillingTaskLike,
   paymentPaidAt: Date | null,
   taskGroup: BillingSessionRow["taskGroup"] = null
-): BillingSessionRow | null {
+): BillingSessionRow {
   const raw = durationMinutesRaw(event.from, event.to);
-  if (raw < billing.minSessionMins) return null;
-
-  const durationMinutes = applyRoundingToMinutes(raw, billing.roundingMins);
-  const earnings = computeEarnings(durationMinutes, billing.hourlyRate);
+  const durationMinutes = raw;
+  const computedEarnings = computeEarnings(durationMinutes, billing.hourlyRate);
+  const earnings =
+    event.paymentRecordId != null && event.paidAmount != null
+      ? Math.round(Number(event.paidAmount) * 100) / 100
+      : computedEarnings;
   const from = event.from;
   return {
     id: event.id,

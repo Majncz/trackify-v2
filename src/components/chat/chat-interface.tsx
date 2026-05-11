@@ -8,6 +8,7 @@ import remarkGfm from "remark-gfm";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { focusControl } from "@/lib/focus-style";
 import { ChatTabBar } from "@/components/chat/chat-tab-bar";
 import {
   Send,
@@ -674,7 +675,8 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
           disabled={isLoading}
           rows={1}
           className={cn(
-            "flex-1 resize-none rounded-md border border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+            "flex-1 resize-none rounded-md border border-input bg-background placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
+            focusControl,
             textSize,
             isSidebar ? "min-h-[32px] max-h-[80px] px-2 py-1.5" : "min-h-[40px] max-h-[120px] px-3 py-2"
           )}

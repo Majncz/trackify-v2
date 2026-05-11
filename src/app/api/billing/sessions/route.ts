@@ -139,12 +139,12 @@ export async function GET(request: NextRequest) {
           name: ev.name,
           taskId: ev.taskId,
           paymentRecordId: ev.paymentRecordId,
+          paidAmount: ev.paidAmount,
         },
         bt.task.name,
         {
           hourlyRate: bt.hourlyRate,
           roundingMins: bt.roundingMins,
-          minSessionMins: bt.minSessionMins,
           currency: bt.currency,
         },
         ev.paymentRecord?.paidAt ?? null,
@@ -156,7 +156,7 @@ export async function GET(request: NextRequest) {
             }
           : null
       );
-      if (row) sessions.push(row);
+      sessions.push(row);
     }
 
     return NextResponse.json({ sessions, groupBy });

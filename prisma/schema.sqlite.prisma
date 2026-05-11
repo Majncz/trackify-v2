@@ -11,17 +11,20 @@ datasource db {
 }
 
 model User {
-  id              String           @id @default(uuid())
-  email           String           @unique
-  password        String
-  tasks           Task[]
-  passwordResets  PasswordReset[]
-  conversations   Conversation[]
-  activeTimers    ActiveTimer[]
-  apiTokens       ApiToken[]
-  taskGroups      TaskGroup[]
-  billingTasks    BillingTask[]
-  paymentRecords  PaymentRecord[]
+  id                     String                 @id @default(uuid())
+  email                  String                 @unique
+  password               String
+  aiTargetHoursPer100Czk Float?
+  tasks                  Task[]
+  passwordResets         PasswordReset[]
+  conversations          Conversation[]
+  activeTimers           ActiveTimer[]
+  apiTokens              ApiToken[]
+  taskGroups             TaskGroup[]
+  billingTasks           BillingTask[]
+  paymentRecords         PaymentRecord[]
+  aiSubscriptionPresets  AiSubscriptionPreset[]
+  aiSubscriptionPeriods  AiSubscriptionPeriod[]
 
   @@map("trackify_user")
 }
@@ -38,18 +41,19 @@ model PasswordReset {
 }
 
 model Task {
-  id           String        @id @default(uuid())
-  name         String
-  hidden       Boolean       @default(false)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @default(now()) @updatedAt
-  userId       String
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  taskGroupId  String?
-  taskGroup    TaskGroup?    @relation(fields: [taskGroupId], references: [id], onDelete: SetNull)
-  events       Event[]
-  activeTimers ActiveTimer[]
-  billingTask  BillingTask?
+  id                  String               @id @default(uuid())
+  name                String
+  hidden              Boolean              @default(false)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @default(now()) @updatedAt
+  userId              String
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskGroupId         String?
+  taskGroup           TaskGroup?           @relation(fields: [taskGroupId], references: [id], onDelete: SetNull)
+  events              Event[]
+  activeTimers        ActiveTimer[]
+  billingTask         BillingTask?
+  aiSubscriptionLinks TaskAiSubscription[]
 
   @@index([userId, hidden])
   @@index([taskGroupId])
@@ -65,6 +69,7 @@ model Event {
   task             Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
   paymentRecordId  String?
   paymentRecord    PaymentRecord?   @relation(fields: [paymentRecordId], references: [id], onDelete: SetNull)
+  paidAmount       Float?
 
   @@index([taskId, from])
   @@index([paymentRecordId])
@@ -80,7 +85,6 @@ model BillingTask {
   hourlyRate     Float
   currency       String   @default("CZK")
   roundingMins   Int      @default(0)
-  minSessionMins Int      @default(0)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -168,4 +172,51 @@ model ApiToken {
 
   @@index([token])
   @@map("trackify_api_token")
+}
+
+model AiSubscriptionPreset {
+  id          String                 @id @default(uuid())
+  userId      String
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  providerKey String?
+  isBuiltIn   Boolean                @default(false)
+  sortOrder   Int                    @default(0)
+  createdAt   DateTime               @default(now())
+  periods     AiSubscriptionPeriod[]
+
+  @@index([userId, sortOrder])
+  @@map("trackify_ai_subscription_preset")
+}
+
+model AiSubscriptionPeriod {
+  id        String               @id @default(uuid())
+  userId    String
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  presetId  String?
+  preset    AiSubscriptionPreset? @relation(fields: [presetId], references: [id], onDelete: SetNull)
+  name      String
+  price     Float
+  currency  String               @default("CZK")
+  startsAt  DateTime
+  endsAt    DateTime?
+  note      String?
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  taskLinks TaskAiSubscription[]
+
+  @@index([userId, startsAt])
+  @@index([userId, endsAt])
+  @@map("trackify_ai_subscription_period")
+}
+
+model TaskAiSubscription {
+  taskId                 String
+  task                   Task                 @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  aiSubscriptionPeriodId String
+  period                 AiSubscriptionPeriod @relation(fields: [aiSubscriptionPeriodId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, aiSubscriptionPeriodId])
+  @@index([aiSubscriptionPeriodId])
+  @@map("trackify_task_ai_subscription")
 }

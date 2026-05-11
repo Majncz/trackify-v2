@@ -6,6 +6,7 @@ import { useGroups } from "@/hooks/use-groups";
 import type { TaskGroup } from "@/hooks/use-groups";
 import { groupAccentHex, resolveGroupAccent } from "@/lib/group-accent";
 import { GROUP_COLOR_PRESETS } from "@/lib/group-color-presets";
+import { focusControl } from "@/lib/focus-style";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,7 +55,6 @@ import {
   Trash2,
   Plus,
   Check,
-  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -363,7 +363,8 @@ function GroupColorPresetGrid({
             aria-selected={selected}
             title={hex}
             className={cn(
-              "h-9 w-9 shrink-0 rounded-md border-2 transition-[transform,box-shadow] outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+              "h-9 w-9 shrink-0 rounded-md border-2 transition-[transform,box-shadow] outline-none",
+              focusControl,
               selected
                 ? "border-foreground shadow-md scale-105"
                 : "border-border/80 hover:scale-105 hover:border-foreground/50",
@@ -416,7 +417,7 @@ export function StatsPageClient() {
 
   // ─── Computed date range ──────────────────────────────────────────────────
 
-  const { from, to, label } = useMemo(() => {
+  const { from, to } = useMemo(() => {
     const now = new Date();
     switch (rangeType) {
       case "today":
@@ -504,15 +505,6 @@ export function StatsPageClient() {
       fill: TASK_CHART_OTHER_HEX,
     });
     return series;
-  }, [topTasks]);
-
-  /** Aligns bar colors with Daily breakdown / Time Spent (top 5 + Other). */
-  const taskChartColor = useMemo(() => {
-    const m = new Map<string, string>();
-    topTasks.forEach(({ task }, i) => {
-      m.set(task.id, TASK_CHART_HEX[i % TASK_CHART_HEX.length]);
-    });
-    return (taskId: string) => m.get(taskId) ?? TASK_CHART_OTHER_HEX;
   }, [topTasks]);
 
   // Trend chart: per-day (or week) stacked hours by top tasks + other (matches dashboard colors)
@@ -663,7 +655,7 @@ export function StatsPageClient() {
           orphanIds.push(id);
           continue;
         }
-        const tMs = taskMs(task, from, to);
+        const tMs = taskMs(task, null, null);
         byIdMs.set(id, tMs);
         ms += tMs;
       }
@@ -679,7 +671,7 @@ export function StatsPageClient() {
 
       return { group: g, ms, membersSorted, orphanIds };
     });
-  }, [groups, tasks, from, to]);
+  }, [groups, tasks]);
 
   const groupsWithTime = useMemo(
     () => groupData.filter((g) => g.ms > 0),
@@ -1130,9 +1122,9 @@ export function StatsPageClient() {
                           </span>
                         ) : (
                           <div className="max-h-44 overflow-y-auto overscroll-contain space-y-1.5 pr-0.5">
-                            {membersSorted.map(({ task: t, ms: tMs }) => {
+                            {membersSorted.map(({ task: t, ms: tMs }, mi) => {
                               const pct = ms > 0 ? (tMs / ms) * 100 : 0;
-                              const hex = taskChartColor(t.id);
+                              const hex = TASK_CHART_HEX[mi % TASK_CHART_HEX.length];
                               return (
                                 <div
                                   key={t.id}
@@ -1173,7 +1165,7 @@ export function StatsPageClient() {
                           </div>
                         )}
                         {membersSorted.length > 0 && ms === 0 && (
-                          <p className="text-[11px] text-muted-foreground mt-1">No time in range</p>
+                          <p className="text-[11px] text-muted-foreground mt-1">No tracked time</p>
                         )}
                       </td>
                       <td className="py-3 px-2 text-right tabular-nums font-semibold whitespace-nowrap align-middle">

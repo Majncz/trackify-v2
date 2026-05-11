@@ -16,7 +16,6 @@ const enrollSchema = z.object({
       message: "roundingMins must be 0, 15, 30, or 60",
     })
     .default(0),
-  minSessionMins: z.number().int().min(0).max(24 * 60).default(0),
 });
 
 function devErrorDetail(error: unknown): string | undefined {
@@ -95,7 +94,6 @@ export async function POST(request: NextRequest) {
         hourlyRate: parsed.hourlyRate,
         currency: parsed.currency,
         roundingMins: parsed.roundingMins,
-        minSessionMins: parsed.minSessionMins,
       },
       include: {
         task: { select: taskInclude },

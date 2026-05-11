@@ -8,6 +8,8 @@ const createPaymentSchema = z.object({
   eventIds: z.array(z.string().uuid()).min(1),
   paidAt: z.string().datetime(),
   note: z.string().max(2000).optional(),
+  /** Per-event final amounts (same keys as eventIds). Optional; defaults to rate × duration. */
+  lineAmounts: z.record(z.string().uuid(), z.number().nonnegative()).optional(),
 });
 
 function devErrorDetail(error: unknown): string | undefined {
@@ -62,12 +64,12 @@ export async function GET(request: NextRequest) {
               name: ev.name,
               taskId: ev.taskId,
               paymentRecordId: ev.paymentRecordId,
+              paidAmount: ev.paidAmount,
             },
             ev.task.name,
             {
               hourlyRate: bt.hourlyRate,
               roundingMins: bt.roundingMins,
-              minSessionMins: bt.minSessionMins,
               currency: bt.currency,
             },
             r.paidAt,
@@ -79,7 +81,7 @@ export async function GET(request: NextRequest) {
                 }
               : null
           );
-          if (row) sessions.push(row);
+          sessions.push(row);
         }
 
         return {
@@ -127,6 +129,36 @@ export async function POST(request: NextRequest) {
     const billingByTaskId = new Map(billingTasks.map((b) => [b.taskId, b]));
 
     const uniqueIds = Array.from(new Set(parsed.eventIds));
+    const lineAmounts = parsed.lineAmounts;
+    if (lineAmounts) {
+      if (Object.keys(lineAmounts).length !== uniqueIds.length) {
+        return NextResponse.json(
+          {
+            error:
+              "lineAmounts must include exactly one amount per selected session",
+          },
+          { status: 400 }
+        );
+      }
+      for (const id of uniqueIds) {
+        if (lineAmounts[id] === undefined) {
+          return NextResponse.json(
+            { error: "lineAmounts must include every selected session" },
+            { status: 400 }
+          );
+        }
+      }
+      const idSet = new Set(uniqueIds);
+      for (const k of Object.keys(lineAmounts)) {
+        if (!idSet.has(k)) {
+          return NextResponse.json(
+            { error: "lineAmounts contains an unknown event id" },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     if (uniqueIds.length !== parsed.eventIds.length) {
       return NextResponse.json(
         { error: "Duplicate event ids in request" },
@@ -158,6 +190,8 @@ export async function POST(request: NextRequest) {
     let totalMinutes = 0;
     let paymentCurrency: string | null = null;
 
+    const perEvent: { id: string; amount: number }[] = [];
+
     for (const ev of events) {
       if (!enrolledIds.has(ev.taskId)) {
         return NextResponse.json(
@@ -182,24 +216,23 @@ export async function POST(request: NextRequest) {
           name: ev.name,
           taskId: ev.taskId,
           paymentRecordId: ev.paymentRecordId,
+          paidAmount: null,
         },
         "",
         {
           hourlyRate: bt.hourlyRate,
           roundingMins: bt.roundingMins,
-          minSessionMins: bt.minSessionMins,
           currency: bt.currency,
         },
         ev.paymentRecord?.paidAt ?? null
       );
-      if (!row) {
-        return NextResponse.json(
-          { error: "Some events are below the minimum billable session length" },
-          { status: 400 }
-        );
-      }
-      totalAmount += row.earnings;
+      const amount =
+        lineAmounts != null
+          ? Math.round(lineAmounts[ev.id]! * 100) / 100
+          : Math.round(row.earnings * 100) / 100;
+      totalAmount += amount;
       totalMinutes += row.durationMinutes;
+      perEvent.push({ id: ev.id, amount });
     }
 
     totalAmount = Math.round(totalAmount * 100) / 100;
@@ -216,10 +249,12 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      await tx.event.updateMany({
-        where: { id: { in: uniqueIds } },
-        data: { paymentRecordId: created.id },
-      });
+      for (const { id, amount } of perEvent) {
+        await tx.event.update({
+          where: { id },
+          data: { paymentRecordId: created.id, paidAmount: amount },
+        });
+      }
 
       return created;
     });

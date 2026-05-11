@@ -84,14 +84,16 @@ export function BillingGuide({ onOpenTasksTab }: BillingGuideProps) {
           </li>
           <li>
             <span className="text-foreground font-medium">Sessions</span> tab:
-            set filters (period, task group, single task, paid/unpaid), then use
-            the list.
+            use the filters at the top of the card (period, task group, task,
+            status), then work the list below.
           </li>
           <li>
             Tap an <span className="text-foreground font-medium">unpaid row</span>{" "}
-            to select it (or use the checkbox), then{" "}
+            to select it (or the checkbox). Use{" "}
+            <span className="text-foreground font-medium">All unpaid</span>{" "}
+            for the whole list (again to clear), then{" "}
             <span className="text-foreground font-medium">Mark as paid…</span>{" "}
-            one currency per batch. Past batches live under{" "}
+            — one currency per batch. History is under{" "}
             <span className="text-foreground font-medium">History</span>.
           </li>
         </ol>

@@ -1,7 +1,18 @@
 "use client";
 
-import { DEFAULT_BILLING_CURRENCY, billingCurrencySelectOptions } from "@/lib/billing-currencies";
+import {
+  DEFAULT_BILLING_CURRENCY,
+  billingCurrencySelectOptions,
+} from "@/lib/billing-currencies";
 import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { formSelectContentProps } from "@/components/ui/form-select";
 
 type CurrencySelectProps = {
   id?: string;
@@ -10,11 +21,6 @@ type CurrencySelectProps = {
   disabled?: boolean;
   className?: string;
 };
-
-const selectClassName = cn(
-  "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm",
-  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-);
 
 export function CurrencySelect({
   id,
@@ -30,18 +36,25 @@ export function CurrencySelect({
   const options = billingCurrencySelectOptions(normalized);
 
   return (
-    <select
-      id={id}
-      className={cn(selectClassName, className)}
+    <Select
       value={normalized}
+      onValueChange={onChange}
       disabled={disabled}
-      onChange={(e) => onChange(e.target.value)}
     >
-      {options.map((o) => (
-        <option key={o.code} value={o.code}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+      <SelectTrigger
+        id={id}
+        className={cn("w-full min-w-0", className)}
+        aria-label={id ? undefined : "Currency"}
+      >
+        <SelectValue placeholder="Choose currency" />
+      </SelectTrigger>
+      <SelectContent {...formSelectContentProps}>
+        {options.map((o) => (
+          <SelectItem key={o.code} value={o.code}>
+            {o.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { focusControl } from "@/lib/focus-style";
 import {
   BarChart,
   Bar,
@@ -19,21 +20,13 @@ import {
 } from "recharts";
 import {
   startOfDay,
-  startOfWeek,
   endOfDay,
-  endOfWeek,
   subDays,
   format,
   eachDayOfInterval,
   addHours,
-  addDays,
   addMinutes,
 } from "date-fns";
-import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "@/components/ui/tooltip";
 import { formatHeatMinutes } from "@/lib/format-heat-minutes";
 import {
   getOverlapDuration,
@@ -1153,7 +1146,10 @@ function WeekCalendarView({
                           <button
                             key={`${globalIdx}-${hour}-${sqIdx}`}
                             type="button"
-                            className="rounded-sm border-0 p-0 cursor-default outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                            className={cn(
+                              "rounded-sm border-0 p-0 cursor-default outline-none",
+                              focusControl,
+                            )}
                             style={cubeStyle}
                             aria-label="Time segment details"
                             onMouseEnter={(e) => {

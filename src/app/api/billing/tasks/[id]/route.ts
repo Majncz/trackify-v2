@@ -16,7 +16,6 @@ const patchSchema = z
         message: "roundingMins must be 0, 15, 30, or 60",
       })
       .optional(),
-    minSessionMins: z.number().int().min(0).max(24 * 60).optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "No fields to update",

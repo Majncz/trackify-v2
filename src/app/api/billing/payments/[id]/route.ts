@@ -61,12 +61,12 @@ export async function GET(
           name: ev.name,
           taskId: ev.taskId,
           paymentRecordId: ev.paymentRecordId,
+          paidAmount: ev.paidAmount,
         },
         ev.task.name,
         {
           hourlyRate: bt.hourlyRate,
           roundingMins: bt.roundingMins,
-          minSessionMins: bt.minSessionMins,
           currency: bt.currency,
         },
         record.paidAt,
@@ -78,7 +78,7 @@ export async function GET(
             }
           : null
       );
-      if (row) sessions.push(row);
+      sessions.push(row);
     }
 
     return NextResponse.json({
@@ -125,7 +125,7 @@ export async function DELETE(
     await prisma.$transaction([
       prisma.event.updateMany({
         where: { paymentRecordId: id },
-        data: { paymentRecordId: null },
+        data: { paymentRecordId: null, paidAmount: null },
       }),
       prisma.paymentRecord.delete({ where: { id } }),
     ]);

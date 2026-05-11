@@ -14,6 +14,8 @@ import {
   taskAccentHex,
   groupAccentSoftBg,
 } from "@/lib/group-accent";
+import { billingSurface, BILLING_SESSION_ACCENT_WASH_ALPHA } from "@/lib/billing-ui";
+import { cn } from "@/lib/utils";
 
 type PaymentListItem = {
   id: string;
@@ -26,43 +28,99 @@ type PaymentListItem = {
   sessions: BillingSessionRow[];
 };
 
+function formatSessionWhen(fromIso: string, toIso: string): string {
+  const from = new Date(fromIso);
+  const to = new Date(toIso);
+  const sameDay = format(from, "yyyy-MM-dd") === format(to, "yyyy-MM-dd");
+  if (sameDay) {
+    return `${format(from, "MMM d, yyyy")} · ${format(from, "HH:mm")}–${format(
+      to,
+      "HH:mm"
+    )}`;
+  }
+  return `${format(from, "MMM d, yyyy HH:mm")} → ${format(
+    to,
+    "MMM d, yyyy HH:mm"
+  )}`;
+}
+
 function PaymentSessionLine({
   taskName,
   groupName,
-  subtitle,
+  sessionFrom,
+  sessionTo,
+  markedPaidAt,
+  billedDurationMinutes,
   accent,
   trailing,
 }: {
   taskName: string;
   groupName: string | null;
-  subtitle: string;
+  sessionFrom: string;
+  sessionTo: string;
+  markedPaidAt: string;
+  billedDurationMinutes: number;
   accent: string;
   trailing?: ReactNode;
 }) {
+  const sessionWhen = formatSessionWhen(sessionFrom, sessionTo);
+  const paidWhen = format(new Date(markedPaidAt), "MMM d, yyyy · HH:mm");
+  const durationLabel = formatDurationMinutes(billedDurationMinutes);
+
+  const metaLineClass =
+    "flex flex-wrap gap-x-1.5 gap-y-0.5 text-xs tabular-nums leading-snug";
+  const labelClass = "shrink-0 font-medium text-muted-foreground";
+
   return (
     <div
-      className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded-md bg-muted/20 px-2.5 py-1.5 text-sm border-l-[3px] border-solid"
+      className={cn(
+        "flex w-full min-w-0 flex-row flex-wrap items-start justify-between gap-x-3 gap-y-2 border-l-[3px] px-2.5 py-2",
+        billingSurface.row({ interactive: false }),
+        "text-sm"
+      )}
       style={{
         borderLeftColor: accent,
-        backgroundColor: groupAccentSoftBg(accent, 0.08),
+        backgroundColor: groupAccentSoftBg(
+          accent,
+          BILLING_SESSION_ACCENT_WASH_ALPHA
+        ),
       }}
     >
-      <div className="min-w-0 flex-1">
-        <p className="font-medium leading-tight">
-          {taskName}
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <div className="flex flex-wrap items-center gap-2 gap-y-1">
+          <p className="text-sm font-medium leading-tight text-foreground">
+            {taskName}
+          </p>
           {groupName ? (
-            <>
-              <span className="font-normal text-muted-foreground"> · </span>
-              <span className="font-medium text-muted-foreground">
-                {groupName}
-              </span>
-            </>
+            <Badge
+              variant="outline"
+              className="text-[10px] font-normal px-1.5 py-0 h-5 border-0"
+              style={{
+                color: accent,
+                backgroundColor: groupAccentSoftBg(accent, 0.18),
+              }}
+            >
+              {groupName}
+            </Badge>
           ) : null}
-        </p>
-        <p className="text-xs text-muted-foreground tabular-nums">{subtitle}</p>
+        </div>
+        <div className="space-y-1 text-muted-foreground">
+          <p className={metaLineClass}>
+            <span className={labelClass}>Session</span>
+            <span className="min-w-0 text-foreground/90">{sessionWhen}</span>
+          </p>
+          <p className={metaLineClass}>
+            <span className={labelClass}>Marked paid</span>
+            <span className="min-w-0 text-foreground/90">{paidWhen}</span>
+          </p>
+          <p className={metaLineClass}>
+            <span className={labelClass}>Duration</span>
+            <span className="min-w-0 text-foreground/90">{durationLabel}</span>
+          </p>
+        </div>
       </div>
       {trailing != null ? (
-        <div className="shrink-0 tabular-nums text-xs font-semibold sm:text-sm">
+        <div className="shrink-0 self-start tabular-nums text-xs font-semibold sm:text-sm sm:pt-0.5">
           {trailing}
         </div>
       ) : null}
@@ -116,7 +174,7 @@ export function PaymentHistory() {
 
   if (isError || !data) {
     return (
-      <div className="rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-6 text-sm text-destructive">
+      <div className="rounded-xl border-2 border-destructive/40 bg-destructive/5 px-4 py-6 text-sm text-destructive">
         Could not load payment history.
       </div>
     );
@@ -124,7 +182,7 @@ export function PaymentHistory() {
 
   if (data.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-border/70 bg-muted/10 px-4 py-10 text-center text-sm text-muted-foreground">
+      <div className="rounded-xl border-2 border-dashed border-border bg-muted/25 px-4 py-10 text-center text-sm text-muted-foreground shadow-inner">
         No payments recorded yet. Mark sessions as paid from the Ledger tab.
       </div>
     );
@@ -136,10 +194,7 @@ export function PaymentHistory() {
         const n = p.sessions.length;
 
         return (
-          <div
-            key={p.id}
-            className="rounded-lg border overflow-hidden bg-card shadow-sm"
-          >
+          <div key={p.id} className={billingSurface.section}>
             <div className="flex flex-wrap items-start gap-3 p-3 sm:p-4">
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -147,19 +202,19 @@ export function PaymentHistory() {
                     {formatMoney(p.totalAmount, p.currency)}
                   </span>
                   <span className="text-sm text-muted-foreground">
-                    {format(new Date(p.paidAt), "MMM d, yyyy")}
+                    {format(new Date(p.paidAt), "MMM d, yyyy · HH:mm")}
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                   <Badge variant="secondary" className="font-normal">
                     {n} session{n !== 1 ? "s" : ""}
                   </Badge>
                   <span className="tabular-nums">
-                    {formatDurationMinutes(p.totalMinutes)} billable
+                    {formatDurationMinutes(p.totalMinutes)}
                   </span>
                 </div>
                 {p.note ? (
-                  <p className="text-xs text-muted-foreground pt-0.5 border-t border-border/50 mt-2">
+                  <p className="text-xs text-muted-foreground pt-0.5 border-t-2 border-border mt-2">
                     {p.note}
                   </p>
                 ) : null}
@@ -186,7 +241,7 @@ export function PaymentHistory() {
               </Button>
             </div>
 
-            <div className="border-t border-border/60 px-3 pb-3 pt-2 sm:px-4 space-y-1.5">
+            <div className="space-y-2 border-t-2 border-border bg-muted/20 px-3 pb-3 pt-3 sm:px-4">
               <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground mb-2">
                 Sessions in this payment
               </p>
@@ -205,7 +260,10 @@ export function PaymentHistory() {
                       key={s.id}
                       taskName={s.taskName}
                       groupName={s.taskGroup?.name ?? null}
-                      subtitle={`${format(new Date(s.from), "MMM d · HH:mm")} · ${formatDurationMinutes(s.durationMinutes)}`}
+                      sessionFrom={s.from}
+                      sessionTo={s.to}
+                      markedPaidAt={s.paymentPaidAt ?? p.paidAt}
+                      billedDurationMinutes={s.durationMinutes}
                       accent={accent}
                       trailing={formatMoney(s.earnings, s.currency)}
                     />

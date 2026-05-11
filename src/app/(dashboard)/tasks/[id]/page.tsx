@@ -12,6 +12,7 @@ import { formatDurationWords } from "@/lib/utils";
 import { ArrowLeft, EyeOff, Clock, Calendar } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
+import { TaskAiSubscriptionsCard } from "@/components/tasks/task-ai-subscriptions-card";
 
 export default function TaskDetailPage({
   params,
@@ -161,6 +162,8 @@ export default function TaskDetailPage({
           )}
         </CardContent>
       </Card>
+
+      <TaskAiSubscriptionsCard taskId={task.id} />
     </div>
   );
 }
