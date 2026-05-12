@@ -14,6 +14,20 @@ function isPostgresUrl(url: string): boolean {
   return url.startsWith("postgresql:") || url.startsWith("postgres:");
 }
 
+/** Avoid ::1 when `localhost` resolves to IPv6 but the mapped port is IPv4-only. */
+function normalizePostgresUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    if (u.hostname.toLowerCase() === "localhost") {
+      u.hostname = "127.0.0.1";
+      return u.toString();
+    }
+  } catch {
+    /* keep original */
+  }
+  return url;
+}
+
 function createPrismaClient() {
   const url = process.env.DATABASE_URL?.trim();
   if (!url) {
@@ -40,7 +54,7 @@ function createPrismaClient() {
   }
 
   const pool = new Pool({
-    connectionString: url,
+    connectionString: normalizePostgresUrl(url),
   });
 
   const adapter = new PrismaPg(pool);
