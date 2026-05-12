@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import {
   DEFAULT_BILLING_CURRENCY,
   billingCurrencySelectOptions,
@@ -12,7 +13,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formSelectContentProps } from "@/components/ui/form-select";
+import {
+  formSelectContentProps,
+  useScopedSelectOpen,
+} from "@/components/ui/form-select";
 
 type CurrencySelectProps = {
   id?: string;
@@ -34,12 +38,17 @@ export function CurrencySelect({
       ? value.trim().toUpperCase()
       : DEFAULT_BILLING_CURRENCY;
   const options = billingCurrencySelectOptions(normalized);
+  const instanceId = React.useId();
+  const scoped = useScopedSelectOpen(instanceId);
 
   return (
     <Select
       value={normalized}
       onValueChange={onChange}
       disabled={disabled}
+      {...(scoped
+        ? { open: scoped.open, onOpenChange: scoped.onOpenChange }
+        : {})}
     >
       <SelectTrigger
         id={id}

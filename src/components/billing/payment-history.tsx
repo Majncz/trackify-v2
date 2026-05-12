@@ -74,12 +74,11 @@ function PaymentSessionLine({
   return (
     <div
       className={cn(
-        "flex w-full min-w-0 flex-row flex-wrap items-start justify-between gap-x-3 gap-y-2 border-l-[3px] px-2.5 py-2",
+        "flex w-full min-w-0 flex-row flex-wrap items-start justify-between gap-x-3 gap-y-2 px-2.5 py-2",
         billingSurface.row({ interactive: false }),
         "text-sm"
       )}
       style={{
-        borderLeftColor: accent,
         backgroundColor: groupAccentSoftBg(
           accent,
           BILLING_SESSION_ACCENT_WASH_ALPHA

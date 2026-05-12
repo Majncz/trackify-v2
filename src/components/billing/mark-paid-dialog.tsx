@@ -275,10 +275,9 @@ export function MarkPaidDialog({
                       <div
                         className={cn(
                           billingSurface.row({ interactive: false }),
-                          "border-l-[3px] px-2 py-1.5 sm:px-2.5 sm:py-1.5"
+                          "px-2 py-1.5 sm:px-2.5 sm:py-1.5"
                         )}
                         style={{
-                          borderLeftColor: accent,
                           backgroundColor: groupAccentSoftBg(accent, 0.06),
                         }}
                         role="listitem"

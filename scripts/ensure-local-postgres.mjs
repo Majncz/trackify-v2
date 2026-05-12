@@ -114,7 +114,7 @@ try {
   } catch {
     console.error(
       `Postgres never became reachable at ${checkHost}:${port}. ` +
-        `Run npm run db:up, or set DATABASE_URL to SQLite (file:./prisma/dev.db) and use npm run dev:sqlite.`
+        `Run npm run db:up, or set DATABASE_URL to SQLite (file:./dev.db → prisma/dev.db) and use npm run dev:sqlite.`
     );
     process.exit(1);
   }

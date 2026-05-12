@@ -57,13 +57,47 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
+        if ("email" in user && typeof user.email === "string") {
+          token.email = user.email;
+        }
+      } else if (typeof token.id === "string" && token.email == null) {
+        const row = await prisma.user.findUnique({
+          where: { id: token.id },
+          select: { email: true },
+        });
+        if (row?.email) token.email = row.email;
       }
       return token;
     },
     async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id as string;
+      if (!session.user) return session;
+
+      const tokenId = typeof token.id === "string" ? token.id : undefined;
+      const tokenEmail =
+        typeof token.email === "string" ? token.email.trim() : undefined;
+
+      let row =
+        tokenId != null
+          ? await prisma.user.findUnique({
+              where: { id: tokenId },
+              select: { id: true, email: true },
+            })
+          : null;
+
+      if (!row && tokenEmail) {
+        row = await prisma.user.findUnique({
+          where: { email: tokenEmail },
+          select: { id: true, email: true },
+        });
       }
+
+      if (row) {
+        session.user.id = row.id;
+        session.user.email = row.email;
+      } else if (tokenId) {
+        session.user.id = tokenId;
+      }
+
       return session;
     },
   },

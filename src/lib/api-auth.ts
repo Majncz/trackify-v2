@@ -10,11 +10,24 @@ export async function getAuthUser(request: Request) {
   // First, try NextAuth session (for web clients)
   const session = await auth();
   if (session?.user?.id) {
-    // Return user from database to ensure consistency
-    const user = await prisma.user.findUnique({
+    // Prefer DB row by JWT id; if missing (new DB / re-seed / SQLite swap), fall back to email.
+    let user = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: { id: true, email: true },
     });
+    if (
+      !user &&
+      session.user.email &&
+      typeof session.user.email === "string"
+    ) {
+      const email = session.user.email.trim();
+      if (email.length > 0) {
+        user = await prisma.user.findUnique({
+          where: { email },
+          select: { id: true, email: true },
+        });
+      }
+    }
     if (user) {
       return user;
     }

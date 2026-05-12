@@ -2,7 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { enrichAiSubscriptionPeriods } from "@/lib/ai-subscription-enrich";
-import { ensureBuiltInAiPresets } from "@/lib/ai-subscription-metrics";
+import {
+  ensureBuiltInAiPresets,
+  validateAiBillingDepletedAt,
+} from "@/lib/ai-subscription-metrics";
+import { optionalBillingEmailSchema } from "@/lib/ai-subscription-email-schema";
+import { optionalBillingProviderUrlSchema } from "@/lib/ai-subscription-provider-url-schema";
+import {
+  AI_BILLING_CADENCE_DEFAULT,
+  aiBillingCadenceZod,
+  normalizeAiBillingCadence,
+} from "@/lib/ai-subscription-cadence";
+import { prismaKnownRequestUserMessage } from "@/lib/prisma-client-errors";
 import { z } from "zod";
 
 function devErrorDetail(error: unknown): string | undefined {
@@ -10,14 +21,23 @@ function devErrorDetail(error: unknown): string | undefined {
   return error instanceof Error ? error.message : String(error);
 }
 
+const aiBillingKindZod = z.enum(["purchase", "recurring_monthly"]);
+
 const createPeriodSchema = z.object({
   name: z.string().min(1).max(200),
   price: z.number().positive(),
   currency: z.string().min(1).max(12).default("CZK"),
   startsAt: z.string().datetime(),
   endsAt: z.string().datetime().optional().nullable(),
+  depletedAt: z.union([z.string().datetime(), z.null()]).optional(),
+  billingKind: aiBillingKindZod.optional().default("purchase"),
+  billingCadence: aiBillingCadenceZod
+    .optional()
+    .default(AI_BILLING_CADENCE_DEFAULT),
   presetId: z.string().uuid().optional().nullable(),
   note: z.string().max(2000).optional().nullable(),
+  billingEmail: optionalBillingEmailSchema,
+  billingProviderUrl: optionalBillingProviderUrlSchema,
   saveAsPreset: z
     .object({
       name: z.string().min(1).max(120),
@@ -38,10 +58,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ periods });
   } catch (error) {
     console.error("GET /api/ai-subscriptions/periods:", error);
+    const prismaMsg = prismaKnownRequestUserMessage(error);
     const detail = devErrorDetail(error);
     return NextResponse.json(
-      { error: "Internal server error", ...(detail ? { detail } : {}) },
-      { status: 500 }
+      {
+        error: prismaMsg ?? "Internal server error",
+        ...(detail ? { detail } : {}),
+      },
+      { status: prismaMsg ? 503 : 500 }
     );
   }
 }
@@ -70,6 +94,23 @@ export async function POST(request: NextRequest) {
         { error: "endsAt must be on or after startsAt" },
         { status: 400 }
       );
+    }
+
+    const depletedAt =
+      parsed.depletedAt === undefined || parsed.depletedAt === null
+        ? null
+        : new Date(parsed.depletedAt);
+    if (depletedAt && Number.isNaN(depletedAt.getTime())) {
+      return NextResponse.json({ error: "Invalid depletedAt" }, { status: 400 });
+    }
+
+    const depletedErr = validateAiBillingDepletedAt({
+      startsAt,
+      calendarEndsAt: endsAt,
+      depletedAt,
+    });
+    if (depletedErr) {
+      return NextResponse.json({ error: depletedErr }, { status: 400 });
     }
 
     if (parsed.presetId) {
@@ -108,10 +149,14 @@ export async function POST(request: NextRequest) {
         currency: parsed.currency.trim().toUpperCase().slice(0, 12),
         startsAt,
         endsAt,
+        depletedAt,
         note: parsed.note?.trim() || null,
         presetId,
+        billingKind: parsed.billingKind,
+        billingCadence: normalizeAiBillingCadence(parsed.billingCadence),
+        billingEmail: parsed.billingEmail ?? null,
+        billingProviderUrl: parsed.billingProviderUrl ?? null,
       },
-      include: { taskLinks: { select: { taskId: true } } },
     });
 
     const enriched = await enrichAiSubscriptionPeriods(prisma, user.id);
@@ -125,10 +170,14 @@ export async function POST(request: NextRequest) {
       );
     }
     console.error("POST /api/ai-subscriptions/periods:", error);
+    const prismaMsg = prismaKnownRequestUserMessage(error);
     const detail = devErrorDetail(error);
     return NextResponse.json(
-      { error: "Internal server error", ...(detail ? { detail } : {}) },
-      { status: 500 }
+      {
+        error: prismaMsg ?? "Internal server error",
+        ...(detail ? { detail } : {}),
+      },
+      { status: prismaMsg ? 503 : 500 }
     );
   }
 }

@@ -1,16 +1,14 @@
 /**
  * Creates or resets a minimal dev login (short email + password), task groups,
- * tasks, time entries, and billing enrollment + sample payment history.
+ * tasks, time entries, billing enrollment + sample payment history, and AI billing entries.
  * Login: a@a.com / a
- *
- * Does not seed AI subscription data.
  */
 import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { prisma } from "../src/lib/prisma";
 import { GROUP_COLOR_PRESETS } from "../src/lib/group-color-presets";
 import { eventToBillingSession } from "../src/lib/billing";
-import { subDays } from "date-fns";
+import { subDays, addDays, endOfDay, endOfMonth, startOfDay } from "date-fns";
 
 const EMAIL = "a@a.com";
 const PASSWORD = "a";
@@ -368,10 +366,120 @@ async function main() {
 
   const unpaidBillableSessions = n - paidSessionCount;
 
+  // ── AI billing seed ─────────────────────────────────────────────────────────
+  await prisma.aiSubscriptionPeriod.deleteMany({ where: { userId: user.id } });
+
+  const aiRows: {
+    name: string;
+    price: number;
+    currency: string;
+    billingKind: string;
+    billingCadence: string;
+    startsAt: Date;
+    endsAt: Date | null;
+    depletedAt: Date | null;
+    billingEmail: string | null;
+    billingProviderUrl: string | null;
+    note: string | null;
+  }[] = [
+    {
+      // Active one-time (monthly coverage) — running now
+      name: "Cursor Pro",
+      price: 19,
+      currency: "USD",
+      billingKind: "purchase",
+      billingCadence: "monthly",
+      startsAt: startOfDay(subDays(now, 18)),
+      endsAt: endOfDay(endOfMonth(subDays(now, 18))),
+      depletedAt: null,
+      billingEmail: "dev@example.com",
+      billingProviderUrl: "https://cursor.sh/settings/billing",
+      note: null,
+    },
+    {
+      // Active recurring monthly
+      name: "ChatGPT Plus",
+      price: 20,
+      currency: "USD",
+      billingKind: "recurring_monthly",
+      billingCadence: "monthly",
+      startsAt: startOfDay(subDays(now, 52)),
+      endsAt: null,
+      depletedAt: null,
+      billingEmail: "dev@example.com",
+      billingProviderUrl: "https://chat.openai.com/billing",
+      note: "Used for writing & ideation",
+    },
+    {
+      // Depleted one-time — credits ran out early
+      name: "Claude Pro",
+      price: 18,
+      currency: "USD",
+      billingKind: "purchase",
+      billingCadence: "monthly",
+      startsAt: startOfDay(subDays(now, 38)),
+      endsAt: endOfDay(endOfMonth(subDays(now, 38))),
+      depletedAt: subDays(now, 6),
+      billingEmail: null,
+      billingProviderUrl: "https://claude.ai/upgrade",
+      note: "Hit message limit before month end",
+    },
+    {
+      // Ended recurring — cancelled a while back
+      name: "GitHub Copilot",
+      price: 10,
+      currency: "USD",
+      billingKind: "recurring_monthly",
+      billingCadence: "monthly",
+      startsAt: startOfDay(subDays(now, 95)),
+      endsAt: endOfDay(subDays(now, 35)),
+      depletedAt: null,
+      billingEmail: "dev@example.com",
+      billingProviderUrl: "https://github.com/settings/copilot",
+      note: "Replaced by Cursor",
+    },
+    {
+      // Short one-time (quarterly) — still active
+      name: "Perplexity Pro",
+      price: 200,
+      currency: "CZK",
+      billingKind: "purchase",
+      billingCadence: "quarterly",
+      startsAt: startOfDay(subDays(now, 10)),
+      endsAt: endOfDay(addDays(now, 80)),
+      depletedAt: null,
+      billingEmail: null,
+      billingProviderUrl: null,
+      note: "Annual promo billed quarterly",
+    },
+  ];
+
+  let aiCount = 0;
+  for (const row of aiRows) {
+    await prisma.aiSubscriptionPeriod.create({
+      data: {
+        userId: user.id,
+        name: row.name,
+        price: row.price,
+        currency: row.currency,
+        billingKind: row.billingKind,
+        billingCadence: row.billingCadence,
+        startsAt: row.startsAt,
+        endsAt: row.endsAt,
+        depletedAt: row.depletedAt,
+        billingEmail: row.billingEmail,
+        billingProviderUrl: row.billingProviderUrl,
+        note: row.note,
+      },
+    });
+    aiCount += 1;
+  }
+
   console.log(
     `Test user ready → email: ${EMAIL}  password: ${PASSWORD}\n` +
       `Created ${groups.length} task groups, ${tasks.length} tasks, ${slots.length} time entries (last ~3 weeks, non-overlapping).\n` +
-      `Billing: ${billingTaskCount} tasks with rates; ${paidSessionCount} sessions in ${paymentBatchCount} payment record(s); ${unpaidBillableSessions} billable sessions still unpaid.`
+      `Billing: ${billingTaskCount} tasks with rates; ${paidSessionCount} sessions in ${paymentBatchCount} payment record(s); ${unpaidBillableSessions} billable sessions still unpaid.\n` +
+      `AI billing: ${aiCount} entries seeded (2 active, 1 depleted, 1 ended, 1 active quarterly).`
   );
 }
 

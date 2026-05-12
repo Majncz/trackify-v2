@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
  * Local Trackify: SQLite file DB at prisma/dev.db, seeded test user on first run.
+ * Prisma resolves SQLite URLs relative to the schema folder (prisma/). Use file:./dev.db.
  *
  * This repo has two Prisma schemas (Postgres + SQLite). The generated client must
  * match DATABASE_URL. `.env` often sets Postgres, which caused endless “fix local dev”
@@ -37,11 +38,34 @@ if (needsBootstrap()) {
     "SQLite dev.db missing or empty — running bootstrap:sqlite (schema + test user a@a.com / a)…"
   );
   execSync("npm run bootstrap:sqlite", { stdio: "inherit", cwd: root, env: process.env });
+} else {
+  const probe = path.join(root, "scripts", "sqlite-has-users.mjs");
+  try {
+    execSync(`node ${JSON.stringify(probe)}`, {
+      cwd: root,
+      stdio: "pipe",
+      env: { ...process.env, DATABASE_URL: "file:./dev.db" },
+    });
+  } catch (err) {
+    const code = err instanceof Error && "status" in err ? err.status : null;
+    if (code === 1) {
+      console.log(
+        "SQLite dev.db has no users — running seed:test-user:sqlite (a@a.com / a)…"
+      );
+      execSync("npm run seed:test-user:sqlite", {
+        stdio: "inherit",
+        cwd: root,
+        env: process.env,
+      });
+    } else {
+      throw err;
+    }
+  }
 }
 
 const env = {
   ...process.env,
-  DATABASE_URL: "file:./prisma/dev.db",
+  DATABASE_URL: "file:./dev.db",
   NEXTAUTH_URL: "http://localhost:3002",
   PORT: process.env.PORT ?? "3002",
 };

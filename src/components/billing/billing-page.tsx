@@ -136,7 +136,8 @@ export function BillingPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (window.location.hash === "#ai-tools") {
+    const h = window.location.hash;
+    if (h === "#ai-billing" || h === "#ai-tools") {
       setTab("ai_tools");
     }
   }, []);
@@ -323,7 +324,7 @@ export function BillingPage() {
               Rates
             </TabsTrigger>
             <TabsTrigger value="ai_tools" className="text-xs sm:text-sm">
-              AI tools
+              AI billing
             </TabsTrigger>
           </TabsList>
 
@@ -337,7 +338,7 @@ export function BillingPage() {
                   ? "Payment history"
                   : tab === "tasks"
                     ? "Rates and billable tasks"
-                    : "AI subscriptions"
+                    : "AI billing"
             }
             className={cn(
               "mt-0 w-full min-w-0 rounded-lg outline-none isolate",

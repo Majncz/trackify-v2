@@ -1,11 +1,14 @@
 import type { PrismaClient } from "@prisma/client";
 import {
+  normalizeAiBillingCadence,
+  type AiBillingCadenceValue,
+} from "@/lib/ai-subscription-cadence";
+import {
+  allocateTimerMillisExclusiveEarliestStartsAt,
   buildAiPeriodMetrics,
-  effectiveWindowEnd,
-  hoursPer100Czk,
-  medianHoursPer100Czk,
-  trackedHoursForPeriod,
-  billablePaidShareInWindow,
+  normalizeAiBillingKind,
+  subscriptionUsageWindowEnd,
+  billablePaidEarningsInWindow,
   type BillingCtx,
 } from "@/lib/ai-subscription-metrics";
 import { convertAmountToCurrency } from "@/lib/fx-rates";
@@ -22,13 +25,17 @@ export type EnrichedAiPeriod = {
   currency: string;
   startsAt: string;
   endsAt: string | null;
+  depletedAt: string | null;
+  billingKind: string;
+  billingCadence: AiBillingCadenceValue;
+  billingEmail: string | null;
+  billingProviderUrl: string | null;
   note: string | null;
   createdAt: string;
   updatedAt: string;
-  linkedTaskIds: string[];
   priceApproxCzk: number | null;
   metrics: ReturnType<typeof buildAiPeriodMetrics>;
-  billablePaidShare: number | null;
+  paidEarningsByCurrency: Record<string, number>;
 };
 
 async function priceInCzk(
@@ -46,33 +53,26 @@ export async function enrichAiSubscriptionPeriods(
   userId: string,
   now = new Date()
 ): Promise<EnrichedAiPeriod[]> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { aiTargetHoursPer100Czk: true },
-  });
-
   const periods = await prisma.aiSubscriptionPeriod.findMany({
     where: { userId },
-    include: {
-      taskLinks: { select: { taskId: true } },
-    },
     orderBy: { startsAt: "desc" },
   });
 
   if (periods.length === 0) return [];
 
-  const allLinkedTaskIds = new Set<string>();
-  for (const p of periods) {
-    for (const l of p.taskLinks) allLinkedTaskIds.add(l.taskId);
-  }
+  const userTasks = await prisma.task.findMany({
+    where: { userId },
+    select: { id: true },
+  });
+  const taskIds = userTasks.map((t) => t.id);
 
-  const taskIds = Array.from(allLinkedTaskIds);
   const events =
     taskIds.length === 0
       ? []
       : await prisma.event.findMany({
           where: { taskId: { in: taskIds } },
           select: {
+            id: true,
             taskId: true,
             from: true,
             to: true,
@@ -81,13 +81,6 @@ export async function enrichAiSubscriptionPeriods(
             paidAmount: true,
           },
         });
-
-  const eventsByTask = new Map<string, typeof events>();
-  for (const ev of events) {
-    const list = eventsByTask.get(ev.taskId) ?? [];
-    list.push(ev);
-    eventsByTask.set(ev.taskId, list);
-  }
 
   const billingRows = await prisma.billingTask.findMany({
     where: { userId },
@@ -116,95 +109,70 @@ export async function enrichAiSubscriptionPeriods(
     });
   }
 
-  const historicalHp100: number[] = [];
-  for (const p of periods) {
-    const linked = p.taskLinks.map((l) => l.taskId);
-    const taskSet = new Set(linked);
-    const evs: { taskId: string; from: Date; to: Date }[] = [];
-    for (const tid of linked) {
-      for (const e of eventsByTask.get(tid) ?? []) {
-        evs.push({
-          taskId: e.taskId,
-          from: e.from,
-          to: e.to,
-        });
-      }
-    }
-    const windowEnd = effectiveWindowEnd(p.endsAt, now);
-    const hours = trackedHoursForPeriod(evs, taskSet, p.startsAt, windowEnd);
-    const pCzk = await priceInCzk(p.price, p.currency);
-    const hp = hoursPer100Czk(hours, pCzk);
-    if (
-      p.endsAt &&
-      p.endsAt.getTime() <= now.getTime() &&
-      hp != null &&
-      hp > 0
-    ) {
-      historicalHp100.push(hp);
-    }
-  }
+  const billablePaidEvents = events.map((e) => ({
+    from: e.from,
+    to: e.to,
+    taskId: e.taskId,
+    paymentRecordId: e.paymentRecordId,
+    name: e.name,
+    paidAmount: e.paidAmount,
+  }));
 
-  const medianHist = medianHoursPer100Czk(historicalHp100);
+  const timelines = periods.map((p) => ({
+    periodId: p.id,
+    startsAt: p.startsAt,
+    windowEnd: subscriptionUsageWindowEnd(p.endsAt, p.depletedAt, now),
+  }));
+
+  const overlapTimerCredit = allocateTimerMillisExclusiveEarliestStartsAt(
+    events.map((e) => ({
+      eventId: e.id,
+      taskId: e.taskId,
+      from: e.from,
+      to: e.to,
+    })),
+    timelines
+  );
 
   const out: EnrichedAiPeriod[] = [];
 
   for (const p of periods) {
-    const linkedTaskIds = p.taskLinks.map((l) => l.taskId);
-    const evsFlat: { taskId: string; from: Date; to: Date }[] = [];
-    const billableEvs: {
-      from: Date;
-      to: Date;
-      taskId: string;
-      paymentRecordId: string | null;
-      name: string;
-      paidAmount: number | null;
-    }[] = [];
-
-    for (const tid of linkedTaskIds) {
-      for (const e of eventsByTask.get(tid) ?? []) {
-        evsFlat.push({
-          taskId: e.taskId,
-          from: e.from,
-          to: e.to,
-        });
-        billableEvs.push({
-          from: e.from,
-          to: e.to,
-          taskId: e.taskId,
-          paymentRecordId: e.paymentRecordId,
-          name: e.name,
-          paidAmount: e.paidAmount,
-        });
-      }
-    }
-
-    const windowEnd = effectiveWindowEnd(p.endsAt, now);
+    const windowEnd = subscriptionUsageWindowEnd(
+      p.endsAt,
+      p.depletedAt,
+      now
+    );
     const pCzk = await priceInCzk(p.price, p.currency);
+    const billingKind = normalizeAiBillingKind(p.billingKind);
+    const billingCadence = normalizeAiBillingCadence(p.billingCadence);
+
+    const credit = overlapTimerCredit.get(p.id);
+    const trackedMs = credit?.trackedMs ?? 0;
+    const trackedHours = trackedMs / 3_600_000;
 
     const metrics = buildAiPeriodMetrics({
-      price: p.price,
       startsAt: p.startsAt,
-      endsAt: p.endsAt,
+      windowEnd,
+      trackedHours,
+      tasksWithTrackedTime: credit?.taskIds.size ?? 0,
+      eventsInWindow: credit?.eventIds.size ?? 0,
       now,
-      linkedTaskIds,
-      events: evsFlat,
-      priceInCzk: pCzk,
-      userTargetHoursPer100Czk: user?.aiTargetHoursPer100Czk ?? null,
-      medianHoursPer100Czk: medianHist,
+      calendarEndsAt: p.endsAt,
+      depletedAt: p.depletedAt,
     });
 
-    const billCtx = new Map<string, BillingCtx>();
-    for (const tid of linkedTaskIds) {
-      const b = billingByTaskId.get(tid);
-      if (b) billCtx.set(tid, b);
-    }
-
-    const paidShare = billablePaidShareInWindow(
-      billableEvs.filter((e) => billCtx.has(e.taskId)),
-      billCtx,
+    const paidEarningsByCurrency = billablePaidEarningsInWindow(
+      billablePaidEvents,
+      billingByTaskId,
       p.startsAt,
       windowEnd
     );
+
+    // Round per-currency totals for display
+    for (const cur of Object.keys(paidEarningsByCurrency)) {
+      paidEarningsByCurrency[cur] =
+        Math.round((paidEarningsByCurrency[cur] ?? 0) * 100) / 100;
+    }
 
     out.push({
       id: p.id,
@@ -215,13 +183,17 @@ export async function enrichAiSubscriptionPeriods(
       currency: p.currency,
       startsAt: p.startsAt.toISOString(),
       endsAt: p.endsAt?.toISOString() ?? null,
+      depletedAt: p.depletedAt?.toISOString() ?? null,
+      billingKind,
+      billingCadence,
+      billingEmail: p.billingEmail?.trim() || null,
+      billingProviderUrl: p.billingProviderUrl?.trim() || null,
       note: p.note,
       createdAt: p.createdAt.toISOString(),
       updatedAt: p.updatedAt.toISOString(),
-      linkedTaskIds,
       priceApproxCzk: pCzk != null ? Math.round(pCzk * 100) / 100 : null,
       metrics,
-      billablePaidShare: paidShare.ratio,
+      paidEarningsByCurrency,
     });
   }
 

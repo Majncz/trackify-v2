@@ -32,7 +32,7 @@ function createPrismaClient() {
   const url = process.env.DATABASE_URL?.trim();
   if (!url) {
     throw new Error(
-      "DATABASE_URL is not set. Examples: postgresql://… for Postgres, or file:./prisma/dev.db for local SQLite (run npm run setup:sqlite, then npm run dev:sqlite)."
+      "DATABASE_URL is not set. Examples: postgresql://… for Postgres, or file:./dev.db for local SQLite (database file prisma/dev.db; run npm run setup:sqlite, then npm run dev:sqlite)."
     );
   }
 

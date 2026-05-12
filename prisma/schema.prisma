@@ -52,7 +52,6 @@ model Task {
   events              Event[]
   activeTimers        ActiveTimer[]
   billingTask         BillingTask?
-  aiSubscriptionLinks TaskAiSubscription[]
 
   @@index([userId, hidden])
   @@index([taskGroupId])
@@ -199,23 +198,21 @@ model AiSubscriptionPeriod {
   currency  String               @default("CZK")
   startsAt  DateTime
   endsAt    DateTime?
+  /// When prepaid credits/tokens ran out (may be before endsAt).
+  depletedAt DateTime?
+  /// purchase = one payment covers credits until depleted/end; recurring_monthly = price charged each calendar month in span.
+  billingKind String              @default("purchase")
+  /// Billing cadence for recurring rows (weekly/quarterly/yearly stored for completeness; metrics still use monthly-style math today).
+  billingCadence String           @default("monthly")
+  /// Email/account the subscription is tied to (optional).
+  billingEmail String?
+  /// Link to billing / manage subscription page (optional).
+  billingProviderUrl String?
   note      String?
   createdAt DateTime             @default(now())
   updatedAt DateTime             @updatedAt
-  taskLinks TaskAiSubscription[]
 
   @@index([userId, startsAt])
   @@index([userId, endsAt])
   @@map("trackify_ai_subscription_period")
-}
-
-model TaskAiSubscription {
-  taskId                 String
-  task                   Task                 @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  aiSubscriptionPeriodId String
-  period                 AiSubscriptionPeriod @relation(fields: [aiSubscriptionPeriodId], references: [id], onDelete: Cascade)
-
-  @@id([taskId, aiSubscriptionPeriodId])
-  @@index([aiSubscriptionPeriodId])
-  @@map("trackify_task_ai_subscription")
 }

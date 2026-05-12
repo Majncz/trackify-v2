@@ -33,8 +33,9 @@
 
 ## Local dev database (do not “fix” this unless the user asks)
 
+- **Postgres = production / real DB.** **Dev = SQLite** by default — not Postgres.
 - **Default local app:** `npm run dev:local` — always SQLite at `prisma/dev.db` (see `scripts/local-dev.mjs`). Ignores Postgres in `.env` for the server process. First run bootstraps schema + seed user `a@a.com` / `a`.
-- **Docker Postgres:** `npm run stack:local` or `npm run dev:local:postgres` only.
+- **Docker Postgres:** `npm run stack:local` or `npm run dev:local:postgres` only — optional parity, not normal dev.
 - Do **not** switch `dev:local` back to Postgres or add overlapping “ensure” scripts for SQLite; that recreated the same bugs repeatedly (two Prisma schemas + `.env` pointing at the wrong DB).
 
 ## Development Workflow

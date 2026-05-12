@@ -41,7 +41,7 @@ async function fetchBillingTasks(): Promise<BillingTaskRow[]> {
   return res.json();
 }
 
-function rateRowStripeAccent(task: Task): string {
+function rateRowAccent(task: Task): string {
   return task.taskGroup
     ? resolveGroupAccent(task.taskGroup)
     : taskAccentHex(task.id);
@@ -162,7 +162,7 @@ export function TaskEnrollmentSheet() {
         )}
       >
         <span className="font-medium text-foreground">How this list works.</span>{" "}
-        The left edge uses your{" "}
+        Rows use a light tint from your{" "}
         <span className="text-foreground">group color</span> when the task is in
         a group, or a stable{" "}
         <span className="text-foreground">task color</span> when it is
@@ -172,15 +172,14 @@ export function TaskEnrollmentSheet() {
       <div className="space-y-3">
       {visibleTasks.map((task: Task) => {
           const b = byTaskId.get(task.id);
-          const stripe = rateRowStripeAccent(task);
+          const rowAccent = rateRowAccent(task);
 
           return (
             <div
               key={task.id}
-              className={cn(billingSurface.section, "border-l-[3px]")}
+              className={billingSurface.section}
               style={{
-                borderLeftColor: stripe,
-                backgroundColor: groupAccentSoftBg(stripe, b ? 0.05 : 0.08),
+                backgroundColor: groupAccentSoftBg(rowAccent, b ? 0.05 : 0.08),
               }}
             >
               <div className="p-3 sm:p-4 space-y-3">

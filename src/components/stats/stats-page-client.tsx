@@ -1096,21 +1096,13 @@ export function StatsPageClient() {
                 </thead>
                 <tbody>
                   {groupData.map(({ group, ms, membersSorted, orphanIds }) => {
-                    const rowAccent = resolveGroupAccent({ id: group.id, color: group.color });
                     return (
                     <tr
                       key={group.id}
                       className="border-b border-border/50 last:border-0 bg-card hover:bg-muted/25 transition-colors"
                     >
                       <td className="py-3 pl-3 pr-2 sm:pl-4 min-w-0 align-middle">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span
-                            className="w-1 h-7 shrink-0 rounded-full self-center"
-                            style={{ backgroundColor: rowAccent }}
-                            aria-hidden
-                          />
-                          <span className="font-semibold leading-snug line-clamp-2 break-words">{group.name}</span>
-                        </div>
+                        <span className="font-semibold leading-snug line-clamp-2 break-words">{group.name}</span>
                       </td>
                       <td className="py-3 px-2 min-w-0 align-top">
                         {group.taskIds.length === 0 ? (

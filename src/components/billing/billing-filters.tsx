@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { billingSurface } from "@/lib/billing-ui";
-import { FormSelect, type FormSelectOption } from "@/components/ui/form-select";
+import { FormSelect, SelectSingleScope, type FormSelectOption } from "@/components/ui/form-select";
 
 export type BillingRangePreset =
   | "this_week"
@@ -94,6 +94,7 @@ export function BillingFilters({
         className
       )}
     >
+      <SelectSingleScope>
       <div className="grid grid-cols-2 gap-x-2 gap-y-2 lg:grid-cols-4 lg:gap-x-3">
         <div className="space-y-1">
           <Label htmlFor="billing-period" className={labelClass}>
@@ -182,6 +183,7 @@ export function BillingFilters({
           </div>
         </div>
       )}
+      </SelectSingleScope>
 
       <div className="flex flex-col gap-1.5 border-t-2 border-border pt-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <span id="billing-group-by-label" className={cn(labelClass, "shrink-0")}>

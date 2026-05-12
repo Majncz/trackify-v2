@@ -2,11 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { enrichAiSubscriptionPeriods } from "@/lib/ai-subscription-enrich";
+import {
+  accumulateAiBillingIntoMonthTotals,
+  aiBillingSpendNativeTotal,
+  normalizeAiBillingKind,
+  subscriptionUsageWindowEnd,
+} from "@/lib/ai-subscription-metrics";
 import { buildRatesToViewCurrency } from "@/lib/fx-rates";
 import { DEFAULT_BILLING_CURRENCY } from "@/lib/billing-currencies";
+import { prismaKnownRequestUserMessage } from "@/lib/prisma-client-errors";
 import {
   endOfMonth,
-  format,
   isWithinInterval,
   parseISO,
   startOfMonth,
@@ -54,10 +60,14 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     const periods = await enrichAiSubscriptionPeriods(prisma, user.id, now);
 
-    const inRange = (startsAt: string, endsAt: string | null) => {
+    const filtered = periods.filter((p) => {
       if (!rangeFrom || !rangeTo) return true;
-      const s = parseISO(startsAt);
-      const e = endsAt ? parseISO(endsAt) : now;
+      const s = parseISO(p.startsAt);
+      const e = subscriptionUsageWindowEnd(
+        p.endsAt ? parseISO(p.endsAt) : null,
+        p.depletedAt ? parseISO(p.depletedAt) : null,
+        now
+      );
       try {
         return (
           isWithinInterval(s, { start: rangeFrom, end: rangeTo }) ||
@@ -67,9 +77,7 @@ export async function GET(request: NextRequest) {
       } catch {
         return true;
       }
-    };
-
-    const filtered = periods.filter((p) => inRange(p.startsAt, p.endsAt));
+    });
 
     const currencies = Array.from(new Set(periods.map((p) => p.currency)));
     const { toView, missing } = await buildRatesToViewCurrency(
@@ -87,26 +95,47 @@ export async function GET(request: NextRequest) {
 
     for (const p of periods) {
       const mult = toView[p.currency] ?? (p.currency === viewCurrency ? 1 : 0);
-      if (mult > 0) {
-        lifetimeInView += p.price * mult;
-      }
-
       const s = parseISO(p.startsAt);
-      const e = p.endsAt ? parseISO(p.endsAt) : now;
-      if (mult > 0 && s <= monthEnd && e >= monthStart) {
+      const calendarEnd = p.endsAt ? parseISO(p.endsAt) : null;
+      const depleted = p.depletedAt ? parseISO(p.depletedAt) : null;
+      const spanEnd = subscriptionUsageWindowEnd(calendarEnd, depleted, now);
+      const kind = normalizeAiBillingKind(p.billingKind);
+
+      if (mult <= 0) continue;
+
+      lifetimeInView +=
+        aiBillingSpendNativeTotal({
+          startsAt: s,
+          calendarEndsAt: calendarEnd,
+          depletedAt: depleted,
+          now,
+          unitPrice: p.price,
+          billingKind: kind,
+        }) * mult;
+
+      if (s <= monthEnd && spanEnd >= monthStart) {
         monthOverlapInView += p.price * mult;
       }
 
-      if (mult > 0) {
-        const key = format(s, "yyyy-MM");
-        monthTotals.set(key, (monthTotals.get(key) ?? 0) + p.price * mult);
-      }
+      accumulateAiBillingIntoMonthTotals({
+        monthTotals,
+        startsAt: s,
+        calendarEndsAt: calendarEnd,
+        depletedAt: depleted,
+        now,
+        unitPrice: p.price,
+        billingKind: kind,
+        mult,
+      });
     }
 
     const sortedMonths = Array.from(monthTotals.keys()).sort();
     let run = 0;
+    const spendByMonth: { month: string; totalInView: number }[] = [];
     for (const m of sortedMonths) {
-      run += monthTotals.get(m) ?? 0;
+      const monthly = monthTotals.get(m) ?? 0;
+      spendByMonth.push({ month: m, totalInView: Math.round(monthly * 100) / 100 });
+      run += monthly;
       cumulativeByMonth.push({ month: m, totalInView: Math.round(run * 100) / 100 });
     }
 
@@ -115,18 +144,6 @@ export async function GET(request: NextRequest) {
     const rankedByHours = [...filtered]
       .filter((p) => p.metrics.trackedHours > 0)
       .sort((a, b) => b.metrics.trackedHours - a.metrics.trackedHours);
-    const rankedByCostHour = [...filtered]
-      .filter((p) => p.metrics.costPerHour != null)
-      .sort((a, b) => (a.metrics.costPerHour ?? 0) - (b.metrics.costPerHour ?? 0));
-
-    const correlationPoints = filtered
-      .filter((p) => p.billablePaidShare != null)
-      .map((p) => ({
-        id: p.id,
-        name: p.name,
-        durationDays: p.metrics.durationDays,
-        billablePaidShare: p.billablePaidShare,
-      }));
 
     return NextResponse.json({
       viewCurrency,
@@ -139,28 +156,26 @@ export async function GET(request: NextRequest) {
         periodCount: periods.length,
       },
       cumulativeByMonth,
+      spendByMonth,
       rankings: {
         mostTrackedHours: rankedByHours.slice(0, 8).map((p) => ({
           id: p.id,
           name: p.name,
           trackedHours: p.metrics.trackedHours,
         })),
-        lowestCostPerHour: rankedByCostHour.slice(0, 8).map((p) => ({
-          id: p.id,
-          name: p.name,
-          costPerHour: p.metrics.costPerHour,
-          currency: p.currency,
-        })),
       },
-      correlation: correlationPoints,
       periods: filtered,
     });
   } catch (error) {
     console.error("GET /api/ai-subscriptions/analytics:", error);
+    const prismaMsg = prismaKnownRequestUserMessage(error);
     const detail = devErrorDetail(error);
     return NextResponse.json(
-      { error: "Internal server error", ...(detail ? { detail } : {}) },
-      { status: 500 }
+      {
+        error: prismaMsg ?? "Internal server error",
+        ...(detail ? { detail } : {}),
+      },
+      { status: prismaMsg ? 503 : 500 }
     );
   }
 }

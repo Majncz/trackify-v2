@@ -47,9 +47,7 @@ export function SessionRow({
   const selectedChromeStyle =
     rowInteractive && selected
       ? {
-          borderTopColor: hexToRgba(accent, 0.55),
-          borderRightColor: hexToRgba(accent, 0.55),
-          borderBottomColor: hexToRgba(accent, 0.55),
+          borderColor: hexToRgba(accent, 0.55),
           backgroundColor: groupAccentSoftBg(accent, 0.22),
           boxShadow: `0 0 0 1px ${hexToRgba(accent, 0.35)}, 0 2px 8px -2px ${hexToRgba(accent, 0.2)}`,
         }
@@ -69,7 +67,7 @@ export function SessionRow({
       role={rowInteractive ? "button" : undefined}
       tabIndex={rowInteractive ? 0 : undefined}
       className={cn(
-        "flex w-full min-w-0 flex-col gap-2 border-l-[3px] p-2.5 sm:flex-row sm:items-center sm:gap-3 sm:p-3",
+        "flex w-full min-w-0 flex-col gap-2 p-2.5 sm:flex-row sm:items-center sm:gap-3 sm:p-3",
         rowInteractive && sessionRowFocus,
         billingSurface.row({
           paid: session.isPaid,
@@ -78,7 +76,6 @@ export function SessionRow({
         !rowInteractive && "cursor-default"
       )}
       style={{
-        borderLeftColor: accent,
         ...(selectedChromeStyle ??
           (useAccentWash ? { backgroundColor: accentCardWash } : {})),
       }}

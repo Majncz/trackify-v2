@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties, MouseEvent } from "react";
+import type { MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,22 +31,6 @@ interface TaskItemProps {
   pendingConfirmation?: boolean;
 }
 
-function taskCardChrome(accent: string | null): { className: string; style?: CSSProperties } {
-  const layout =
-    "transition-[box-shadow,border-color] h-full flex flex-col cursor-pointer rounded-xl bg-card text-card-foreground shadow-sm";
-  if (!accent) {
-    return { className: cn(layout, "border border-border") };
-  }
-  // One thin border; prominence from saturation (alpha), not extra ring thickness
-  return {
-    className: cn(layout, "border"),
-    style: {
-      borderColor: hexToRgba(accent, 0.9),
-      boxShadow: `0 11px 34px -10px ${hexToRgba(accent, 0.52)}`,
-    },
-  };
-}
-
 export function TaskItem({
   task,
   isActive,
@@ -58,7 +42,6 @@ export function TaskItem({
   const router = useRouter();
   const group = task.taskGroup ?? null;
   const accentHex = group ? resolveGroupAccent({ id: group.id, color: group.color }) : null;
-  const chrome = taskCardChrome(accentHex);
   const totalTime = task.events.reduce((sum, e) => {
     const fromMs = new Date(e.from).getTime();
     const toMs = new Date(e.to).getTime();
@@ -90,12 +73,11 @@ export function TaskItem({
   return (
     <Card
       className={cn(
-        chrome.className,
+        "h-full flex flex-col cursor-pointer rounded-xl border border-border bg-card text-card-foreground shadow-sm",
         isActive && "ring-2 ring-primary ring-offset-2 ring-offset-background z-0",
         pendingConfirmation &&
           "animate-pending-pulse ring-2 ring-yellow-500 ring-offset-2 ring-offset-background"
       )}
-      style={chrome.style}
       onClick={handleCardClick}
     >
       <CardContent className="p-4 flex flex-col flex-1">

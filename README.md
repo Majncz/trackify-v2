@@ -10,34 +10,29 @@ A time tracking application built with Next.js, Socket.IO, and PostgreSQL.
 
 - **Frontend**: Next.js 14 (App Router), React, Tailwind CSS, shadcn/ui
 - **Backend**: Next.js API Routes, Socket.IO for real-time updates
-- **Database**: PostgreSQL in production; optional **SQLite file** for local dev without Docker
+- **Database**: **PostgreSQL** in production and staging (the real DB). **SQLite** (`prisma/dev.db`) for normal local development — no Docker required.
 
 ## Prerequisites
 
 - **Node.js 18.17+** (or newer). If you use `nvm`, run `nvm install` then `nvm use` (see `.nvmrc`).
-- **Database**: either nothing extra (SQLite file), **or** PostgreSQL via Docker (`npm run db:up`), **or** any reachable Postgres URL
+- **Database**: daily dev uses **SQLite**; install Docker Postgres **only** if you want parity with production migrations locally (optional).
 - Caddy (reverse proxy, already configured on server — not needed for `dev:local`)
 
 ## Local Development
 
-### Default: Postgres from `.env` (same DB as `npm run seed:test-user`)
+**Default workflow:** SQLite (`npm run dev:local` or `npm run dev:sqlite`). **PostgreSQL** stays for **production**, hosted staging, and optional local parity — not for day-to-day app development unless you opt in.
 
-`npm run dev:local` sets **`NEXTAUTH_URL=http://localhost:3002`** and **does not override `DATABASE_URL`**, so the app uses whatever is in `.env` (usually PostgreSQL). It also runs **`prisma generate`** for **`schema.prisma`** (Postgres client).
+### SQLite file DB (`prisma/dev.db`) — normal dev
 
-```bash
-# .env → postgresql://… (e.g. after npm run db:up)
-npm run setup:postgres   # or setup:dev — generate + migrations
-npm run dev:local
-```
+**`npm run dev:local`** and **`npm run dev:sqlite`** both run **`scripts/local-dev.mjs`**: SQLite only, **`NEXTAUTH_URL=http://localhost:3002`**, port **3002**, ignoring Postgres in **`.env`**.
 
-Open **[http://localhost:3002](http://localhost:3002)**. **`npm run dev:local:postgres`** is the same command (kept as an alias).
+Detailed setup (**`DATABASE_URL`** paths, seeding **`a@a.com`**, troubleshooting): **[docs/local-sqlite-dev.md](./docs/local-sqlite-dev.md)**.
 
-### Without Docker — optional SQLite file (`prisma/dev.db`)
-
-Prisma uses **`prisma/schema.sqlite.prisma`** for this path; do **not** run `prisma migrate deploy` against SQLite — use **`npm run setup:sqlite`** (`db push`). If an old `dev.db` blocks the push, use **`npm run setup:sqlite:force`**.
+Prisma uses **`prisma/schema.sqlite.prisma`** for SQLite; do **not** run **`prisma migrate deploy`** against this file DB — use **`npm run setup:sqlite`** (**`db push`**). If push fails, **`npm run setup:sqlite:force`** (may wipe local SQLite data).
 
 ```bash
 cp .env.example .env
+# SQLite: use DATABASE_URL=file:./dev.db (see docs/local-sqlite-dev.md)
 # Set NEXTAUTH_SECRET (e.g. openssl rand -base64 32)
 
 npm install
@@ -45,9 +40,25 @@ npm run setup:sqlite
 npm run dev:sqlite
 ```
 
-Optional demo data: **`npm run bootstrap:sqlite`** (creates `a@a.com` / `a` in **`dev.db` only**).
+Optional demo data: **`npm run bootstrap:sqlite`** (**`a@a.com`** / **`a`** in **`prisma/dev.db`** only).
 
-### With Docker — PostgreSQL (matches production migrations)
+### Optional — PostgreSQL on your machine
+
+Use this when you need **migration parity** or want to hit the **same DB stack as production** locally. Not required for UI/feature work.
+
+`npm run dev:local:postgres` checks Postgres, runs **`prisma generate`** for **`schema.prisma`**, and starts the server using **`DATABASE_URL`** from **`.env`** (must be **`postgresql://…`**).
+
+```bash
+# .env → postgresql://… (e.g. after npm run db:up)
+npm run setup:postgres   # or setup:dev — generate + migrations
+npm run dev:local:postgres
+```
+
+Open **[http://localhost:3002](http://localhost:3002)**.
+
+### HTTPS dev host / production-like (`npm run dev`)
+
+Uses Postgres from **`.env`** (e.g. Docker). Typical when mirroring the deployed stack behind your proxy — **not** the same as everyday SQLite dev.
 
 ```bash
 cp .env.example .env
@@ -62,7 +73,7 @@ npm run setup:dev
 npm run dev
 ```
 
-Port **3002**. **`npm run dev`** is for the HTTPS dev host behind your proxy and expects Postgres in `.env`.
+Port **3002**. **`npm run dev`** expects **`DATABASE_URL=postgresql://…`** (production-like).
 
 ### ⚠️ IMPORTANT: Hot Reload vs Restart
 
@@ -150,8 +161,9 @@ pkill -f 'node dist/index.js'
 Copy `.env.example` to `.env` and configure:
 
 ```env
-DATABASE_URL="postgresql://…"         # dev:local — or file:./prisma/dev.db for npm run dev:sqlite
-NEXTAUTH_URL="http://localhost:3002" # npm run dev:local / dev:sqlite
+DATABASE_URL="file:./dev.db"              # local dev (SQLite → prisma/dev.db)
+# DATABASE_URL="postgresql://…"           # production / staging / optional Docker dev only
+NEXTAUTH_URL="http://localhost:3002"    # npm run dev:local / dev:sqlite
 NEXTAUTH_SECRET="generate-a-secret"
 ANTHROPIC_API_KEY=""     # optional — AI chat
 SMTP_* / SMTP_FROM=""    # optional — password reset emails

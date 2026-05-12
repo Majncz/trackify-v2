@@ -53,7 +53,6 @@ model Task {
   events              Event[]
   activeTimers        ActiveTimer[]
   billingTask         BillingTask?
-  aiSubscriptionLinks TaskAiSubscription[]
 
   @@index([userId, hidden])
   @@index([taskGroupId])
@@ -200,23 +199,16 @@ model AiSubscriptionPeriod {
   currency  String               @default("CZK")
   startsAt  DateTime
   endsAt    DateTime?
+  depletedAt DateTime?
+  billingKind String              @default("purchase")
+  billingCadence String           @default("monthly")
+  billingEmail String?
+  billingProviderUrl String?
   note      String?
   createdAt DateTime             @default(now())
   updatedAt DateTime             @updatedAt
-  taskLinks TaskAiSubscription[]
 
   @@index([userId, startsAt])
   @@index([userId, endsAt])
   @@map("trackify_ai_subscription_period")
-}
-
-model TaskAiSubscription {
-  taskId                 String
-  task                   Task                 @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  aiSubscriptionPeriodId String
-  period                 AiSubscriptionPeriod @relation(fields: [aiSubscriptionPeriodId], references: [id], onDelete: Cascade)
-
-  @@id([taskId, aiSubscriptionPeriodId])
-  @@index([aiSubscriptionPeriodId])
-  @@map("trackify_task_ai_subscription")
 }

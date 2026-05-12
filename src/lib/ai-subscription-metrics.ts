@@ -1,6 +1,27 @@
 import type { PrismaClient } from "@prisma/client";
+import {
+  differenceInCalendarMonths,
+  eachMonthOfInterval,
+  format,
+  startOfMonth,
+} from "date-fns";
 import { eventToBillingSession, type BillingTaskLike } from "./billing";
 import { AI_SUBSCRIPTION_BUILTIN_DEFS } from "./ai-subscription-default-presets";
+
+export const AI_BILLING_KIND_PURCHASE = "purchase";
+export const AI_BILLING_KIND_RECURRING_MONTHLY = "recurring_monthly";
+
+export type AiBillingKindValue =
+  | typeof AI_BILLING_KIND_PURCHASE
+  | typeof AI_BILLING_KIND_RECURRING_MONTHLY;
+
+export function normalizeAiBillingKind(
+  raw: string | null | undefined
+): AiBillingKindValue {
+  return raw === AI_BILLING_KIND_RECURRING_MONTHLY
+    ? AI_BILLING_KIND_RECURRING_MONTHLY
+    : AI_BILLING_KIND_PURCHASE;
+}
 
 export function overlapMs(
   aFrom: Date,
@@ -13,12 +34,119 @@ export function overlapMs(
   return Math.max(0, e - s);
 }
 
-export function effectiveWindowEnd(endsAt: Date | null, now: Date): Date {
-  return endsAt ?? now;
+/**
+ * End of the interval where paid credits were usable: capped by wall-clock now,
+ * optional subscription calendar end, and optional token/credit depletion time.
+ */
+export function subscriptionUsageWindowEnd(
+  calendarEndsAt: Date | null,
+  depletedAt: Date | null,
+  now: Date
+): Date {
+  let endMs = now.getTime();
+  if (calendarEndsAt != null && Number.isFinite(calendarEndsAt.getTime())) {
+    endMs = Math.min(endMs, calendarEndsAt.getTime());
+  }
+  if (depletedAt != null && Number.isFinite(depletedAt.getTime())) {
+    endMs = Math.min(endMs, depletedAt.getTime());
+  }
+  return new Date(endMs);
+}
+
+/** Inclusive calendar months touched by [start, end]. */
+export function billedMonthsInclusive(start: Date, end: Date): number {
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) {
+    return 0;
+  }
+  if (end.getTime() < start.getTime()) return 0;
+  return Math.max(1, differenceInCalendarMonths(end, start) + 1);
+}
+
+/** Total native-currency spend attributed to this entry (uses billing kind + usage window). */
+export function aiBillingSpendNativeTotal(args: {
+  startsAt: Date;
+  calendarEndsAt: Date | null;
+  depletedAt: Date | null;
+  now: Date;
+  unitPrice: number;
+  billingKind: AiBillingKindValue;
+}): number {
+  const end = subscriptionUsageWindowEnd(
+    args.calendarEndsAt,
+    args.depletedAt,
+    args.now
+  );
+  if (end.getTime() < args.startsAt.getTime()) return 0;
+  if (args.billingKind === AI_BILLING_KIND_RECURRING_MONTHLY) {
+    return billedMonthsInclusive(args.startsAt, end) * args.unitPrice;
+  }
+  return args.unitPrice;
+}
+
+export function accumulateAiBillingIntoMonthTotals(args: {
+  monthTotals: Map<string, number>;
+  startsAt: Date;
+  calendarEndsAt: Date | null;
+  depletedAt: Date | null;
+  now: Date;
+  unitPrice: number;
+  billingKind: AiBillingKindValue;
+  mult: number;
+}): void {
+  const end = subscriptionUsageWindowEnd(
+    args.calendarEndsAt,
+    args.depletedAt,
+    args.now
+  );
+  if (end.getTime() < args.startsAt.getTime()) return;
+
+  if (args.billingKind === AI_BILLING_KIND_RECURRING_MONTHLY) {
+    const intervalStart = startOfMonth(args.startsAt);
+    const intervalEnd = startOfMonth(end);
+    if (intervalStart.getTime() > intervalEnd.getTime()) return;
+    for (const m of eachMonthOfInterval({
+      start: intervalStart,
+      end: intervalEnd,
+    })) {
+      const key = format(m, "yyyy-MM");
+      args.monthTotals.set(
+        key,
+        (args.monthTotals.get(key) ?? 0) + args.unitPrice * args.mult
+      );
+    }
+  } else {
+    const key = format(args.startsAt, "yyyy-MM");
+    args.monthTotals.set(
+      key,
+      (args.monthTotals.get(key) ?? 0) + args.unitPrice * args.mult
+    );
+  }
+}
+
+export function validateAiBillingDepletedAt(args: {
+  startsAt: Date;
+  calendarEndsAt: Date | null;
+  depletedAt: Date | null;
+}): string | null {
+  if (!args.depletedAt || !Number.isFinite(args.depletedAt.getTime())) {
+    return null;
+  }
+  if (args.depletedAt.getTime() < args.startsAt.getTime()) {
+    return "Credits depleted time must be on or after the start time";
+  }
+  if (
+    args.calendarEndsAt &&
+    args.calendarEndsAt.getTime() >= args.startsAt.getTime() &&
+    args.depletedAt.getTime() > args.calendarEndsAt.getTime()
+  ) {
+    return "Credits depleted time cannot be after the subscription end date";
+  }
+  return null;
 }
 
 /**
  * Sum tracked (timer) hours for events that overlap [windowStart, windowEnd].
+ * (Unused by AI metrics after mutual timer allocation — kept as a standalone helper.)
  */
 export function trackedHoursInWindow(
   events: { from: Date; to: Date }[],
@@ -32,65 +160,136 @@ export function trackedHoursInWindow(
   return ms / 3_600_000;
 }
 
-export function trackedHoursForPeriod(
-  events: { taskId: string; from: Date; to: Date }[],
-  linkedTaskIdSet: Set<string>,
-  windowStart: Date,
+/**
+ * Timeline slice for allocating timer duration when several AI billing windows overlap.
+ *
+ * When several billing rows cover the same clock time, timer minutes are credited to **one**
+ * row only—the earliest **startsAt** wins (ties broken by **period id**). Sessions outside every
+ * window are ignored here. Nothing is keyed off “linked tasks”; it is automatic from dates.
+ *
+ * **Money** totals are unchanged each row still stacks spend; **only** tracked-hour metrics use
+ * this split when several billing periods overlap so summed timer credit across concurrent rows
+ * does not double-count wall-clock overlaps.
+ */
+export type AiBillingActiveTimeline = {
+  periodId: string;
+  startsAt: Date;
+  windowEnd: Date;
+};
+
+export type AiTimerSliceForAllocation = {
+  eventId: string;
+  taskId: string;
+  from: Date;
+  to: Date;
+};
+
+export type ExclusiveTimerCredit = {
+  trackedMs: number;
+  eventIds: Set<string>;
+  taskIds: Set<string>;
+};
+
+function winnerPeriodIdAt(
+  midMs: number,
+  windows: AiBillingActiveTimeline[]
+): string | null {
+  const overlapping = windows.filter((w) => {
+    const s = w.startsAt.getTime();
+    const e = w.windowEnd.getTime();
+    return midMs >= s && midMs <= e;
+  });
+  if (overlapping.length === 0) return null;
+  overlapping.sort(
+    (a, b) =>
+      a.startsAt.getTime() - b.startsAt.getTime() ||
+      a.periodId.localeCompare(b.periodId)
+  );
+  return overlapping[0]!.periodId;
+}
+
+/** Split overlapping timer overlap across billing rows (earliest-active row wins each slice). */
+export function allocateTimerMillisExclusiveEarliestStartsAt(
+  events: AiTimerSliceForAllocation[],
+  periodWindows: AiBillingActiveTimeline[]
+): Map<string, ExclusiveTimerCredit> {
+  const byPeriod = new Map<string, ExclusiveTimerCredit>();
+
+  const sortedWindows = [...periodWindows].sort(
+    (a, b) =>
+      a.startsAt.getTime() - b.startsAt.getTime() ||
+      a.periodId.localeCompare(b.periodId)
+  );
+
+  function creditRow(
+    periodId: string,
+    msDelta: number,
+    eventId: string,
+    taskId: string
+  ) {
+    if (msDelta <= 0 || !Number.isFinite(msDelta)) return;
+    let row = byPeriod.get(periodId);
+    if (!row) {
+      row = {
+        trackedMs: 0,
+        eventIds: new Set<string>(),
+        taskIds: new Set<string>(),
+      };
+      byPeriod.set(periodId, row);
+    }
+    row.trackedMs += msDelta;
+    row.eventIds.add(eventId);
+    row.taskIds.add(taskId);
+  }
+
+  for (const ev of events) {
+    const ef = ev.from.getTime();
+    const et = ev.to.getTime();
+    if (!(et > ef && Number.isFinite(ef))) continue;
+
+    const points = new Set<number>();
+    points.add(ef);
+    points.add(et);
+    for (const p of sortedWindows) {
+      const ws = p.startsAt.getTime();
+      const we = p.windowEnd.getTime();
+      const lo = Math.max(ef, ws);
+      const hi = Math.min(et, we);
+      if (hi > lo) {
+        points.add(lo);
+        points.add(hi);
+      }
+    }
+
+    const arr = Array.from(points)
+      .filter((t) => t >= ef && t <= et)
+      .sort((x, y) => x - y);
+
+    for (let i = 0; i < arr.length - 1; i++) {
+      const a = arr[i]!;
+      const b = arr[i + 1]!;
+      const segmentLen = b - a;
+      if (!(segmentLen > 0)) continue;
+      const mid = a + segmentLen / 2;
+      const wid = winnerPeriodIdAt(mid, sortedWindows);
+      if (wid === null) continue;
+      creditRow(wid, segmentLen, ev.eventId, ev.taskId);
+    }
+  }
+
+  return byPeriod;
+}
+
+/**
+ * How many whole calendar days the billing row has been active (start through
+ * today/end/depletion). Always at least 1.
+ */
+export function elapsedDaysForActiveBillingSpan(
+  startsAt: Date,
   windowEnd: Date
 ): number {
-  let ms = 0;
-  for (const ev of events) {
-    if (!linkedTaskIdSet.has(ev.taskId)) continue;
-    ms += overlapMs(ev.from, ev.to, windowStart, windowEnd);
-  }
-  return ms / 3_600_000;
-}
-
-/**
- * Days for burn rate (minimum fraction of a day to avoid div-by-zero).
- */
-export function durationDaysForBurn(startsAt: Date, windowEnd: Date): number {
-  const raw = (windowEnd.getTime() - startsAt.getTime()) / 86_400_000;
-  return Math.max(raw, 1 / 24);
-}
-
-export function hoursPer100Czk(
-  hours: number,
-  priceInCzk: number | null
-): number | null {
-  if (hours <= 0 || priceInCzk == null || !Number.isFinite(priceInCzk)) {
-    return null;
-  }
-  if (priceInCzk <= 0) return null;
-  return (100 * hours) / priceInCzk;
-}
-
-/**
- * 100% = meeting average (actual === target). &gt;100% = better than target.
- */
-export function effectivenessPercent(
-  actualHoursPer100Czk: number | null,
-  targetHoursPer100Czk: number | null,
-  medianFallback: number | null
-): number | null {
-  const target =
-    targetHoursPer100Czk != null && targetHoursPer100Czk > 0
-      ? targetHoursPer100Czk
-      : medianFallback != null && medianFallback > 0
-        ? medianFallback
-        : null;
-  if (actualHoursPer100Czk == null || target == null || target <= 0) {
-    return null;
-  }
-  return Math.round((actualHoursPer100Czk / target) * 1000) / 10;
-}
-
-export function medianHoursPer100Czk(values: number[]): number | null {
-  const v = values.filter((x) => Number.isFinite(x) && x > 0).sort((a, b) => a - b);
-  if (v.length === 0) return null;
-  const mid = Math.floor(v.length / 2);
-  if (v.length % 2 === 1) return v[mid]!;
-  return (v[mid - 1]! + v[mid]!) / 2;
+  const ms = windowEnd.getTime() - startsAt.getTime();
+  return Math.max(1, Math.ceil(ms / 86_400_000));
 }
 
 export async function ensureBuiltInAiPresets(
@@ -126,10 +325,12 @@ type BillingCtx = {
 export type { BillingCtx };
 
 /**
- * Aggregated paid ratio for billable time on linked tasks overlapping the AI period window.
- * Y-axis for correlation chart: paid earnings / (paid + unpaid billable earnings), 0–1.
+ * Paid billable earnings from sessions on tasks enrolled in Billing that overlap
+ * [windowStart, windowEnd]. Aggregated per billing task currency. Only paid sessions
+ * are counted — once a row is ended/depleted the window is fixed so the number
+ * is stable ("final for that run").
  */
-export function billablePaidShareInWindow(
+export function billablePaidEarningsInWindow(
   events: {
     from: Date;
     to: Date;
@@ -141,9 +342,8 @@ export function billablePaidShareInWindow(
   billingByTaskId: Map<string, BillingCtx>,
   windowStart: Date,
   windowEnd: Date
-): { paid: number; unpaid: number; ratio: number | null } {
-  let paid = 0;
-  let unpaid = 0;
+): Record<string, number> {
+  const byCurrency: Record<string, number> = {};
 
   for (const ev of events) {
     const ctx = billingByTaskId.get(ev.taskId);
@@ -171,94 +371,56 @@ export function billablePaidShareInWindow(
       null,
       ctx.taskGroup
     );
-    const earningsPortion = row.earnings * frac;
-    if (row.isPaid) paid += earningsPortion;
-    else unpaid += earningsPortion;
+    if (!row.isPaid) continue;
+
+    const currency = ctx.billing.currency;
+    byCurrency[currency] = (byCurrency[currency] ?? 0) + row.earnings * frac;
   }
 
-  const total = paid + unpaid;
-  if (total <= 0) return { paid: 0, unpaid: 0, ratio: null };
-  return { paid, unpaid, ratio: paid / total };
+  return byCurrency;
 }
 
 export type AiPeriodMetrics = {
-  linkedTaskCount: number;
+  /** Tasks receiving any credited timer overlap under this billing row */
+  tasksWithTrackedTime: number;
+  /** Timer hours credited to this row (overlapping rows split automatically — earlier start wins) */
   trackedHours: number;
+  /** Distinct timers that credited time to this row */
   eventsInWindow: number;
-  costPerHour: number | null;
-  costPerLinkedTask: number | null;
-  burnPerDayNative: number;
   durationDays: number;
-  hoursPer100Czk: number | null;
-  effectivenessPercent: number | null;
   isActive: boolean;
 };
 
 export function buildAiPeriodMetrics(args: {
-  price: number;
   startsAt: Date;
-  endsAt: Date | null;
+  windowEnd: Date;
+  trackedHours: number;
+  tasksWithTrackedTime: number;
+  eventsInWindow: number;
   now: Date;
-  linkedTaskIds: string[];
-  events: { taskId: string; from: Date; to: Date }[];
-  priceInCzk: number | null;
-  userTargetHoursPer100Czk: number | null;
-  medianHoursPer100Czk: number | null;
+  calendarEndsAt: Date | null;
+  depletedAt: Date | null;
 }): AiPeriodMetrics {
-  const windowEnd = effectiveWindowEnd(args.endsAt, args.now);
-  const taskSet = new Set(args.linkedTaskIds);
-  const trackedHours = trackedHoursForPeriod(
-    args.events,
-    taskSet,
+  const trackedHoursRounded = Math.round(args.trackedHours * 100) / 100;
+
+  const durationDays = elapsedDaysForActiveBillingSpan(
     args.startsAt,
-    windowEnd
+    args.windowEnd
   );
 
-  let eventsInWindow = 0;
-  for (const ev of args.events) {
-    if (!taskSet.has(ev.taskId)) continue;
-    if (overlapMs(ev.from, ev.to, args.startsAt, windowEnd) > 0) {
-      eventsInWindow += 1;
-    }
-  }
-
-  const linkedCount = args.linkedTaskIds.length;
-  const costPerHour =
-    trackedHours > 0 ? args.price / trackedHours : null;
-  const costPerLinkedTask =
-    linkedCount > 0 ? args.price / linkedCount : null;
-  const durationDays = durationDaysForBurn(args.startsAt, windowEnd);
-  const burnPerDayNative = args.price / durationDays;
-
-  const hp100 = hoursPer100Czk(trackedHours, args.priceInCzk);
-  const eff = effectivenessPercent(
-    hp100,
-    args.userTargetHoursPer100Czk,
-    args.medianHoursPer100Czk
-  );
-
-  const active =
-    !args.endsAt || args.endsAt.getTime() > args.now.getTime();
+  const calendarActive =
+    args.calendarEndsAt == null ||
+    args.calendarEndsAt.getTime() > args.now.getTime();
+  const tokensActive =
+    args.depletedAt == null ||
+    args.depletedAt.getTime() > args.now.getTime();
+  const isActive = calendarActive && tokensActive;
 
   return {
-    linkedTaskCount: linkedCount,
-    trackedHours:
-      Math.round(trackedHours * 100) / 100,
-    eventsInWindow,
-    costPerHour:
-      costPerHour != null
-        ? Math.round(costPerHour * 100) / 100
-        : null,
-    costPerLinkedTask:
-      costPerLinkedTask != null
-        ? Math.round(costPerLinkedTask * 100) / 100
-        : null,
-    burnPerDayNative:
-      Math.round(burnPerDayNative * 100) / 100,
-    durationDays:
-      Math.round(durationDays * 100) / 100,
-    hoursPer100Czk: hp100 != null ? Math.round(hp100 * 100) / 100 : null,
-    effectivenessPercent: eff,
-    isActive: active,
+    tasksWithTrackedTime: args.tasksWithTrackedTime,
+    trackedHours: trackedHoursRounded,
+    eventsInWindow: args.eventsInWindow,
+    durationDays,
+    isActive,
   };
 }
