@@ -1,6 +1,7 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { streamText, tool, stepCountIs, convertToModelMessages } from "ai";
 import { z } from "zod";
+import { CHAT_MODEL_ID } from "@/lib/ai-model";
 import { getAuthUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { toZonedTime, fromZonedTime } from "date-fns-tz";
@@ -421,7 +422,7 @@ export async function POST(req: Request) {
   const todayInUserTz = toZonedTime(nowForPrompt, timezone);
 
   const result = streamText({
-    model: anthropic("claude-sonnet-5"),
+    model: anthropic(CHAT_MODEL_ID),
     system: `You are an AI assistant for Trackify, a time tracking application.
 
 Today: ${todayInUserTz.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.

@@ -21,7 +21,7 @@ fi
 
 # Not running, start it
 echo "🚀 Starting dev server on port 3002..."
-echo "   URL: https://dev.time.ranajakub.com"
+echo "   URL: https://dev.trackify.ranajakub.com"
 echo ""
 exec npm run dev
 

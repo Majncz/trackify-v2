@@ -38,7 +38,7 @@ npx prisma db push
 npm run dev
 ```
 
-Dev server runs on port 3002 → https://dev.time.ranajakub.com
+Dev server runs on port 3002 → https://dev.trackify.ranajakub.com
 
 ### ⚠️ IMPORTANT: Hot Reload vs Restart
 
@@ -82,14 +82,14 @@ The deploy script handles the full workflow:
 4. **Install** dependencies & generate Prisma client
 5. **Build** the application
 6. **Start** production server on port 3000
-7. **Verify** health check passes
+7. **Verify** PM2 cwd, runtime model endpoint, and health check pass
 
 ## Server Configuration
 
 | Environment | Directory | Port | URL | Command |
 |-------------|-----------|------|-----|---------|
-| Development | `/root/trackify` | 3002 | https://dev.time.ranajakub.com | `npm run dev` |
-| Production | `/root/trackify-prod` | 3000 | https://time.ranajakub.com | `npm run deploy` |
+| Development | `/root/trackify` | 3002 | https://dev.trackify.ranajakub.com | `npm run dev` |
+| Production | `/root/trackify-prod` | 3000 | https://trackify.ranajakub.com | `npm run deploy` |
 | Database | - | 5435 | localhost (Docker) | - |
 
 **Note:** Dev and prod use separate directories to avoid build conflicts. The deploy script automatically pulls latest code and builds in the prod directory.
@@ -118,8 +118,9 @@ Copy `.env.example` to `.env` and configure:
 
 ```env
 DATABASE_URL="postgresql://user:pass@localhost:5435/trackify"
-NEXTAUTH_URL="https://dev.time.ranajakub.com"
+NEXTAUTH_URL="https://dev.trackify.ranajakub.com"
 NEXTAUTH_SECRET="generate-a-secret"
+ANTHROPIC_API_KEY="your-anthropic-api-key"
 ```
 
 ## Project Structure
@@ -140,6 +141,11 @@ NEXTAUTH_SECRET="generate-a-secret"
 ```
 
 ## Troubleshooting
+
+**AI chat still using an old model?**
+- Confirm deploy succeeded and `pm2 describe trackify-prod` shows `exec cwd` as `/root/trackify-prod`
+- Check runtime model: `curl -s http://127.0.0.1:3000/api/chat/model`
+- Verify compiled output: `grep claude-sonnet-5 /root/trackify-prod/.next/server/app/api/chat/route.js`
 
 **Login not working?**
 - Check `NEXTAUTH_URL` matches your domain
