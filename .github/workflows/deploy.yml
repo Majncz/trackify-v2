@@ -17,7 +17,8 @@ jobs:
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd /root/trackify
+            PROD_DIR="/root/trackify-prod"
+            cd "$PROD_DIR"
             
             # Backup database before deploy
             docker exec trackify-database pg_dump -U trackify trackify > backups/pre_deploy_$(date +%Y%m%d_%H%M%S).sql
@@ -35,7 +36,8 @@ jobs:
             # Run database migrations
             npx prisma migrate deploy
             
-            # Build the app
+            # Clean and build in prod directory (pm2 trackify-prod runs from here)
+            rm -rf .next dist
             npm run build
             
             # Restart PM2
