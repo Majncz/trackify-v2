@@ -36,11 +36,24 @@ jobs:
             # Run database migrations
             npx prisma migrate deploy
             
+            # Verify source model before build
+            if ! grep -q 'anthropic("claude-sonnet-5")' src/app/api/chat/route.ts; then
+              echo "ERROR: chat route is not on claude-sonnet-5"
+              exit 1
+            fi
+
             # Clean and build in prod directory (pm2 trackify-prod runs from here)
             rm -rf .next dist
             npm run build
-            
-            # Restart PM2
-            pm2 restart trackify-prod
-            
+
+            # Verify compiled route contains Sonnet 5
+            if ! grep -q 'claude-sonnet-5' .next/server/app/api/chat/route.js; then
+              echo "ERROR: built chat route missing claude-sonnet-5"
+              exit 1
+            fi
+
+            # Reload PM2 from ecosystem so cwd/env match repo (.env on disk is preserved)
+            pm2 startOrReload ecosystem.config.cjs --only trackify-prod --update-env
+            pm2 save
+
             echo "✅ Deployment complete!"

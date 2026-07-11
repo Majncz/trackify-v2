@@ -63,13 +63,22 @@ npx prisma generate --schema=prisma/schema.prisma > /dev/null
 # Step 7: Clean and build
 echo ""
 echo "🧹 Step 7: Building application..."
+if ! grep -q 'anthropic("claude-sonnet-5")' src/app/api/chat/route.ts; then
+    echo "ERROR: chat route is not on claude-sonnet-5"
+    exit 1
+fi
 rm -rf .next dist
 npm run build
+if ! grep -q 'claude-sonnet-5' .next/server/app/api/chat/route.js; then
+    echo "ERROR: built chat route missing claude-sonnet-5"
+    exit 1
+fi
 
-# Step 8: Start production server
+# Step 8: Start production server from ecosystem config
 echo ""
 echo "🚀 Step 8: Starting production server..."
-pm2 start trackify-prod 2>/dev/null || pm2 restart trackify-prod
+pm2 startOrReload ecosystem.config.cjs --only trackify-prod --update-env
+pm2 save
 SERVER_PID=$(pm2 pid trackify-prod)
 
 # Step 9: Health check
