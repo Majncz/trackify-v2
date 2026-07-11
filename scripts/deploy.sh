@@ -51,6 +51,7 @@ cd "$PROD_DIR"
 git fetch origin
 git reset --hard origin/master
 echo "   Updated to $(git rev-parse --short HEAD)"
+bash "$SCRIPT_DIR/sync-production-env.sh" "$PROD_DIR"
 
 # Step 5: Install dependencies
 echo ""
@@ -83,6 +84,7 @@ echo ""
 echo "🔎 Step 9: Verifying production process..."
 bash "$SCRIPT_DIR/verify-production.sh" pm2
 bash "$SCRIPT_DIR/verify-production.sh" runtime
+bash "$SCRIPT_DIR/verify-production.sh" auth
 
 # Step 10: Health check
 echo ""

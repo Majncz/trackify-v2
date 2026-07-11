@@ -26,6 +26,9 @@ jobs:
             # Reset to match remote (prevents dirty working dir from blocking deploys)
             git fetch origin master
             git reset --hard origin/master
+
+            # Keep the preserved production environment aligned with the public host
+            bash scripts/sync-production-env.sh "$PROD_DIR"
             
             # Install dependencies
             npm ci
@@ -52,5 +55,6 @@ jobs:
             # Verify PM2 cwd and live runtime model endpoint
             bash scripts/verify-production.sh pm2
             bash scripts/verify-production.sh runtime
+            bash scripts/verify-production.sh auth
 
             echo "✅ Deployment complete!"

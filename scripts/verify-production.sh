@@ -5,6 +5,7 @@ PROD_DIR="${PROD_DIR:-/root/trackify-prod}"
 PORT="${PORT:-3000}"
 PM2_APP="${PM2_APP:-trackify-prod}"
 EXPECTED_MODEL="${EXPECTED_MODEL:-claude-sonnet-5}"
+EXPECTED_SITE_URL="${EXPECTED_SITE_URL:-https://trackify.ranajakub.com}"
 
 verify_source_model() {
   if ! grep -q "CHAT_MODEL_ID = \"$EXPECTED_MODEL\"" "$PROD_DIR/src/lib/ai-model.ts"; then
@@ -75,6 +76,28 @@ verify_runtime_model() {
   exit 1
 }
 
+verify_runtime_auth_url() {
+  local response
+
+  for i in {1..15}; do
+    response=$(curl -sf "http://127.0.0.1:${PORT}/api/auth/providers" 2>/dev/null || true)
+    if [ -n "$response" ]; then
+      if [[ "$response" != *"$EXPECTED_SITE_URL"* ]]; then
+        echo "ERROR: auth provider URL does not reference $EXPECTED_SITE_URL"
+        echo "       response: $response"
+        exit 1
+      fi
+
+      echo "   Runtime auth URL OK: $EXPECTED_SITE_URL"
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "ERROR: /api/auth/providers did not respond on port $PORT"
+  exit 1
+}
+
 case "${1:-all}" in
   source)
     verify_source_model
@@ -88,14 +111,18 @@ case "${1:-all}" in
   runtime)
     verify_runtime_model
     ;;
+  auth)
+    verify_runtime_auth_url
+    ;;
   all)
     verify_source_model
     verify_compiled_model
     verify_pm2_cwd
     verify_runtime_model
+    verify_runtime_auth_url
     ;;
   *)
-    echo "Usage: $0 [source|compiled|pm2|runtime|all]"
+    echo "Usage: $0 [source|compiled|pm2|runtime|auth|all]"
     exit 1
     ;;
 esac
