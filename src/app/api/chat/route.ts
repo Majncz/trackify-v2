@@ -421,7 +421,7 @@ export async function POST(req: Request) {
   const todayInUserTz = toZonedTime(nowForPrompt, timezone);
 
   const result = streamText({
-    model: anthropic("claude-sonnet-4-20250514"),
+    model: anthropic("claude-sonnet-5"),
     system: `You are an AI assistant for Trackify, a time tracking application.
 
 Today: ${todayInUserTz.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.
