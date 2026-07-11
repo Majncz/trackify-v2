@@ -85,6 +85,8 @@ echo "🔎 Step 9: Verifying production process..."
 bash "$SCRIPT_DIR/verify-production.sh" pm2
 bash "$SCRIPT_DIR/verify-production.sh" runtime
 bash "$SCRIPT_DIR/verify-production.sh" auth
+python3 "$SCRIPT_DIR/configure-caddy-production.py"
+bash "$SCRIPT_DIR/verify-public-production.sh"
 
 # Step 10: Health check
 echo ""

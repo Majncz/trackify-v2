@@ -24,6 +24,8 @@ pm2 save
 bash "$SCRIPT_DIR/verify-production.sh" pm2
 bash "$SCRIPT_DIR/verify-production.sh" runtime
 bash "$SCRIPT_DIR/verify-production.sh" auth
+python3 "$SCRIPT_DIR/configure-caddy-production.py"
+bash "$SCRIPT_DIR/verify-public-production.sh"
 
 echo "✅ Done! Trackify is running with the latest changes."
 pm2 logs trackify-prod --lines 5 --nostream

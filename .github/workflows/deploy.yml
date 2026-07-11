@@ -57,4 +57,8 @@ jobs:
             bash scripts/verify-production.sh runtime
             bash scripts/verify-production.sh auth
 
+            # Route the public host to the verified production process
+            python3 scripts/configure-caddy-production.py
+            bash scripts/verify-public-production.sh
+
             echo "✅ Deployment complete!"
