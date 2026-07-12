@@ -48,6 +48,7 @@ jobs:
 
           PROD_DIR="/root/trackify-prod"
           COMPOSE_FILE="/root/dockerized-services/docker-compose.yml"
+          COMPOSE_ENV_FILE="/root/trackify/.env"
           SERVICE="trackify-prod"
           CONTAINER="trackify-prod"
           PORT="3000"
@@ -63,6 +64,7 @@ jobs:
           grep -q "$EXPECTED_MODEL" \
             "$PROD_DIR/.next/server/app/api/chat/route.js"
           test -f "$COMPOSE_FILE"
+          test -f "$COMPOSE_ENV_FILE"
 
           expected_sha="$(git -C "$PROD_DIR" rev-parse HEAD)"
           build_info="$(
@@ -109,8 +111,23 @@ jobs:
           echo "precondition_container=service=$container_service mount=$container_mount"
 
           backup_file="${COMPOSE_FILE}.trackify-prod.backup.$(date -u +%Y%m%d%H%M%S)"
-          COMPOSE_FILE="$COMPOSE_FILE" BACKUP_FILE="$backup_file" \
-            EXPECTED_NEXTAUTH_URL="$EXPECTED_SITE_URL" python3 <<'PY'
+          auth_backup_file="${COMPOSE_ENV_FILE}.trackify-prod.backup.$(date -u +%Y%m%d%H%M%S)"
+          rollback_needed=1
+          rollback() {
+            if [ "$rollback_needed" -eq 1 ]; then
+              echo "ERROR: restoring production configuration after an incomplete replacement"
+              if [ -f "$backup_file" ]; then
+                cp -a "$backup_file" "$COMPOSE_FILE" || true
+              fi
+              if [ -f "$auth_backup_file" ]; then
+                cp -a "$auth_backup_file" "$COMPOSE_ENV_FILE" || true
+              fi
+              docker compose -f "$COMPOSE_FILE" up -d --no-build --no-deps "$SERVICE" || true
+            fi
+          }
+          trap rollback ERR
+
+          COMPOSE_FILE="$COMPOSE_FILE" BACKUP_FILE="$backup_file" python3 <<'PY'
           import os
           import re
           import shutil
@@ -141,30 +158,18 @@ jobs:
           block = "".join(lines[start:end])
           old_mount = "/root/trackify:/app"
           new_mount = "/root/trackify-prod:/app"
-          old_auth = "NEXTAUTH_URL: https://time.ranajakub.com"
-          new_auth = f"NEXTAUTH_URL: {os.environ['EXPECTED_NEXTAUTH_URL']}"
           mount_old_count = block.count(old_mount)
           mount_new_count = block.count(new_mount)
-          auth_old_count = block.count(old_auth)
-          auth_new_count = block.count(new_auth)
           if mount_old_count > 1 or mount_new_count > 1:
               raise SystemExit(
                   "trackify-prod service has an ambiguous /app mount"
               )
-          if auth_old_count > 1 or auth_new_count > 1:
-              raise SystemExit(
-                  "trackify-prod service has an ambiguous NEXTAUTH_URL setting"
-              )
           if mount_old_count == 0 and mount_new_count == 0:
               raise SystemExit("trackify-prod service has no recognized /app mount")
-          if auth_old_count == 0 and auth_new_count == 0:
-              raise SystemExit("trackify-prod service has no recognized NEXTAUTH_URL setting")
 
           updated_block = block
           if mount_old_count == 1:
               updated_block = updated_block.replace(old_mount, new_mount)
-          if auth_old_count == 1:
-              updated_block = updated_block.replace(old_auth, new_auth)
           updated = text.replace(block, updated_block, 1)
           shutil.copy2(compose, backup)
           mode = stat.S_IMODE(compose.stat().st_mode)
@@ -178,23 +183,44 @@ jobs:
               if os.path.exists(temporary):
                   os.unlink(temporary)
           print(f"compose_backup={backup}")
-          print(
-              "compose_updated="
-              f"mount={new_mount} NEXTAUTH_URL={os.environ['EXPECTED_NEXTAUTH_URL']}"
-          )
+          print(f"compose_updated=mount={new_mount}")
+          PY
+
+          COMPOSE_ENV_FILE="$COMPOSE_ENV_FILE" BACKUP_FILE="$auth_backup_file" \
+            EXPECTED_NEXTAUTH_URL="$EXPECTED_SITE_URL" python3 <<'PY'
+          import os
+          import re
+          import shutil
+          import stat
+          import tempfile
+          from pathlib import Path
+
+          env_file = Path(os.environ["COMPOSE_ENV_FILE"])
+          backup = Path(os.environ["BACKUP_FILE"])
+          text = env_file.read_text()
+          pattern = re.compile(r"^NEXTAUTH_URL=.*$", re.MULTILINE)
+          matches = pattern.findall(text)
+          if len(matches) != 1:
+              raise SystemExit(f"expected one NEXTAUTH_URL setting, found {len(matches)}")
+
+          replacement = f'NEXTAUTH_URL="{os.environ["EXPECTED_NEXTAUTH_URL"]}"'
+          updated = pattern.sub(replacement, text, count=1)
+          shutil.copy2(env_file, backup)
+          mode = stat.S_IMODE(env_file.stat().st_mode)
+          fd, temporary = tempfile.mkstemp(prefix=f".{env_file.name}.", dir=env_file.parent)
+          try:
+              with os.fdopen(fd, "w") as handle:
+                  handle.write(updated)
+              os.chmod(temporary, mode)
+              os.replace(temporary, env_file)
+          finally:
+              if os.path.exists(temporary):
+                  os.unlink(temporary)
+          print(f"auth_env_backup={backup}")
+          print(f"auth_env_updated={replacement}")
           PY
 
           docker compose -f "$COMPOSE_FILE" config >/dev/null
-
-          rollback_needed=1
-          rollback() {
-            if [ "$rollback_needed" -eq 1 ]; then
-              echo "ERROR: restoring the Docker Compose file after an incomplete replacement"
-              cp -a "$backup_file" "$COMPOSE_FILE" || true
-              docker compose -f "$COMPOSE_FILE" up -d --no-build --no-deps "$SERVICE" || true
-            fi
-          }
-          trap rollback ERR
 
           pm2_app_exists="$(
             pm2 jlist | node -e '
@@ -289,6 +315,8 @@ jobs:
               "precondition_",
               "compose_backup=",
               "compose_updated=",
+              "auth_env_backup=",
+              "auth_env_updated=",
               "container_state=",
               "container_env_NEXTAUTH_URL=",
               "pm2_duplicate_removed=",
