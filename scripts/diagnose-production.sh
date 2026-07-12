@@ -80,6 +80,21 @@ report_pm2() {
       }
     });
   ' 2>&1 || true
+
+  for log_file in \
+    "/var/log/trackify-prod-error.log" \
+    "/var/log/trackify-prod-out.log" \
+    "$HOME/.pm2/logs/trackify-prod-error.log" \
+    "$HOME/.pm2/logs/trackify-prod-out.log"; do
+    if [ -f "$log_file" ]; then
+      echo "pm2_log_file=$log_file"
+      awk '
+        tolower($0) ~ /error|exception|fatal|eaddrinuse|module not found|cannot find|prisma|crash|exit|ready|loaded|unhandled/ {
+          print "pm2_log=" substr($0, 1, 1000)
+        }
+      ' "$log_file" 2>/dev/null || true
+    fi
+  done
 }
 
 report_build_artifacts() {
@@ -144,7 +159,7 @@ report_network() {
   section "Listening services"
   if command -v lsof >/dev/null 2>&1; then
     lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | \
-      awk '/:(3000|3002|80|443)([^0-9]|$)/ { print }' || true
+      awk '/:(3000|3002|80|443)([^0-9]|$)/ { print "listener=" $0 }' || true
   else
     echo "lsof=not-installed"
   fi
@@ -152,7 +167,7 @@ report_network() {
   if command -v ps >/dev/null 2>&1; then
     echo "node_processes:"
     ps -eo pid,ppid,user,args 2>/dev/null | \
-      awk '/[n]ode|[n]ext|[t]sx/ { print }' || true
+      awk '/[n]ode|[n]ext|[t]sx/ { print "node_process=" $0 }' || true
   fi
 }
 
