@@ -1,9 +1,9 @@
-name: Repair Trackify Production Process
+name: Repair Trackify Production Container
 
-# This workflow changes only the PM2 process definition for trackify-prod.
-# It intentionally does not run deployments, builds, migrations, or Caddy
-# commands. The isolated branch trigger is only for safely running this
-# workflow before it is merged to the default branch.
+# This workflow switches the existing Docker production service from the stale
+# /root/trackify checkout to the verified /root/trackify-prod checkout. It
+# removes only the duplicate, failing PM2 entry afterward. It does not run
+# builds, migrations, database commands, or Caddy commands.
 on:
   workflow_dispatch:
   push:
@@ -19,21 +19,23 @@ concurrency:
 
 jobs:
   repair:
-    name: Repair PM2 production cwd
+    name: Repair Docker production checkout
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Repair PM2 process over SSH
+      - name: Repair Docker service over SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           key_file="$RUNNER_TEMP/trackify-repair-key"
-          trap 'rm -f "$key_file"' EXIT
+          output_file="$RUNNER_TEMP/trackify-repair-output"
+          trap 'rm -f "$key_file" "$output_file"' EXIT
 
           printf '%s\n' "$SSH_PRIVATE_KEY" > "$key_file"
           chmod 600 "$key_file"
 
+          set +e
           ssh \
             -o StrictHostKeyChecking=accept-new \
             -o ConnectTimeout=10 \
@@ -41,16 +43,18 @@ jobs:
             -o ServerAliveCountMax=3 \
             -i "$key_file" \
             root@195.201.147.39 \
-            'bash -s' <<'REMOTE_SCRIPT'
+            'bash -s' <<'REMOTE_SCRIPT' | tee "$output_file"
           set -euo pipefail
 
           PROD_DIR="/root/trackify-prod"
+          COMPOSE_FILE="/root/dockerized-services/docker-compose.yml"
+          SERVICE="trackify-prod"
+          CONTAINER="trackify-prod"
           PORT="3000"
           PM2_APP="trackify-prod"
           EXPECTED_MODEL="claude-sonnet-5"
           EXPECTED_SITE_URL="https://trackify.ranajakub.com"
 
-          echo "Checking the existing production build..."
           test -d "$PROD_DIR/.git"
           test -f "$PROD_DIR/dist/server/index.js"
           test -f "$PROD_DIR/.next/server/app/api/chat/model/route.js"
@@ -58,6 +62,7 @@ jobs:
             "$PROD_DIR/src/lib/ai-model.ts"
           grep -q "$EXPECTED_MODEL" \
             "$PROD_DIR/.next/server/app/api/chat/route.js"
+          test -f "$COMPOSE_FILE"
 
           expected_sha="$(git -C "$PROD_DIR" rev-parse HEAD)"
           build_info="$(
@@ -80,85 +85,152 @@ jobs:
                 throw new Error(`build-info model ${info.model} != ${process.env.EXPECTED_MODEL}`);
               }
             '
-          echo "Build preconditions OK: $expected_sha / $EXPECTED_MODEL"
+          echo "precondition_build=$expected_sha model=$EXPECTED_MODEL"
 
-          pm2_cwd="$(
+          container_service="$(
+            docker inspect --format \
+              '{{index .Config.Labels "com.docker.compose.service"}}' \
+              "$CONTAINER" 2>/dev/null || true
+          )"
+          container_mount="$(
+            docker inspect --format \
+              '{{range .Mounts}}{{if eq .Destination "/app"}}{{.Source}}{{end}}{{end}}' \
+              "$CONTAINER" 2>/dev/null || true
+          )"
+          if [ "$container_service" != "$SERVICE" ]; then
+            echo "ERROR: $CONTAINER is not the expected Compose service"
+            exit 1
+          fi
+          if [ "$container_mount" != "/root/trackify" ]; then
+            echo "ERROR: expected the stale /root/trackify mount, found '$container_mount'"
+            exit 1
+          fi
+          echo "precondition_container=service=$container_service mount=$container_mount"
+
+          backup_file="${COMPOSE_FILE}.trackify-prod.backup.$(date -u +%Y%m%d%H%M%S)"
+          COMPOSE_FILE="$COMPOSE_FILE" BACKUP_FILE="$backup_file" python3 <<'PY'
+          import os
+          import re
+          import shutil
+          import stat
+          import tempfile
+          from pathlib import Path
+
+          compose = Path(os.environ["COMPOSE_FILE"])
+          backup = Path(os.environ["BACKUP_FILE"])
+          text = compose.read_text()
+          lines = text.splitlines(keepends=True)
+          service_matches = [
+              index
+              for index, line in enumerate(lines)
+              if re.match(r"^(\s*)trackify-prod:\s*$", line)
+          ]
+          if len(service_matches) != 1:
+              raise SystemExit(f"expected one trackify-prod service, found {len(service_matches)}")
+
+          start = service_matches[0]
+          service_indent = re.match(r"^(\s*)", lines[start]).group(1)
+          end = len(lines)
+          for index in range(start + 1, len(lines)):
+              if re.match(rf"^{re.escape(service_indent)}[^ \t].*:\s*$", lines[index]):
+                  end = index
+                  break
+
+          block = "".join(lines[start:end])
+          old_mount = "/root/trackify:/app"
+          new_mount = "/root/trackify-prod:/app"
+          if block.count(old_mount) != 1:
+              raise SystemExit(
+                  f"expected one {old_mount!r} mount in trackify-prod service, "
+                  f"found {block.count(old_mount)}"
+              )
+
+          updated = text.replace(block, block.replace(old_mount, new_mount), 1)
+          shutil.copy2(compose, backup)
+          mode = stat.S_IMODE(compose.stat().st_mode)
+          fd, temporary = tempfile.mkstemp(prefix=f".{compose.name}.", dir=compose.parent)
+          try:
+              with os.fdopen(fd, "w") as handle:
+                  handle.write(updated)
+              os.chmod(temporary, mode)
+              os.replace(temporary, compose)
+          finally:
+              if os.path.exists(temporary):
+                  os.unlink(temporary)
+          print(f"compose_backup={backup}")
+          print("compose_updated=/root/trackify-prod:/app")
+          PY
+
+          docker compose -f "$COMPOSE_FILE" config >/dev/null
+
+          rollback_needed=1
+          rollback() {
+            if [ "$rollback_needed" -eq 1 ]; then
+              echo "ERROR: restoring the Docker Compose file after an incomplete replacement"
+              cp -a "$backup_file" "$COMPOSE_FILE" || true
+              docker compose -f "$COMPOSE_FILE" up -d --no-build --no-deps "$SERVICE" || true
+            fi
+          }
+          trap rollback ERR
+
+          pm2_app_exists="$(
             pm2 jlist | node -e '
               let input = "";
               process.stdin.on("data", (chunk) => { input += chunk; });
               process.stdin.on("end", () => {
                 const apps = JSON.parse(input);
-                const app = apps.find((candidate) => candidate.name === process.argv[1]);
-                process.stdout.write(app?.pm2_env?.pm_cwd || app?.pm_cwd || "");
+                process.stdout.write(
+                  apps.some((candidate) => candidate.name === process.argv[1])
+                    ? "yes"
+                    : "no"
+                );
               });
             ' "$PM2_APP"
           )"
-          echo "Current PM2 cwd: ${pm2_cwd:-unknown}"
-
-          if [ "$pm2_cwd" != "$PROD_DIR" ]; then
-            echo "Replacing stale PM2 entry with the production ecosystem definition..."
+          if [ "$pm2_app_exists" = "yes" ]; then
             pm2 delete "$PM2_APP"
-            pm2 start "$PROD_DIR/ecosystem.config.cjs" \
-              --only "$PM2_APP" \
-              --update-env
+            pm2 save
+            echo "pm2_duplicate_removed=yes"
           else
-            echo "PM2 cwd is already correct; restarting only the target process..."
-            pm2 restart "$PM2_APP" --update-env
+            echo "pm2_duplicate_removed=no"
           fi
-          pm2 save
 
-          final_cwd="$(
-            pm2 jlist | node -e '
-              let input = "";
-              process.stdin.on("data", (chunk) => { input += chunk; });
-              process.stdin.on("end", () => {
-                const apps = JSON.parse(input);
-                const app = apps.find((candidate) => candidate.name === process.argv[1]);
-                process.stdout.write(app?.pm2_env?.pm_cwd || app?.pm_cwd || "");
-              });
-            ' "$PM2_APP"
+          docker compose -f "$COMPOSE_FILE" up -d --no-build --no-deps "$SERVICE"
+
+          container_state="$(
+            docker inspect --format '{{.State.Status}}' "$CONTAINER"
           )"
-          if [ "$final_cwd" != "$PROD_DIR" ]; then
-            echo "ERROR: PM2 cwd is '$final_cwd', expected '$PROD_DIR'"
+          container_mount="$(
+            docker inspect --format \
+              '{{range .Mounts}}{{if eq .Destination "/app"}}{{.Source}}{{end}}{{end}}' \
+              "$CONTAINER"
+          )"
+          if [ "$container_state" != "running" ] || [ "$container_mount" != "$PROD_DIR" ]; then
+            echo "ERROR: container state=$container_state mount=$container_mount"
             exit 1
           fi
+          echo "container_state=$container_state mount=$container_mount"
 
-          pm2_status="$(
-            pm2 jlist | node -e '
-              let input = "";
-              process.stdin.on("data", (chunk) => { input += chunk; });
-              process.stdin.on("end", () => {
-                const apps = JSON.parse(input);
-                const app = apps.find((candidate) => candidate.name === process.argv[1]);
-                process.stdout.write(app?.pm2_env?.status || "");
-              });
-            ' "$PM2_APP"
-          )"
-          if [ "$pm2_status" != "online" ]; then
-            echo "ERROR: PM2 status is '$pm2_status', expected online"
-            exit 1
-          fi
-          echo "PM2 process OK: cwd=$final_cwd status=$pm2_status"
-
-          for attempt in {1..20}; do
+          runtime_model_ok=0
+          for attempt in $(seq 1 30); do
             response="$(curl -sf "http://127.0.0.1:${PORT}/api/chat/model" 2>/dev/null || true)"
-            if [ -n "$response" ]; then
+            if [ -n "$response" ] && \
               RESPONSE="$response" EXPECTED_SHA="$expected_sha" EXPECTED_MODEL="$EXPECTED_MODEL" \
                 node -e '
                   const response = JSON.parse(process.env.RESPONSE);
                   if (response.model !== process.env.EXPECTED_MODEL) process.exit(1);
                   if (response.gitSha !== process.env.EXPECTED_SHA) process.exit(1);
-                ' && {
-                  echo "Runtime model OK: $response"
-                  break
-                }
-            fi
-            if [ "$attempt" -eq 20 ]; then
-              echo "ERROR: corrected process did not expose the expected model endpoint"
-              exit 1
+                '; then
+              echo "runtime_model=$response"
+              runtime_model_ok=1
+              break
             fi
             sleep 1
           done
+          if [ "$runtime_model_ok" -ne 1 ]; then
+            echo "ERROR: corrected Docker service did not expose the expected model endpoint"
+            exit 1
+          fi
 
           auth_response="$(curl -sf "http://127.0.0.1:${PORT}/api/auth/providers")"
           if [[ "$auth_response" != *"$EXPECTED_SITE_URL"* ]]; then
@@ -166,11 +238,45 @@ jobs:
             echo "$auth_response"
             exit 1
           fi
-          echo "Runtime auth URL OK: $EXPECTED_SITE_URL"
+          echo "runtime_auth=$EXPECTED_SITE_URL"
+
+          rollback_needed=0
+          trap - ERR
+          echo "docker_production_repair=complete"
           REMOTE_SCRIPT
+          ssh_status="${PIPESTATUS[0]}"
+          set -e
+
+          SSH_STATUS="$ssh_status" python3 - "$output_file" <<'PY'
+          import os
+          import sys
+          from pathlib import Path
+
+          prefixes = (
+              "precondition_",
+              "compose_backup=",
+              "compose_updated=",
+              "container_state=",
+              "pm2_duplicate_removed=",
+              "runtime_model=",
+              "runtime_auth=",
+              "docker_production_repair=",
+              "ERROR:",
+          )
+          for line in Path(sys.argv[1]).read_text(errors="replace").splitlines():
+              if line.startswith(prefixes):
+                  safe = line[:1000].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                  print(f"::warning title=Docker production repair::{safe}")
+          if int(os.environ["SSH_STATUS"]) != 0:
+              print(f"::error title=Docker production repair::ssh_exit={os.environ['SSH_STATUS']}")
+          PY
+
+          if [ "$ssh_status" -ne 0 ]; then
+            exit "$ssh_status"
+          fi
 
   public:
-    name: Verify public routes after PM2 repair
+    name: Verify public routes after Docker repair
     needs: repair
     runs-on: ubuntu-latest
     timeout-minutes: 5
