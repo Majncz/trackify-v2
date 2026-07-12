@@ -101,14 +101,16 @@ jobs:
             echo "ERROR: $CONTAINER is not the expected Compose service"
             exit 1
           fi
-          if [ "$container_mount" != "/root/trackify" ]; then
-            echo "ERROR: expected the stale /root/trackify mount, found '$container_mount'"
+          if [ "$container_mount" != "/root/trackify" ] && \
+            [ "$container_mount" != "$PROD_DIR" ]; then
+            echo "ERROR: unexpected production mount '$container_mount'"
             exit 1
           fi
           echo "precondition_container=service=$container_service mount=$container_mount"
 
           backup_file="${COMPOSE_FILE}.trackify-prod.backup.$(date -u +%Y%m%d%H%M%S)"
-          COMPOSE_FILE="$COMPOSE_FILE" BACKUP_FILE="$backup_file" python3 <<'PY'
+          COMPOSE_FILE="$COMPOSE_FILE" BACKUP_FILE="$backup_file" \
+            EXPECTED_NEXTAUTH_URL="$EXPECTED_SITE_URL" python3 <<'PY'
           import os
           import re
           import shutil
@@ -139,13 +141,31 @@ jobs:
           block = "".join(lines[start:end])
           old_mount = "/root/trackify:/app"
           new_mount = "/root/trackify-prod:/app"
-          if block.count(old_mount) != 1:
+          old_auth = "NEXTAUTH_URL: https://time.ranajakub.com"
+          new_auth = f"NEXTAUTH_URL: {os.environ['EXPECTED_NEXTAUTH_URL']}"
+          mount_old_count = block.count(old_mount)
+          mount_new_count = block.count(new_mount)
+          auth_old_count = block.count(old_auth)
+          auth_new_count = block.count(new_auth)
+          if mount_old_count > 1 or mount_new_count > 1:
               raise SystemExit(
-                  f"expected one {old_mount!r} mount in trackify-prod service, "
-                  f"found {block.count(old_mount)}"
+                  "trackify-prod service has an ambiguous /app mount"
               )
+          if auth_old_count > 1 or auth_new_count > 1:
+              raise SystemExit(
+                  "trackify-prod service has an ambiguous NEXTAUTH_URL setting"
+              )
+          if mount_old_count == 0 and mount_new_count == 0:
+              raise SystemExit("trackify-prod service has no recognized /app mount")
+          if auth_old_count == 0 and auth_new_count == 0:
+              raise SystemExit("trackify-prod service has no recognized NEXTAUTH_URL setting")
 
-          updated = text.replace(block, block.replace(old_mount, new_mount), 1)
+          updated_block = block
+          if mount_old_count == 1:
+              updated_block = updated_block.replace(old_mount, new_mount)
+          if auth_old_count == 1:
+              updated_block = updated_block.replace(old_auth, new_auth)
+          updated = text.replace(block, updated_block, 1)
           shutil.copy2(compose, backup)
           mode = stat.S_IMODE(compose.stat().st_mode)
           fd, temporary = tempfile.mkstemp(prefix=f".{compose.name}.", dir=compose.parent)
@@ -158,7 +178,10 @@ jobs:
               if os.path.exists(temporary):
                   os.unlink(temporary)
           print(f"compose_backup={backup}")
-          print("compose_updated=/root/trackify-prod:/app")
+          print(
+              "compose_updated="
+              f"mount={new_mount} NEXTAUTH_URL={os.environ['EXPECTED_NEXTAUTH_URL']}"
+          )
           PY
 
           docker compose -f "$COMPOSE_FILE" config >/dev/null
@@ -211,6 +234,16 @@ jobs:
           fi
           echo "container_state=$container_state mount=$container_mount"
 
+          container_nextauth="$(
+            docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" | \
+              awk -F= '$1 == "NEXTAUTH_URL" { print substr($0, index($0, "=") + 1); exit }'
+          )"
+          if [ "$container_nextauth" != "$EXPECTED_SITE_URL" ]; then
+            echo "ERROR: container NEXTAUTH_URL is '$container_nextauth'"
+            exit 1
+          fi
+          echo "container_env_NEXTAUTH_URL=$container_nextauth"
+
           runtime_model_ok=0
           for attempt in $(seq 1 30); do
             response="$(curl -sf "http://127.0.0.1:${PORT}/api/chat/model" 2>/dev/null || true)"
@@ -257,6 +290,7 @@ jobs:
               "compose_backup=",
               "compose_updated=",
               "container_state=",
+              "container_env_NEXTAUTH_URL=",
               "pm2_duplicate_removed=",
               "runtime_model=",
               "runtime_auth=",
