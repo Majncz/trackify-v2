@@ -199,6 +199,16 @@ report_network() {
       'docker_container={{.ID}} name={{.Names}} image={{.Image}} ports={{.Ports}}' \
       2>&1 || true
   fi
+
+  local compose_file="/root/dockerized-services/docker-compose.yml"
+  if [ -f "$compose_file" ]; then
+    grep -nE \
+      '^[[:space:]]*trackify-prod:|^[[:space:]]*(container_name|image|build|command|working_dir|ports|volumes|restart|env_file|depends_on):' \
+      "$compose_file" 2>/dev/null | \
+      awk '{ print "compose=" $0 }' || true
+  else
+    echo "compose_file_missing=$compose_file"
+  fi
 }
 
 report_caddy() {

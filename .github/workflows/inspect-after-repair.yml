@@ -74,7 +74,7 @@ jobs:
 
           owner_count = 0
           parent_count = 0
-          container_count = 0
+          compose_count = 0
           for line in lines:
               if '"name":"trackify-prod"' in line:
                   add("PM2 production process", line)
@@ -86,9 +86,9 @@ jobs:
                   parent_count += 1
               elif line.startswith("port_container="):
                   add("Port 3000 container", line)
-              elif line.startswith("docker_container=") and container_count < 3:
-                  add("Running Docker container", line)
-                  container_count += 1
+              elif line.startswith("compose=") and compose_count < 8:
+                  add("Docker Compose service", line)
+                  compose_count += 1
 
           preferred_endpoints = (
               "production port model endpoint",
