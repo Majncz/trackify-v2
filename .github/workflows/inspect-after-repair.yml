@@ -95,6 +95,8 @@ jobs:
                   add("Container .env NEXTAUTH_URL", line)
               elif line.startswith("compose_auth="):
                   add("Compose auth environment", line)
+              elif line.startswith("compose_auth_raw="):
+                  add("Raw Compose auth setting", line)
 
           preferred_endpoints = (
               "production port model endpoint",

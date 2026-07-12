@@ -233,6 +233,8 @@ report_container_auth() {
   ' 2>/dev/null | awk '{ print "container_app_env=" $0 }' || true
 
   if [ -f "$compose_file" ]; then
+    grep -nE 'trackify-prod:|NEXTAUTH_URL' "$compose_file" 2>/dev/null | \
+      awk '{ print "compose_auth_raw=" $0 }' || true
     docker compose -f "$compose_file" config 2>/dev/null | \
       awk '/NEXTAUTH_URL|env_file/ { print "compose_auth=" $0 }' || true
   fi
