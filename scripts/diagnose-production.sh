@@ -58,10 +58,20 @@ report_pm2() {
             pid: app.pid ?? null,
             status: env.status ?? null,
             cwd: env.pm_cwd || app.pm_cwd || null,
+            actualCwd: app.pid
+              ? (() => {
+                  try {
+                    return require("fs").readlinkSync(`/proc/${app.pid}/cwd`);
+                  } catch {
+                    return null;
+                  }
+                })()
+              : null,
             script: env.pm_exec_path || null,
             args: env.args || null,
             nodeEnv: env.NODE_ENV || null,
-            port: env.PORT || null
+            port: env.PORT || null,
+            nextAuthUrl: env.NEXTAUTH_URL || null
           }));
         }
       } catch (error) {
@@ -96,6 +106,12 @@ report_build_artifacts() {
     echo "build_info_missing=$PROD_DIR/build-info.json"
   fi
 
+  if [ -f "$PROD_DIR/.env" ]; then
+    grep -E '^NEXTAUTH_URL=' "$PROD_DIR/.env" 2>&1 || echo "NEXTAUTH_URL=missing"
+  else
+    echo "production_env_missing=$PROD_DIR/.env"
+  fi
+
   local compiled_route="$PROD_DIR/.next/server/app/api/chat/route.js"
   if [ -f "$compiled_route" ]; then
     echo "compiled_route=$compiled_route"
@@ -104,6 +120,24 @@ report_build_artifacts() {
   else
     echo "compiled_route_missing=$compiled_route"
   fi
+
+  for manifest in \
+    "$PROD_DIR/.next/server/app-paths-manifest.json" \
+    "$PROD_DIR/.next/routes-manifest.json"; do
+    if [ -f "$manifest" ]; then
+      node -e '
+        const fs = require("fs");
+        const manifestPath = process.argv[1];
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+        const hasChatModelRoute = Object.keys(manifest).some((key) =>
+          key.includes("api/chat/model")
+        );
+        console.log(`manifest=${manifestPath} hasChatModelRoute=${hasChatModelRoute}`);
+      ' "$manifest" 2>&1 || true
+    else
+      echo "manifest_missing=$manifest"
+    fi
+  done
 }
 
 report_network() {

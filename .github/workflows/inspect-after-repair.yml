@@ -106,6 +106,10 @@ jobs:
                   add("Build metadata", line)
               elif '"name":"trackify-prod"' in line:
                   add("PM2 production process", line)
+              elif line.startswith("NEXTAUTH_URL="):
+                  add("Production NEXTAUTH_URL", line)
+              elif line.startswith("manifest=") or line.startswith("manifest_missing="):
+                  add("Next route manifest", line)
               elif "reverse_proxy" in line and "trackify.ranajakub.com" in line:
                   add("Caddy production route", line)
 
