@@ -233,8 +233,26 @@ report_container_auth() {
   ' 2>/dev/null | awk '{ print "container_app_env=" $0 }' || true
 
   if [ -f "$compose_file" ]; then
-    grep -nE 'trackify-prod:|NEXTAUTH_URL|env_file|/root/trackify/.env' "$compose_file" 2>/dev/null | \
-      awk '{ print "compose_auth_raw=" $0 }' || true
+    awk '
+      /^[[:space:]]*trackify-prod:[[:space:]]*$/ {
+        in_target=1
+        print "compose_auth_raw=" NR ": " $0
+        next
+      }
+      in_target && /^[[:space:]]{2}[^[:space:]][^:]*:[[:space:]]*$/ {
+        in_target=0
+      }
+      in_target && /env_file[[:space:]]*:/ {
+        print "compose_auth_raw=" NR ": " $0
+        for (offset = 1; offset <= 3 && getline next_line > 0; offset++) {
+          print "compose_auth_raw=" NR ": " next_line
+        }
+        next
+      }
+      in_target && /NEXTAUTH_URL/ {
+        print "compose_auth_raw=" NR ": " $0
+      }
+    ' "$compose_file" 2>/dev/null || true
     for compose_env in \
       "/root/.env" \
       "/root/dockerized-services/.env" \
