@@ -43,7 +43,43 @@ jobs:
             -o ServerAliveCountMax=3 \
             -i "$key_file" \
             root@195.201.147.39 \
-            'bash -s' < scripts/diagnose-production.sh
+            'bash -s' < scripts/diagnose-production.sh | tee "$RUNNER_TEMP/vps-diagnostic.txt"
+
+          # GitHub hides raw SSH logs from unauthenticated viewers. Publish
+          # only safe, filtered routing/runtime facts as check annotations;
+          # never publish the full diagnostic output or environment values.
+          python3 - "$RUNNER_TEMP/vps-diagnostic.txt" <<'PY'
+          import sys
+          from pathlib import Path
+
+          lines = Path(sys.argv[1]).read_text(errors="replace").splitlines()
+          prefixes = (
+              "path=",
+              "sha=",
+              "branch=",
+              "compiled_route=",
+              "compiled_model_text_not_found",
+              "HTTP/",
+              "ActiveState=",
+              "SubState=",
+              "MainPID=",
+          )
+
+          for line in lines:
+              if not (
+                  line.startswith(prefixes)
+                  or line.startswith('{"gitSha"')
+                  or line.startswith('{"model"')
+                  or line.startswith('{"credentials"')
+                  or '"name":' in line
+                  or "reverse_proxy" in line
+                  or "trackify.ranajakub.com" in line
+              ):
+                  continue
+
+              safe_line = line[:1000].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(f"::warning title=Read-only VPS diagnostic::{safe_line}")
+          PY
 
   public:
     name: Read-only public hostname diagnostics
