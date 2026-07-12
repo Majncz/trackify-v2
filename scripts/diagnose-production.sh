@@ -160,6 +160,18 @@ report_network() {
   if command -v lsof >/dev/null 2>&1; then
     lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | \
       awk '/:(3000|3002|80|443)([^0-9]|$)/ { print "listener=" $0 }' || true
+
+    echo "port_3000_owners:"
+    while read -r pid; do
+      [ -n "$pid" ] || continue
+      ps -o pid=,ppid=,user=,args= -p "$pid" 2>/dev/null | \
+        awk '{ print "port_owner=" $0 }' || true
+      parent_pid="$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d " ")"
+      if [ -n "$parent_pid" ]; then
+        ps -o pid=,ppid=,user=,args= -p "$parent_pid" 2>/dev/null | \
+          awk '{ print "port_parent=" $0 }' || true
+      fi
+    done < <(lsof -t -iTCP:3000 -sTCP:LISTEN 2>/dev/null | sort -u)
   else
     echo "lsof=not-installed"
   fi
@@ -168,6 +180,12 @@ report_network() {
     echo "node_processes:"
     ps -eo pid,ppid,user,args 2>/dev/null | \
       awk '/[n]ode|[n]ext|[t]sx/ { print "node_process=" $0 }' || true
+  fi
+
+  if command -v docker >/dev/null 2>&1; then
+    docker ps --format \
+      'docker_container={{.ID}} name={{.Names}} image={{.Image}} ports={{.Ports}}' \
+      2>&1 || true
   fi
 }
 

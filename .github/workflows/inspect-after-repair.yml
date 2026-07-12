@@ -72,46 +72,21 @@ jobs:
               safe = message[:1000].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
               print(f"::warning title={title}::{safe}")
 
-          production_sha = None
-          in_production = False
-          for line in lines:
-              if line == "===== Production checkout =====":
-                  in_production = True
-                  continue
-              if line.startswith("===== ") and line != "===== Production checkout =====":
-                  in_production = False
-              if in_production and line.startswith("sha="):
-                  production_sha = line
-                  break
-
-          development_sha = None
-          in_development = False
-          for line in lines:
-              if line == "===== Development checkout =====":
-                  in_development = True
-                  continue
-              if line.startswith("===== ") and line != "===== Development checkout =====":
-                  in_development = False
-              if in_development and line.startswith("sha="):
-                  development_sha = line
-                  break
-
-          if production_sha:
-              add("Production checkout", production_sha)
-          if development_sha:
-              add("Development checkout", development_sha)
-
-          listener_count = 0
-          process_count = 0
+          owner_count = 0
+          parent_count = 0
+          container_count = 0
           for line in lines:
               if '"name":"trackify-prod"' in line:
                   add("PM2 production process", line)
-              elif line.startswith("listener=") and listener_count < 3:
-                  add("Listening process", line)
-                  listener_count += 1
-              elif line.startswith("node_process=") and process_count < 3:
-                  add("Node process", line)
-                  process_count += 1
+              elif line.startswith("port_owner=") and owner_count < 2:
+                  add("Port 3000 owner", line)
+                  owner_count += 1
+              elif line.startswith("port_parent=") and parent_count < 2:
+                  add("Port 3000 parent", line)
+                  parent_count += 1
+              elif line.startswith("docker_container=") and container_count < 3:
+                  add("Running Docker container", line)
+                  container_count += 1
 
           preferred_endpoints = (
               "production port model endpoint",
