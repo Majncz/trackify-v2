@@ -1,0 +1,129 @@
+name: Inspect Trackify After Repair
+
+# Read-only follow-up for the targeted PM2 repair. It never changes the VPS.
+on:
+  push:
+    branches:
+      - "inspect/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    name: Inspect current PM2 and route state
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out diagnostic script
+        uses: actions/checkout@v4
+
+      - name: Inspect VPS without changing it
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          key_file="$RUNNER_TEMP/trackify-inspect-key"
+          output_file="$RUNNER_TEMP/trackify-inspect-output"
+          trap 'rm -f "$key_file" "$output_file"' EXIT
+
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$key_file"
+          chmod 600 "$key_file"
+
+          set +e
+          ssh \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=10 \
+            -o ServerAliveInterval=10 \
+            -o ServerAliveCountMax=3 \
+            -i "$key_file" \
+            root@195.201.147.39 \
+            'bash -s' < scripts/diagnose-production.sh | tee "$output_file"
+          ssh_status="${PIPESTATUS[0]}"
+          set -e
+
+          python3 - "$output_file" <<'PY'
+          import json
+          import re
+          import sys
+          from pathlib import Path
+
+          lines = Path(sys.argv[1]).read_text(errors="replace").splitlines()
+          values = []
+          endpoint_status = {}
+          endpoint_body = {}
+          current_endpoint = None
+
+          for line in lines:
+              if line.startswith("--- ") and line.endswith(" ---"):
+                  current_endpoint = line[4:-4]
+                  continue
+              if current_endpoint and line.startswith("HTTP/"):
+                  endpoint_status[current_endpoint] = line
+                  continue
+              if current_endpoint and (
+                  line.startswith('{"model"')
+                  or line.startswith('{"credentials"')
+              ):
+                  endpoint_body[current_endpoint] = line
+
+          def add(title, message):
+              safe = message[:1000].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(f"::warning title={title}::{safe}")
+
+          production_sha = None
+          in_production = False
+          for line in lines:
+              if line == "===== Production checkout =====":
+                  in_production = True
+                  continue
+              if line.startswith("===== ") and line != "===== Production checkout =====":
+                  in_production = False
+              if in_production and line.startswith("sha="):
+                  production_sha = line
+                  break
+
+          development_sha = None
+          in_development = False
+          for line in lines:
+              if line == "===== Development checkout =====":
+                  in_development = True
+                  continue
+              if line.startswith("===== ") and line != "===== Development checkout =====":
+                  in_development = False
+              if in_development and line.startswith("sha="):
+                  development_sha = line
+                  break
+
+          if production_sha:
+              add("Production checkout", production_sha)
+          if development_sha:
+              add("Development checkout", development_sha)
+
+          for line in lines:
+              if line.startswith('{"gitSha"'):
+                  add("Build metadata", line)
+              elif '"name":"trackify-prod"' in line:
+                  add("PM2 production process", line)
+              elif "reverse_proxy" in line and "trackify.ranajakub.com" in line:
+                  add("Caddy production route", line)
+
+          preferred_endpoints = (
+              "production port model endpoint",
+              "production port auth providers",
+              "Caddy-local model endpoint",
+              "Caddy-local auth providers",
+          )
+          for endpoint in preferred_endpoints:
+              if endpoint in endpoint_status:
+                  body = endpoint_body.get(endpoint, "")
+                  add(endpoint, f"{endpoint_status[endpoint]} {body}".strip())
+
+          if ssh_status != 0:
+              add("SSH diagnostic status", f"ssh_exit={ssh_status}")
+          PY
+
+          if [ "$ssh_status" -ne 0 ]; then
+            exit "$ssh_status"
+          fi
