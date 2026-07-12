@@ -168,8 +168,20 @@ report_network() {
         awk '{ print "port_owner=" $0 }' || true
       parent_pid="$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d " ")"
       if [ -n "$parent_pid" ]; then
-        ps -o pid=,ppid=,user=,args= -p "$parent_pid" 2>/dev/null | \
-          awk '{ print "port_parent=" $0 }' || true
+        parent_line="$(ps -o pid=,ppid=,user=,args= -p "$parent_pid" 2>/dev/null || true)"
+        printf '%s\n' "$parent_line" | awk '{ print "port_parent=" $0 }'
+
+        if command -v docker >/dev/null 2>&1; then
+          container_id="$(
+            printf '%s\n' "$parent_line" | \
+              sed -n 's/.* -id \([0-9a-f]\{12,\}\) .*/\1/p'
+          )"
+          if [ -n "$container_id" ]; then
+            docker inspect --format \
+              'port_container=id={{.Id}} name={{.Name}} image={{.Config.Image}} workdir={{.Config.WorkingDir}} cmd={{json .Config.Cmd}} mounts={{range .Mounts}}{{.Source}}:{{.Destination}};{{end}} labels={{json .Config.Labels}}' \
+              "$container_id" 2>&1 || true
+          fi
+        fi
       fi
     done < <(lsof -t -iTCP:3000 -sTCP:LISTEN 2>/dev/null | sort -u)
   else

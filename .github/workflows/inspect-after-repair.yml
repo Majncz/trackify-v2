@@ -84,6 +84,8 @@ jobs:
               elif line.startswith("port_parent=") and parent_count < 2:
                   add("Port 3000 parent", line)
                   parent_count += 1
+              elif line.startswith("port_container="):
+                  add("Port 3000 container", line)
               elif line.startswith("docker_container=") and container_count < 3:
                   add("Running Docker container", line)
                   container_count += 1
