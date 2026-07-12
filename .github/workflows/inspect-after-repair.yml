@@ -101,23 +101,17 @@ jobs:
           if development_sha:
               add("Development checkout", development_sha)
 
+          listener_count = 0
+          process_count = 0
           for line in lines:
-              if line.startswith('{"gitSha"'):
-                  add("Build metadata", line)
-              elif '"name":"trackify-prod"' in line:
+              if '"name":"trackify-prod"' in line:
                   add("PM2 production process", line)
-              elif line.startswith("NEXTAUTH_URL="):
-                  add("Production NEXTAUTH_URL", line)
-              elif line.startswith("manifest=") or line.startswith("manifest_missing="):
-                  add("Next route manifest", line)
-              elif line.startswith("pm2_log="):
-                  add("PM2 runtime log", line)
-              elif line.startswith("listener="):
+              elif line.startswith("listener=") and listener_count < 3:
                   add("Listening process", line)
-              elif line.startswith("node_process="):
+                  listener_count += 1
+              elif line.startswith("node_process=") and process_count < 3:
                   add("Node process", line)
-              elif "reverse_proxy" in line and "trackify.ranajakub.com" in line:
-                  add("Caddy production route", line)
+                  process_count += 1
 
           preferred_endpoints = (
               "production port model endpoint",
