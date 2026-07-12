@@ -211,6 +211,33 @@ report_network() {
   fi
 }
 
+report_container_auth() {
+  section "Docker authentication environment"
+  local container="trackify-prod"
+  local compose_file="/root/dockerized-services/docker-compose.yml"
+
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "docker=not-installed"
+    return 0
+  fi
+
+  docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$container" 2>/dev/null | \
+    awk '/^NEXTAUTH_URL=/ { print "container_env=" $0 }' || true
+
+  docker exec "$container" sh -c '
+    if [ -f /app/.env ]; then
+      grep -E "^NEXTAUTH_URL=" /app/.env
+    else
+      echo "missing=/app/.env"
+    fi
+  ' 2>/dev/null | awk '{ print "container_app_env=" $0 }' || true
+
+  if [ -f "$compose_file" ]; then
+    docker compose -f "$compose_file" config 2>/dev/null | \
+      awk '/NEXTAUTH_URL|env_file/ { print "compose_auth=" $0 }' || true
+  fi
+}
+
 report_caddy() {
   section "Caddy routing configuration"
   if [ ! -d /etc/caddy ]; then
@@ -321,6 +348,7 @@ report_checkout "Development" "$DEV_DIR"
 report_build_artifacts
 report_pm2
 report_network
+report_container_auth
 report_caddy
 report_runtime_routes
 

@@ -86,9 +86,15 @@ jobs:
                   parent_count += 1
               elif line.startswith("port_container="):
                   add("Port 3000 container", line)
-              elif line.startswith("compose=") and compose_count < 8:
+              elif line.startswith("compose=") and compose_count < 2:
                   add("Docker Compose service", line)
                   compose_count += 1
+              elif line.startswith("container_env="):
+                  add("Container NEXTAUTH_URL", line)
+              elif line.startswith("container_app_env="):
+                  add("Container .env NEXTAUTH_URL", line)
+              elif line.startswith("compose_auth="):
+                  add("Compose auth environment", line)
 
           preferred_endpoints = (
               "production port model endpoint",
