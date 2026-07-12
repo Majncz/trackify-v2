@@ -1,0 +1,182 @@
+name: Diagnose Trackify Production
+
+# This workflow never deploys, migrates, restarts, reloads, or writes to the
+# production server. The isolated branch trigger lets us run it before adding
+# the workflow to master, which would otherwise trigger the deploy workflow.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "diagnose/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trackify-production-diagnostics
+  cancel-in-progress: false
+
+jobs:
+  vps:
+    name: Read-only VPS diagnostics
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out diagnostic script
+        uses: actions/checkout@v4
+
+      - name: Inspect production runtime over SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          key_file="$RUNNER_TEMP/trackify-diagnostic-key"
+          trap 'rm -f "$key_file"' EXIT
+
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$key_file"
+          chmod 600 "$key_file"
+
+          ssh \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=10 \
+            -o ServerAliveInterval=10 \
+            -o ServerAliveCountMax=3 \
+            -i "$key_file" \
+            root@195.201.147.39 \
+            'bash -s' < scripts/diagnose-production.sh
+
+  public:
+    name: Read-only public hostname diagnostics
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PUBLIC_HOST: trackify.ranajakub.com
+      EXPECTED_MODEL: claude-sonnet-5
+    steps:
+      - name: Resolve current master build target
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 1
+
+      - name: Probe public model, auth, and chat routes
+        run: |
+          set -u
+          failures=0
+          expected_sha="$(git rev-parse HEAD)"
+
+          probe() {
+            local label="$1"
+            local path="$2"
+            local body_file
+            local headers_file
+            local error_file
+            local url
+            local status
+
+            body_file="$(mktemp)"
+            headers_file="$(mktemp)"
+            error_file="$(mktemp)"
+            url="https://${PUBLIC_HOST}${path}?diagnostic=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-$(date +%s)"
+
+            status="$(
+              curl -ksS \
+                --connect-timeout 10 \
+                --max-time 20 \
+                -D "$headers_file" \
+                -o "$body_file" \
+                -w '%{http_code}' \
+                "$url" \
+                2>"$error_file" || true
+            )"
+
+            printf '\n===== %s =====\n' "$label"
+            printf 'url=%s\n' "$url"
+            printf 'http_status=%s\n' "$status"
+            awk '
+              BEGIN { IGNORECASE = 1 }
+              /^HTTP\/|^server:|^location:|^cache-control:|^content-type:/ {
+                sub(/\r$/, "")
+                print
+              }
+            ' "$headers_file" || true
+
+            if [ -s "$error_file" ]; then
+              echo "curl_error:"
+              python3 - "$error_file" <<'PY'
+          import sys
+          from pathlib import Path
+
+          text = Path(sys.argv[1]).read_text(errors="replace")
+          print(text[:2000])
+          PY
+            fi
+
+            echo "response:"
+            if jq -e . "$body_file" >/dev/null 2>&1; then
+              jq . "$body_file"
+            else
+              python3 - "$body_file" <<'PY'
+          import sys
+          from pathlib import Path
+
+          text = Path(sys.argv[1]).read_text(errors="replace")
+          print(text[:2000])
+          PY
+            fi
+
+            case "$path" in
+              /api/chat/model)
+                model="$(jq -r '.model // empty' "$body_file" 2>/dev/null || true)"
+                sha="$(jq -r '.gitSha // empty' "$body_file" 2>/dev/null || true)"
+                printf 'model=%s\n' "$model"
+                printf 'git_sha=%s\n' "$sha"
+                if [ "$status" != "200" ] || [ "$model" != "$EXPECTED_MODEL" ]; then
+                  echo "::error::Public model endpoint is not returning $EXPECTED_MODEL"
+                  failures=$((failures + 1))
+                fi
+                if [ "$sha" != "$expected_sha" ]; then
+                  echo "::error::Public model endpoint SHA is $sha, expected $expected_sha"
+                  failures=$((failures + 1))
+                fi
+                ;;
+              /api/auth/providers)
+                if [ "$status" != "200" ]; then
+                  echo "::error::Public auth providers endpoint returned HTTP $status"
+                  failures=$((failures + 1))
+                fi
+                if ! python3 - "$body_file" "https://${PUBLIC_HOST}" <<'PY'
+          import sys
+          from pathlib import Path
+
+          body = Path(sys.argv[1]).read_text(errors="replace")
+          expected = sys.argv[2]
+          raise SystemExit(0 if expected in body else 1)
+          PY
+                then
+                  echo "::error::Public auth callbacks do not reference https://${PUBLIC_HOST}"
+                  failures=$((failures + 1))
+                fi
+                ;;
+              /api/chat)
+                if [ "$status" = "404" ]; then
+                  echo "::error::Public chat route is not reaching the Next application"
+                  failures=$((failures + 1))
+                fi
+                ;;
+            esac
+
+            rm -f "$body_file" "$headers_file" "$error_file"
+          }
+
+          probe "Public model endpoint" "/api/chat/model"
+          probe "Public auth providers" "/api/auth/providers"
+          probe "Public chat route method probe" "/api/chat"
+
+          printf '\n===== Public diagnostic result =====\n'
+          if [ "$failures" -eq 0 ]; then
+            echo "All public route checks passed."
+          else
+            echo "Public route checks reported $failures mismatch(es)."
+            exit 1
+          fi
