@@ -99,6 +99,8 @@ jobs:
                   add("Raw Compose auth setting", line)
               elif line.startswith("compose_dotenv="):
                   add("Compose dotenv auth setting", line)
+              elif line.startswith("compose_environment="):
+                  add("Compose environment auth setting", line)
 
           preferred_endpoints = (
               "production port model endpoint",
