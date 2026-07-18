@@ -12,6 +12,11 @@ import { formatDurationWords } from "@/lib/utils";
 import { ArrowLeft, EyeOff, Clock, Calendar } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
+import { TaskBillingPanel } from "@/components/tasks/task-billing-panel";
+import {
+  resolveGroupAccent,
+  groupAccentSoftBg,
+} from "@/lib/group-accent";
 export default function TaskDetailPage({
   params,
 }: {
@@ -139,6 +144,21 @@ export default function TaskDetailPage({
               </Button>
             )}
           </div>
+          {task.taskGroup ? (
+            <Badge
+              variant="outline"
+              className="mt-2 w-fit border-0 text-[11px] font-normal"
+              style={{
+                color: resolveGroupAccent(task.taskGroup),
+                backgroundColor: groupAccentSoftBg(
+                  resolveGroupAccent(task.taskGroup),
+                  0.2
+                ),
+              }}
+            >
+              {task.taskGroup.name}
+            </Badge>
+          ) : null}
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
@@ -160,6 +180,8 @@ export default function TaskDetailPage({
           )}
         </CardContent>
       </Card>
+
+      <TaskBillingPanel task={task} />
     </div>
   );
 }
