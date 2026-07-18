@@ -124,17 +124,15 @@ The deploy script handles the full workflow:
 4. **Install** dependencies & generate Prisma client
 5. **Build** the application
 6. **Start** production server on port 3000
-7. **Verify** health check passes
+7. **Verify** PM2 cwd, runtime model endpoint, and health check pass
 
 ## Server Configuration
-
 
 | Environment | Directory             | Port | URL                                                              | Command          |
 | ----------- | --------------------- | ---- | ---------------------------------------------------------------- | ---------------- |
 | Development | `/root/trackify`      | 3002 | [https://dev.time.ranajakub.com](https://dev.time.ranajakub.com) | `npm run dev`    |
 | Production  | `/root/trackify-prod` | 3000 | [https://time.ranajakub.com](https://time.ranajakub.com)         | `npm run deploy` |
 | Database    | -                     | 5435 | localhost (Docker)                                               | -                |
-
 
 **Note:** Dev and prod use separate directories to avoid build conflicts. The deploy script automatically pulls latest code and builds in the prod directory.
 
@@ -187,6 +185,11 @@ SMTP_* / SMTP_FROM=""    # optional — password reset emails
 ```
 
 ## Troubleshooting
+
+**AI chat still using an old model?**
+- Confirm deploy succeeded and `pm2 describe trackify-prod` shows `exec cwd` as `/root/trackify-prod`
+- Check runtime model: `curl -s http://127.0.0.1:3000/api/chat/model`
+- Verify compiled output: `grep claude-sonnet-5 /root/trackify-prod/.next/server/app/api/chat/route.js`
 
 **Login not working?**
 

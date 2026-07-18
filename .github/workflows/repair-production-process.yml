@@ -1,0 +1,404 @@
+name: Repair Trackify Production Container
+
+# This workflow switches the existing Docker production service from the stale
+# /root/trackify checkout to the verified /root/trackify-prod checkout. It
+# removes only the duplicate, failing PM2 entry afterward. It does not run
+# builds, migrations, database commands, or Caddy commands.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "repair/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trackify-production-process-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    name: Repair Docker production checkout
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Repair Docker service over SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          key_file="$RUNNER_TEMP/trackify-repair-key"
+          output_file="$RUNNER_TEMP/trackify-repair-output"
+          trap 'rm -f "$key_file" "$output_file"' EXIT
+
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$key_file"
+          chmod 600 "$key_file"
+
+          set +e
+          ssh \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=10 \
+            -o ServerAliveInterval=10 \
+            -o ServerAliveCountMax=3 \
+            -i "$key_file" \
+            root@195.201.147.39 \
+            'bash -s' <<'REMOTE_SCRIPT' | tee "$output_file"
+          set -euo pipefail
+
+          PROD_DIR="/root/trackify-prod"
+          COMPOSE_FILE="/root/dockerized-services/docker-compose.yml"
+          COMPOSE_ENV_FILE="/root/trackify/.env"
+          SERVICE="trackify-prod"
+          CONTAINER="trackify-prod"
+          PORT="3000"
+          PM2_APP="trackify-prod"
+          EXPECTED_MODEL="claude-sonnet-5"
+          EXPECTED_SITE_URL="https://trackify.ranajakub.com"
+
+          test -d "$PROD_DIR/.git"
+          test -f "$PROD_DIR/dist/server/index.js"
+          test -f "$PROD_DIR/.next/server/app/api/chat/model/route.js"
+          grep -q 'CHAT_MODEL_ID = "claude-sonnet-5"' \
+            "$PROD_DIR/src/lib/ai-model.ts"
+          grep -q "$EXPECTED_MODEL" \
+            "$PROD_DIR/.next/server/app/api/chat/route.js"
+          test -f "$COMPOSE_FILE"
+          test -f "$COMPOSE_ENV_FILE"
+
+          expected_sha="$(git -C "$PROD_DIR" rev-parse HEAD)"
+          build_info="$(
+            node -e '
+              const fs = require("fs");
+              const info = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+              process.stdout.write(JSON.stringify({
+                gitSha: info.gitSha ?? null,
+                model: info.model ?? null
+              }));
+            ' "$PROD_DIR/build-info.json"
+          )"
+          BUILD_INFO="$build_info" EXPECTED_SHA="$expected_sha" EXPECTED_MODEL="$EXPECTED_MODEL" \
+            node -e '
+              const info = JSON.parse(process.env.BUILD_INFO);
+              if (info.gitSha !== process.env.EXPECTED_SHA) {
+                throw new Error(`build-info SHA ${info.gitSha} != checkout ${process.env.EXPECTED_SHA}`);
+              }
+              if (info.model !== process.env.EXPECTED_MODEL) {
+                throw new Error(`build-info model ${info.model} != ${process.env.EXPECTED_MODEL}`);
+              }
+            '
+          echo "precondition_build=$expected_sha model=$EXPECTED_MODEL"
+
+          container_service="$(
+            docker inspect --format \
+              '{{index .Config.Labels "com.docker.compose.service"}}' \
+              "$CONTAINER" 2>/dev/null || true
+          )"
+          container_mount="$(
+            docker inspect --format \
+              '{{range .Mounts}}{{if eq .Destination "/app"}}{{.Source}}{{end}}{{end}}' \
+              "$CONTAINER" 2>/dev/null || true
+          )"
+          if [ "$container_service" != "$SERVICE" ]; then
+            echo "ERROR: $CONTAINER is not the expected Compose service"
+            exit 1
+          fi
+          if [ "$container_mount" != "/root/trackify" ] && \
+            [ "$container_mount" != "$PROD_DIR" ]; then
+            echo "ERROR: unexpected production mount '$container_mount'"
+            exit 1
+          fi
+          echo "precondition_container=service=$container_service mount=$container_mount"
+
+          backup_file="${COMPOSE_FILE}.trackify-prod.backup.$(date -u +%Y%m%d%H%M%S)"
+          auth_backup_file="${COMPOSE_ENV_FILE}.trackify-prod.backup.$(date -u +%Y%m%d%H%M%S)"
+          rollback_needed=1
+          rollback() {
+            if [ "$rollback_needed" -eq 1 ]; then
+              echo "ERROR: restoring production configuration after an incomplete replacement"
+              if [ -f "$backup_file" ]; then
+                cp -a "$backup_file" "$COMPOSE_FILE" || true
+              fi
+              if [ -f "$auth_backup_file" ]; then
+                cp -a "$auth_backup_file" "$COMPOSE_ENV_FILE" || true
+              fi
+              docker compose -f "$COMPOSE_FILE" up -d --no-build --no-deps "$SERVICE" || true
+            fi
+          }
+          trap rollback ERR
+
+          COMPOSE_FILE="$COMPOSE_FILE" BACKUP_FILE="$backup_file" python3 <<'PY'
+          import os
+          import re
+          import shutil
+          import stat
+          import tempfile
+          from pathlib import Path
+
+          compose = Path(os.environ["COMPOSE_FILE"])
+          backup = Path(os.environ["BACKUP_FILE"])
+          text = compose.read_text()
+          lines = text.splitlines(keepends=True)
+          service_matches = [
+              index
+              for index, line in enumerate(lines)
+              if re.match(r"^(\s*)trackify-prod:\s*$", line)
+          ]
+          if len(service_matches) != 1:
+              raise SystemExit(f"expected one trackify-prod service, found {len(service_matches)}")
+
+          start = service_matches[0]
+          service_indent = re.match(r"^(\s*)", lines[start]).group(1)
+          end = len(lines)
+          for index in range(start + 1, len(lines)):
+              if re.match(rf"^{re.escape(service_indent)}[^ \t].*:\s*$", lines[index]):
+                  end = index
+                  break
+
+          block = "".join(lines[start:end])
+          old_mount = "/root/trackify:/app"
+          new_mount = "/root/trackify-prod:/app"
+          mount_old_count = block.count(old_mount)
+          mount_new_count = block.count(new_mount)
+          if mount_old_count > 1 or mount_new_count > 1:
+              raise SystemExit(
+                  "trackify-prod service has an ambiguous /app mount"
+              )
+          if mount_old_count == 0 and mount_new_count == 0:
+              raise SystemExit("trackify-prod service has no recognized /app mount")
+
+          updated_block = block
+          if mount_old_count == 1:
+              updated_block = updated_block.replace(old_mount, new_mount)
+          updated = text.replace(block, updated_block, 1)
+          shutil.copy2(compose, backup)
+          mode = stat.S_IMODE(compose.stat().st_mode)
+          fd, temporary = tempfile.mkstemp(prefix=f".{compose.name}.", dir=compose.parent)
+          try:
+              with os.fdopen(fd, "w") as handle:
+                  handle.write(updated)
+              os.chmod(temporary, mode)
+              os.replace(temporary, compose)
+          finally:
+              if os.path.exists(temporary):
+                  os.unlink(temporary)
+          print(f"compose_backup={backup}")
+          print(f"compose_updated=mount={new_mount}")
+          PY
+
+          COMPOSE_ENV_FILE="$COMPOSE_ENV_FILE" BACKUP_FILE="$auth_backup_file" \
+            EXPECTED_NEXTAUTH_URL="$EXPECTED_SITE_URL" python3 <<'PY'
+          import os
+          import re
+          import shutil
+          import stat
+          import tempfile
+          from pathlib import Path
+
+          env_file = Path(os.environ["COMPOSE_ENV_FILE"])
+          backup = Path(os.environ["BACKUP_FILE"])
+          text = env_file.read_text()
+          pattern = re.compile(r"^NEXTAUTH_URL=.*$", re.MULTILINE)
+          matches = pattern.findall(text)
+          if len(matches) != 1:
+              raise SystemExit(f"expected one NEXTAUTH_URL setting, found {len(matches)}")
+
+          replacement = f'NEXTAUTH_URL="{os.environ["EXPECTED_NEXTAUTH_URL"]}"'
+          updated = pattern.sub(replacement, text, count=1)
+          shutil.copy2(env_file, backup)
+          mode = stat.S_IMODE(env_file.stat().st_mode)
+          fd, temporary = tempfile.mkstemp(prefix=f".{env_file.name}.", dir=env_file.parent)
+          try:
+              with os.fdopen(fd, "w") as handle:
+                  handle.write(updated)
+              os.chmod(temporary, mode)
+              os.replace(temporary, env_file)
+          finally:
+              if os.path.exists(temporary):
+                  os.unlink(temporary)
+          print(f"auth_env_backup={backup}")
+          print(f"auth_env_updated={replacement}")
+          PY
+
+          docker compose -f "$COMPOSE_FILE" config >/dev/null
+
+          pm2_app_exists="$(
+            pm2 jlist | node -e '
+              let input = "";
+              process.stdin.on("data", (chunk) => { input += chunk; });
+              process.stdin.on("end", () => {
+                const apps = JSON.parse(input);
+                process.stdout.write(
+                  apps.some((candidate) => candidate.name === process.argv[1])
+                    ? "yes"
+                    : "no"
+                );
+              });
+            ' "$PM2_APP"
+          )"
+          if [ "$pm2_app_exists" = "yes" ]; then
+            pm2 delete "$PM2_APP"
+            pm2 save
+            echo "pm2_duplicate_removed=yes"
+          else
+            echo "pm2_duplicate_removed=no"
+          fi
+
+          docker compose -f "$COMPOSE_FILE" up -d --no-build --no-deps "$SERVICE"
+
+          container_state="$(
+            docker inspect --format '{{.State.Status}}' "$CONTAINER"
+          )"
+          container_mount="$(
+            docker inspect --format \
+              '{{range .Mounts}}{{if eq .Destination "/app"}}{{.Source}}{{end}}{{end}}' \
+              "$CONTAINER"
+          )"
+          if [ "$container_state" != "running" ] || [ "$container_mount" != "$PROD_DIR" ]; then
+            echo "ERROR: container state=$container_state mount=$container_mount"
+            exit 1
+          fi
+          echo "container_state=$container_state mount=$container_mount"
+
+          container_nextauth="$(
+            docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" | \
+              awk -F= '$1 == "NEXTAUTH_URL" { print substr($0, index($0, "=") + 1); exit }'
+          )"
+          if [ "$container_nextauth" != "$EXPECTED_SITE_URL" ]; then
+            echo "ERROR: container NEXTAUTH_URL is '$container_nextauth'"
+            exit 1
+          fi
+          echo "container_env_NEXTAUTH_URL=$container_nextauth"
+
+          runtime_model_ok=0
+          for attempt in $(seq 1 30); do
+            response="$(curl -sf "http://127.0.0.1:${PORT}/api/chat/model" 2>/dev/null || true)"
+            if [ -n "$response" ] && \
+              RESPONSE="$response" EXPECTED_SHA="$expected_sha" EXPECTED_MODEL="$EXPECTED_MODEL" \
+                node -e '
+                  const response = JSON.parse(process.env.RESPONSE);
+                  if (response.model !== process.env.EXPECTED_MODEL) process.exit(1);
+                  if (response.gitSha !== process.env.EXPECTED_SHA) process.exit(1);
+                '; then
+              echo "runtime_model=$response"
+              runtime_model_ok=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$runtime_model_ok" -ne 1 ]; then
+            echo "ERROR: corrected Docker service did not expose the expected model endpoint"
+            exit 1
+          fi
+
+          auth_response="$(curl -sf "http://127.0.0.1:${PORT}/api/auth/providers")"
+          if [[ "$auth_response" != *"$EXPECTED_SITE_URL"* ]]; then
+            echo "ERROR: runtime auth callbacks do not reference $EXPECTED_SITE_URL"
+            echo "$auth_response"
+            exit 1
+          fi
+          echo "runtime_auth=$EXPECTED_SITE_URL"
+
+          rollback_needed=0
+          trap - ERR
+          echo "docker_production_repair=complete"
+          REMOTE_SCRIPT
+          ssh_status="${PIPESTATUS[0]}"
+          set -e
+
+          SSH_STATUS="$ssh_status" python3 - "$output_file" <<'PY'
+          import os
+          import sys
+          from pathlib import Path
+
+          prefixes = (
+              "precondition_",
+              "compose_backup=",
+              "compose_updated=",
+              "auth_env_backup=",
+              "auth_env_updated=",
+              "container_state=",
+              "container_env_NEXTAUTH_URL=",
+              "pm2_duplicate_removed=",
+              "runtime_model=",
+              "runtime_auth=",
+              "docker_production_repair=",
+              "ERROR:",
+          )
+          for line in Path(sys.argv[1]).read_text(errors="replace").splitlines():
+              if line.startswith(prefixes):
+                  safe = line[:1000].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                  print(f"::warning title=Docker production repair::{safe}")
+          if int(os.environ["SSH_STATUS"]) != 0:
+              print(f"::error title=Docker production repair::ssh_exit={os.environ['SSH_STATUS']}")
+          PY
+
+          if [ "$ssh_status" -ne 0 ]; then
+            exit "$ssh_status"
+          fi
+
+  public:
+    name: Verify public routes after Docker repair
+    needs: repair
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PUBLIC_HOST: trackify.ranajakub.com
+      EXPECTED_MODEL: claude-sonnet-5
+    steps:
+      - name: Resolve current master build target
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 1
+
+      - name: Verify public model, auth, and chat routes
+        run: |
+          set -euo pipefail
+          expected_sha="$(git rev-parse HEAD)"
+          query="repair=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          model_response="$(
+            curl -ksSf \
+              --connect-timeout 10 \
+              --max-time 20 \
+              "https://${PUBLIC_HOST}/api/chat/model?${query}"
+          )"
+          MODEL_RESPONSE="$model_response" EXPECTED_SHA="$expected_sha" EXPECTED_MODEL="$EXPECTED_MODEL" \
+            node -e '
+              const response = JSON.parse(process.env.MODEL_RESPONSE);
+              if (response.model !== process.env.EXPECTED_MODEL) {
+                throw new Error(`public model is ${response.model}`);
+              }
+              if (response.gitSha !== process.env.EXPECTED_SHA) {
+                throw new Error(`public SHA is ${response.gitSha}, expected ${process.env.EXPECTED_SHA}`);
+              }
+            '
+          echo "Public model OK: $model_response"
+
+          auth_response="$(
+            curl -ksSf \
+              --connect-timeout 10 \
+              --max-time 20 \
+              "https://${PUBLIC_HOST}/api/auth/providers?${query}"
+          )"
+          if [[ "$auth_response" != *"https://${PUBLIC_HOST}"* ]]; then
+            echo "ERROR: public auth callbacks are stale"
+            echo "$auth_response"
+            exit 1
+          fi
+          echo "Public auth URL OK: $auth_response"
+
+          chat_status="$(
+            curl -ksS \
+              --connect-timeout 10 \
+              --max-time 20 \
+              -o /dev/null \
+              -w '%{http_code}' \
+              "https://${PUBLIC_HOST}/api/chat?${query}"
+          )"
+          if [ "$chat_status" = "404" ]; then
+            echo "ERROR: public chat route still returns 404"
+            exit 1
+          fi
+          echo "Public chat route reached Next.js: HTTP $chat_status"

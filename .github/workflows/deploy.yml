@@ -26,6 +26,9 @@ jobs:
             # Reset to match remote (prevents dirty working dir from blocking deploys)
             git fetch origin master
             git reset --hard origin/master
+
+            # Keep the preserved production environment aligned with the public host
+            bash scripts/sync-production-env.sh "$PROD_DIR"
             
             # Install dependencies
             npm ci
@@ -33,12 +36,27 @@ jobs:
             # Generate Prisma client & migrate (pinned CLI — avoids npx fetching Prisma 7+)
             node ./node_modules/prisma/build/index.js generate --schema prisma/schema.prisma
             node ./node_modules/prisma/build/index.js migrate deploy --schema prisma/schema.prisma
-            
+
+            # Verify source model and write runtime build metadata
+            bash scripts/verify-production.sh source
+            bash scripts/write-build-info.sh "$PROD_DIR"
+
             # Clean and build in prod directory (pm2 trackify-prod runs from here)
             rm -rf .next dist
             npm run build
-            
-            # Restart PM2
-            pm2 restart trackify-prod
-            
+
+            # Verify compiled route and reload PM2 from prod checkout
+            bash scripts/verify-production.sh compiled
+            pm2 startOrReload "$PROD_DIR/ecosystem.config.cjs" --only trackify-prod --update-env
+            pm2 save
+
+            # Verify PM2 cwd and live runtime model endpoint
+            bash scripts/verify-production.sh pm2
+            bash scripts/verify-production.sh runtime
+            bash scripts/verify-production.sh auth
+
+            # Route the public host to the verified production process
+            python3 scripts/configure-caddy-production.py
+            bash scripts/verify-public-production.sh
+
             echo "✅ Deployment complete!"

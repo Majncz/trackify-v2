@@ -27,6 +27,7 @@
     "build": "next build && npx tsc server/index.ts --outDir dist --esModuleInterop --skipLibCheck --module commonjs --target ES2020",
     "start": "cross-env NODE_ENV=production PORT=3000 node dist/server/index.js",
     "deploy": "bash scripts/deploy.sh",
+    "verify:production": "bash scripts/verify-production.sh",
     "lint": "next lint",
     "migrate": "node ./node_modules/tsx/dist/cli.mjs scripts/migrate-data.ts",
     "seed:test-user": "node ./node_modules/tsx/dist/cli.mjs scripts/seed-test-user.ts",
