@@ -12,6 +12,7 @@
     "dev:restart": "npm run dev:stop && sleep 1 && npm run dev:local",
     "stack:local": "npm run db:up && sleep 5 && npm run setup:postgres && npm run dev:local:postgres",
     "db:migrate": "node ./node_modules/prisma/build/index.js migrate deploy --schema prisma/schema.prisma",
+    "verify:migrate-from-master": "node scripts/verify-migrate-from-master.mjs",
     "setup:dev": "npm install && node ./node_modules/prisma/build/index.js generate --schema prisma/schema.prisma && node ./node_modules/prisma/build/index.js migrate deploy --schema prisma/schema.prisma",
     "setup:sqlite": "node scripts/prisma-generate-for-env.mjs --sqlite && cross-env DATABASE_URL=file:./dev.db node ./node_modules/prisma/build/index.js db push --schema prisma/schema.sqlite.prisma",
     "setup:sqlite:force": "node scripts/prisma-generate-for-env.mjs --sqlite && cross-env DATABASE_URL=file:./dev.db node ./node_modules/prisma/build/index.js db push --schema prisma/schema.sqlite.prisma --accept-data-loss",
