@@ -8,6 +8,7 @@ import remarkGfm from "remark-gfm";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { focusControl } from "@/lib/focus-style";
 import { ChatTabBar } from "@/components/chat/chat-tab-bar";
 import {
   Send,
@@ -24,14 +25,22 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
   listTasks: "Get all your tasks",
   findTask: "Search for a task",
   listEvents: "List time entries",
+  listTaskGroups: "List task groups",
   createTask: "Create a new task",
   createEvent: "Log time to a task",
   getStats: "Get time statistics",
   deleteEvent: "Delete a time entry",
   updateEvent: "Update a time entry",
+  setTaskGroupMembership: "Add task to a group or remove from group",
 };
 
-export const WRITE_TOOLS = ["createTask", "createEvent", "deleteEvent", "updateEvent"];
+export const WRITE_TOOLS = [
+  "createTask",
+  "createEvent",
+  "deleteEvent",
+  "updateEvent",
+  "setTaskGroupMembership",
+];
 
 // Helper functions (outside component to avoid recreation)
 function formatToolName(name: string): string {
@@ -75,6 +84,11 @@ function getToolDescription(name: string, args: Record<string, unknown>): string
     if (args.newDate) changes.push(`move to ${formatDate(args.newDate as string)}`);
     if (args.newDuration) changes.push(`change duration to ${formatDuration(args.newDuration as number)}`);
     return changes.length > 0 ? changes.join(" and ") : "Update time entry";
+  }
+  if (name === "setTaskGroupMembership") {
+    const gid = args.groupId as string | null | undefined;
+    if (gid == null || gid === "") return "Remove task from its group";
+    return "Assign task to group";
   }
   return Object.entries(args)
     .filter(([k]) => !k.includes("Id"))
@@ -238,6 +252,7 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
       // Invalidate queries after successful write operations to refresh frontend data
       if (WRITE_TOOLS.includes(toolName)) {
         queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        queryClient.invalidateQueries({ queryKey: ["groups"] });
         queryClient.invalidateQueries({ queryKey: ["stats"] });
         queryClient.invalidateQueries({ queryKey: ["events"] });
       }
@@ -370,7 +385,12 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
   const iconSize = isSidebar ? "h-3 w-3" : "h-4 w-4";
 
   return (
-    <div className={cn("relative flex flex-col", isSidebar ? "h-full" : "h-full")}>
+    <div
+      className={cn(
+        "relative flex flex-col w-full min-w-0",
+        isSidebar ? "h-full" : "min-h-[calc(100svh-12rem)] sm:min-h-[65vh]"
+      )}
+    >
       {header && (
         <div className="shrink-0 border-b bg-background">
           {header}
@@ -386,7 +406,13 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
       )}
 
       {/* Messages */}
-      <div className={cn("flex-1 overflow-y-auto", spacing, isSidebar ? "px-2 pb-4" : "pb-24 md:pb-4")}>
+      <div
+        className={cn(
+          "flex-1 overflow-y-auto overflow-x-hidden min-h-0",
+          spacing,
+          isSidebar ? "px-2 pb-4" : "pb-[calc(10rem+env(safe-area-inset-bottom,0px))] md:pb-4"
+        )}
+      >
         {messages.length === 0 && !error && (
           <div className={cn(
             "flex flex-col items-center justify-center text-center text-muted-foreground",
@@ -426,12 +452,12 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
             <div className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
               <div
                 className={cn(
-                  "max-w-[90%] rounded-lg",
+                  "rounded-lg break-words",
                   padding,
                   textSize,
                   message.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted prose prose-sm dark:prose-invert prose-p:my-1 prose-headings:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-table:my-1 max-w-none"
+                    ? "max-w-[min(92vw,20rem)] sm:max-w-[min(85%,24rem)] bg-primary text-primary-foreground"
+                    : "max-w-[min(100%,calc(100vw-2rem))] sm:max-w-[90%] bg-muted prose prose-sm dark:prose-invert prose-p:my-1 prose-headings:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-table:my-1 prose-pre:overflow-x-auto prose-pre:max-w-full"
                 )}
               >
                 {message.role === "user" ? (
@@ -451,7 +477,11 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
                             remarkPlugins={[remarkGfm]}
                             components={{
                               table: ({ children }) => (
-                                <table className="border-collapse w-full text-xs my-1">{children}</table>
+                                <div className="overflow-x-auto max-w-full my-1 rounded-md border border-border/50">
+                                  <table className="border-collapse w-full text-xs min-w-[min(100%,280px)]">
+                                    {children}
+                                  </table>
+                                </div>
                               ),
                               thead: ({ children }) => (
                                 <thead className="bg-muted/50">{children}</thead>
@@ -625,8 +655,10 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
       <form
         onSubmit={handleSubmit}
         className={cn(
-          "flex gap-2 border-t bg-background",
-          isSidebar ? "p-2" : "fixed bottom-16 left-0 right-0 md:relative md:bottom-auto p-4 md:p-0 md:pt-4 z-40"
+          "flex gap-2 border-t bg-background/95 backdrop-blur-sm supports-[backdrop-filter]:bg-background/80",
+          isSidebar
+            ? "p-2"
+            : "fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] left-0 right-0 z-40 p-3 md:relative md:bottom-auto md:z-auto md:bg-background md:backdrop-blur-none md:p-0 md:pt-4"
         )}
       >
         <textarea
@@ -643,7 +675,8 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
           disabled={isLoading}
           rows={1}
           className={cn(
-            "flex-1 resize-none rounded-md border border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+            "flex-1 resize-none rounded-md border border-input bg-background placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
+            focusControl,
             textSize,
             isSidebar ? "min-h-[32px] max-h-[80px] px-2 py-1.5" : "min-h-[40px] max-h-[120px] px-3 py-2"
           )}

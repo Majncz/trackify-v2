@@ -33,12 +33,10 @@ jobs:
             # Install dependencies
             npm ci
             
-            # Generate Prisma client
-            npx prisma generate
-            
-            # Run database migrations
-            npx prisma migrate deploy
-            
+            # Generate Prisma client & migrate (pinned CLI — avoids npx fetching Prisma 7+)
+            node ./node_modules/prisma/build/index.js generate --schema prisma/schema.prisma
+            node ./node_modules/prisma/build/index.js migrate deploy --schema prisma/schema.prisma
+
             # Verify source model and write runtime build metadata
             bash scripts/verify-production.sh source
             bash scripts/write-build-info.sh "$PROD_DIR"

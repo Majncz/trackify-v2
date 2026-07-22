@@ -1,5 +1,4 @@
-// Load environment variables before any other imports
-import "dotenv/config";
+import "./load-env";
 
 import { createServer } from "http";
 import { parse } from "url";
@@ -336,6 +335,7 @@ app.prepare().then(async () => {
   });
 
   httpServer.listen(port, () => {
-    console.log(`> Ready on http://${hostname}:${port}`);
+    // 0.0.0.0 is bind-only — browsers reject http://0.0.0.0/ (ERR_ADDRESS_INVALID).
+    console.log(`> Ready on http://localhost:${port}`);
   });
 });

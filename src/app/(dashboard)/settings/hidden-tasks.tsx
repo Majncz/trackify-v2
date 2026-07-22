@@ -98,10 +98,10 @@ export function HiddenTasks() {
             {hiddenTasks.map((task) => (
               <div
                 key={task.id}
-                className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                className="flex flex-col gap-3 p-3 rounded-lg bg-muted/50 sm:flex-row sm:items-center sm:justify-between"
               >
-                <div>
-                  <p className="font-medium">{task.name}</p>
+                <div className="min-w-0">
+                  <p className="font-medium break-words">{task.name}</p>
                   <p className="text-sm text-muted-foreground">
                     {formatDurationWords(task.totalTime)}
                   </p>
@@ -111,6 +111,7 @@ export function HiddenTasks() {
                   size="sm"
                   onClick={() => handleRestore(task.id)}
                   disabled={restoringId === task.id}
+                  className="shrink-0 w-full sm:w-auto"
                 >
                   <RotateCcw className="h-4 w-4 mr-1" />
                   {restoringId === task.id ? "Restoring..." : "Restore"}

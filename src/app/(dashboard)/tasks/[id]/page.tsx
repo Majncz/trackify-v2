@@ -12,7 +12,11 @@ import { formatDurationWords } from "@/lib/utils";
 import { ArrowLeft, EyeOff, Clock, Calendar } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
-
+import { TaskBillingPanel } from "@/components/tasks/task-billing-panel";
+import {
+  resolveGroupAccent,
+  groupAccentSoftBg,
+} from "@/lib/group-accent";
 export default function TaskDetailPage({
   params,
 }: {
@@ -109,8 +113,8 @@ export default function TaskDetailPage({
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-xl">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <CardTitle className="text-xl min-w-0 break-words">
               {isEditing ? (
                 <Input
                   type="text"
@@ -133,12 +137,28 @@ export default function TaskDetailPage({
                 size="sm"
                 onClick={handleHide}
                 disabled={deleteTask.isPending}
+                className="shrink-0 self-start sm:self-auto"
               >
                 <EyeOff className="h-4 w-4 mr-2" />
                 {deleteTask.isPending ? "Hiding..." : "Hide"}
               </Button>
             )}
           </div>
+          {task.taskGroup ? (
+            <Badge
+              variant="outline"
+              className="mt-2 w-fit border-0 text-[11px] font-normal"
+              style={{
+                color: resolveGroupAccent(task.taskGroup),
+                backgroundColor: groupAccentSoftBg(
+                  resolveGroupAccent(task.taskGroup),
+                  0.2
+                ),
+              }}
+            >
+              {task.taskGroup.name}
+            </Badge>
+          ) : null}
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
@@ -160,6 +180,8 @@ export default function TaskDetailPage({
           )}
         </CardContent>
       </Card>
+
+      <TaskBillingPanel task={task} />
     </div>
   );
 }
@@ -244,9 +266,9 @@ function EventsList({ events }: { events: Event[] }) {
                 return (
                   <div
                     key={event.id}
-                    className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border/50 hover:bg-muted transition-colors"
+                    className="flex flex-col gap-2 p-3 bg-muted/50 rounded-lg border border-border/50 hover:bg-muted transition-colors sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
                       <Clock className="h-4 w-4 text-muted-foreground" />
                       <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
                         <span className="text-sm font-medium">
@@ -258,7 +280,7 @@ function EventsList({ events }: { events: Event[] }) {
                         </span>
                       </div>
                     </div>
-                    <Badge variant="outline" className="font-mono">
+                    <Badge variant="outline" className="font-mono shrink-0 self-start sm:self-auto">
                       {formatDurationWords(duration)}
                     </Badge>
                   </div>

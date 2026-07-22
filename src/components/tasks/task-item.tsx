@@ -1,10 +1,11 @@
 "use client";
 
+import type { MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatDurationWords } from "@/lib/utils";
-import { cn } from "@/lib/utils";
+import { formatDurationWords, cn } from "@/lib/utils";
+import { resolveGroupAccent, hexToRgba } from "@/lib/group-accent";
 import { Play, Square } from "lucide-react";
 
 interface Event {
@@ -18,6 +19,7 @@ interface Task {
   name: string;
   hidden: boolean;
   events: Event[];
+  taskGroup?: { id: string; name: string; color?: string | null } | null;
 }
 
 interface TaskItemProps {
@@ -38,14 +40,15 @@ export function TaskItem({
   pendingConfirmation,
 }: TaskItemProps) {
   const router = useRouter();
+  const group = task.taskGroup ?? null;
+  const accentHex = group ? resolveGroupAccent({ id: group.id, color: group.color }) : null;
   const totalTime = task.events.reduce((sum, e) => {
     const fromMs = new Date(e.from).getTime();
     const toMs = new Date(e.to).getTime();
     return sum + (toMs - fromMs);
   }, 0);
 
-  function handleCardClick(e: React.MouseEvent) {
-    // Don't navigate if clicking on buttons
+  function handleCardClick(e: MouseEvent) {
     const target = e.target as HTMLElement;
     if (
       target.closest("button") ||
@@ -57,54 +60,69 @@ export function TaskItem({
     router.push(`/tasks/${task.id}`);
   }
 
-  function handleStartClick(e: React.MouseEvent) {
+  function handleStartClick(e: MouseEvent) {
     e.stopPropagation();
     onStart();
   }
 
-  function handleStopClick(e: React.MouseEvent) {
+  function handleStopClick(e: MouseEvent) {
     e.stopPropagation();
     onStop();
-    }
+  }
 
   return (
     <Card
       className={cn(
-        "transition-all h-full flex flex-col cursor-pointer",
-        isActive && "border-primary ring-1 ring-primary",
-        pendingConfirmation && "animate-pending-pulse border-yellow-500 ring-1 ring-yellow-500"
+        "h-full flex flex-col cursor-pointer rounded-xl border border-border bg-card text-card-foreground shadow-sm",
+        isActive && "ring-2 ring-primary ring-offset-2 ring-offset-background z-0",
+        pendingConfirmation &&
+          "animate-pending-pulse ring-2 ring-yellow-500 ring-offset-2 ring-offset-background"
       )}
       onClick={handleCardClick}
     >
       <CardContent className="p-4 flex flex-col flex-1">
-        <div className="mb-3">
-          <h3 className="font-medium truncate">{task.name}</h3>
+        <div className="mb-3 flex items-start justify-between gap-2">
+          <h3 className="font-medium truncate min-w-0">{task.name}</h3>
+          {group ? (
+            <span
+              className="shrink-0 max-w-[min(11rem,48%)] truncate rounded-xl border px-2.5 py-1 text-[10px] font-medium leading-tight shadow-sm"
+              style={{
+                borderColor: accentHex ? hexToRgba(accentHex, 0.92) : undefined,
+                color: accentHex ?? undefined,
+              }}
+              title={group.name}
+            >
+              {group.name}
+            </span>
+          ) : null}
         </div>
 
-        <p className={cn(
-          "text-sm text-muted-foreground mb-3",
-          isLoading && "animate-pulse opacity-70"
-        )}>
+        <p
+          className={cn(
+            "text-sm text-muted-foreground mb-3",
+            isLoading && "animate-pulse opacity-70"
+          )}
+        >
           Total: {formatDurationWords(totalTime)}
         </p>
 
         <div className="mt-auto">
-            {isActive ? (
-                <Button
+          {isActive ? (
+            <Button
               onClick={handleStopClick}
-                  variant="destructive"
-                  size="sm"
-                  disabled={isLoading}
+              variant="destructive"
+              size="sm"
+              disabled={isLoading}
               className="w-full"
-                >
-                  <Square className="h-4 w-4 mr-1" />
-                  {isLoading ? "Saving..." : pendingConfirmation ? "Syncing..." : "Stop"}
-                </Button>
-            ) : (
+            >
+              <Square className="h-4 w-4 mr-1" />
+              {isLoading ? "Saving..." : pendingConfirmation ? "Syncing..." : "Stop"}
+            </Button>
+          ) : (
             <Button onClick={handleStartClick} size="sm" className="w-full">
-                  <Play className="h-4 w-4 mr-1" />
-                  Start
-                </Button>
+              <Play className="h-4 w-4 mr-1" />
+              Start
+            </Button>
           )}
         </div>
       </CardContent>

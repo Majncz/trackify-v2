@@ -15,7 +15,7 @@ import { ChevronDown, ChevronUp, AlertCircle, X } from "lucide-react";
 
 export function TaskList() {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [tasksPerRow, setTasksPerRow] = useState(3);
+  const [tasksPerRow, setTasksPerRow] = useState(1);
   const [isAdjustDialogOpen, setIsAdjustDialogOpen] = useState(false);
   const { tasks, isLoading } = useTasks();
   const {
@@ -67,12 +67,14 @@ export function TaskList() {
   useEffect(() => {
     function updateTasksPerRow() {
       const width = window.innerWidth;
-      if (width < 1024) {
-        setTasksPerRow(2); // Mobile/Tablet: 2 columns
+      if (width < 640) {
+        setTasksPerRow(1);
+      } else if (width < 1024) {
+        setTasksPerRow(2);
       } else if (width < 1280) {
-        setTasksPerRow(3); // Desktop: 3 columns
+        setTasksPerRow(3);
       } else {
-        setTasksPerRow(4); // XL: 4 columns
+        setTasksPerRow(4);
       }
     }
 
@@ -90,7 +92,7 @@ export function TaskList() {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
           <Skeleton className="h-32" />
           <Skeleton className="h-32" />
           <Skeleton className="h-32" />
@@ -127,16 +129,16 @@ export function TaskList() {
           pendingConfirmation && "animate-pending-pulse"
         )}>
           <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
                 <p className="text-sm text-primary font-medium">
                   {pendingConfirmation ? "Syncing..." : "Currently tracking"}
                 </p>
-                <p className="text-lg font-semibold">
+                <p className="text-lg font-semibold truncate">
                   {tasks.find((t) => t.id === taskId)?.name}
                 </p>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-3 sm:gap-4 shrink-0">
                 <TimerDisplay
                   milliseconds={elapsed}
                   size="lg"
@@ -170,7 +172,7 @@ export function TaskList() {
           </Card>
         ) : (
           <>
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
               {displayedTasks.map((task) => (
             <TaskItem
               key={task.id}

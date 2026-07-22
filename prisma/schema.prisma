@@ -1,20 +1,29 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
-  id             String          @id @default(uuid())
-  email          String          @unique
-  password       String
-  tasks          Task[]
-  passwordResets PasswordReset[]
-  conversations  Conversation[]
-  activeTimers   ActiveTimer[]
-  apiTokens      ApiToken[]
+  id                     String                 @id @default(uuid())
+  email                  String                 @unique
+  password               String
+  /// Target tracked hours per 100 CZK spend (effectiveness baseline). Null = rolling median of past periods.
+  aiTargetHoursPer100Czk Float?
+  tasks                  Task[]
+  passwordResets         PasswordReset[]
+  conversations          Conversation[]
+  activeTimers           ActiveTimer[]
+  apiTokens              ApiToken[]
+  taskGroups             TaskGroup[]
+  billingTasks           BillingTask[]
+  paymentRecords         PaymentRecord[]
+  aiSubscriptionPresets  AiSubscriptionPreset[]
+  aiSubscriptionPeriods  AiSubscriptionPeriod[]
 
   @@map("trackify_user")
 }
@@ -31,30 +40,71 @@ model PasswordReset {
 }
 
 model Task {
-  id           String        @id @default(uuid())
-  name         String
-  hidden       Boolean       @default(false)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @default(now()) @updatedAt
-  userId       String
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  events       Event[]
-  activeTimers ActiveTimer[]
+  id                  String               @id @default(uuid())
+  name                String
+  hidden              Boolean              @default(false)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @default(now()) @updatedAt
+  userId              String
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskGroupId         String?
+  taskGroup           TaskGroup?           @relation(fields: [taskGroupId], references: [id], onDelete: SetNull)
+  events              Event[]
+  activeTimers        ActiveTimer[]
+  billingTask         BillingTask?
 
   @@index([userId, hidden])
+  @@index([taskGroupId])
   @@map("trackify_task")
 }
 
 model Event {
-  id        String   @id @default(uuid())
-  from      DateTime @default(now())
-  to        DateTime
-  name      String   @default("Time entry")
-  taskId    String
-  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  id               String           @id @default(uuid())
+  from             DateTime         @default(now())
+  to               DateTime
+  name             String           @default("Time entry")
+  taskId           String
+  task             Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  paymentRecordId  String?
+  paymentRecord    PaymentRecord?   @relation(fields: [paymentRecordId], references: [id], onDelete: SetNull)
+  /// Amount recorded when marked paid (may differ from rate × duration).
+  paidAmount       Float?
 
   @@index([taskId, from])
+  @@index([paymentRecordId])
   @@map("trackify_event")
+}
+
+model BillingTask {
+  id             String   @id @default(uuid())
+  taskId         String   @unique
+  task           Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hourlyRate     Float
+  currency       String   @default("CZK")
+  roundingMins   Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId])
+  @@map("trackify_billing_task")
+}
+
+model PaymentRecord {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paidAt       DateTime
+  note         String?
+  totalAmount  Float
+  totalMinutes Int
+  currency     String   @default("CZK")
+  events       Event[]
+  createdAt    DateTime @default(now())
+
+  @@index([userId, paidAt])
+  @@map("trackify_payment_record")
 }
 
 model Conversation {
@@ -94,6 +144,20 @@ model ActiveTimer {
   @@map("trackify_active_timer")
 }
 
+model TaskGroup {
+  id        String   @id @default(uuid())
+  name      String
+  color     String?  // Custom hex e.g. #4f46e5; null = derived from id in UI
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks     Task[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("trackify_task_group")
+}
+
 model ApiToken {
   id        String   @id @default(uuid())
   token     String   @unique
@@ -106,4 +170,49 @@ model ApiToken {
 
   @@index([token])
   @@map("trackify_api_token")
+}
+
+model AiSubscriptionPreset {
+  id          String                 @id @default(uuid())
+  userId      String
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  providerKey String?
+  isBuiltIn   Boolean                @default(false)
+  sortOrder   Int                    @default(0)
+  createdAt   DateTime               @default(now())
+  periods     AiSubscriptionPeriod[]
+
+  @@index([userId, sortOrder])
+  @@map("trackify_ai_subscription_preset")
+}
+
+model AiSubscriptionPeriod {
+  id        String               @id @default(uuid())
+  userId    String
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  presetId  String?
+  preset    AiSubscriptionPreset? @relation(fields: [presetId], references: [id], onDelete: SetNull)
+  name      String
+  price     Float
+  currency  String               @default("CZK")
+  startsAt  DateTime
+  endsAt    DateTime?
+  /// When prepaid credits/tokens ran out (may be before endsAt).
+  depletedAt DateTime?
+  /// purchase = one payment covers credits until depleted/end; recurring_monthly = price charged each calendar month in span.
+  billingKind String              @default("purchase")
+  /// Billing cadence for recurring rows (weekly/quarterly/yearly stored for completeness; metrics still use monthly-style math today).
+  billingCadence String           @default("monthly")
+  /// Email/account the subscription is tied to (optional).
+  billingEmail String?
+  /// Link to billing / manage subscription page (optional).
+  billingProviderUrl String?
+  note      String?
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  @@index([userId, startsAt])
+  @@index([userId, endsAt])
+  @@map("trackify_ai_subscription_period")
 }

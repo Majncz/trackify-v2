@@ -10,55 +10,96 @@ A time tracking application built with Next.js, Socket.IO, and PostgreSQL.
 
 - **Frontend**: Next.js 14 (App Router), React, Tailwind CSS, shadcn/ui
 - **Backend**: Next.js API Routes, Socket.IO for real-time updates
-- **Database**: PostgreSQL with Prisma ORM
-- **Auth**: NextAuth.js v5
+- **Database**: **PostgreSQL** in production and staging (the real DB). **SQLite** (`prisma/dev.db`) for normal local development — no Docker required.
 
 ## Prerequisites
 
-- Node.js 20+
-- PostgreSQL (via Docker)
-- Caddy (reverse proxy, already configured on server)
+- **Node.js 18.17+** (or newer). If you use `nvm`, run `nvm install` then `nvm use` (see `.nvmrc`).
+- **Database**: daily dev uses **SQLite**; install Docker Postgres **only** if you want parity with production migrations locally (optional).
+- Caddy (reverse proxy, already configured on server — not needed for `dev:local`)
 
 ## Local Development
 
+**Default workflow:** SQLite (`npm run dev:local` or `npm run dev:sqlite`). **PostgreSQL** stays for **production**, hosted staging, and optional local parity — not for day-to-day app development unless you opt in.
+
+### SQLite file DB (`prisma/dev.db`) — normal dev
+
+**`npm run dev:local`** and **`npm run dev:sqlite`** both run **`scripts/local-dev.mjs`**: SQLite only, **`NEXTAUTH_URL=http://localhost:3002`**, port **3002**, ignoring Postgres in **`.env`**.
+
+Detailed setup (**`DATABASE_URL`** paths, seeding **`a@a.com`**, troubleshooting): **[docs/local-sqlite-dev.md](./docs/local-sqlite-dev.md)**.
+
+Prisma uses **`prisma/schema.sqlite.prisma`** for SQLite; do **not** run **`prisma migrate deploy`** against this file DB — use **`npm run setup:sqlite`** (**`db push`**). If push fails, **`npm run setup:sqlite:force`** (may wipe local SQLite data).
+
 ```bash
-# Start the database
-docker-compose up -d
+cp .env.example .env
+# SQLite: use DATABASE_URL=file:./dev.db (see docs/local-sqlite-dev.md)
+# Set NEXTAUTH_SECRET (e.g. openssl rand -base64 32)
 
-# Install dependencies
 npm install
+npm run setup:sqlite
+npm run dev:sqlite
+```
 
-# Generate Prisma client
-npx prisma generate
+Optional demo data: **`npm run bootstrap:sqlite`** (**`a@a.com`** / **`a`** in **`prisma/dev.db`** only).
 
-# Push schema to database
-npx prisma db push
+### Optional — PostgreSQL on your machine
 
-# Start dev server with hot reload
+Use this when you need **migration parity** or want to hit the **same DB stack as production** locally. Not required for UI/feature work.
+
+`npm run dev:local:postgres` checks Postgres, runs **`prisma generate`** for **`schema.prisma`**, and starts the server using **`DATABASE_URL`** from **`.env`** (must be **`postgresql://…`**).
+
+```bash
+# .env → postgresql://… (e.g. after npm run db:up)
+npm run setup:postgres   # or setup:dev — generate + migrations
+npm run dev:local:postgres
+```
+
+Open **[http://localhost:3002](http://localhost:3002)**.
+
+### HTTPS dev host / production-like (`npm run dev`)
+
+Uses Postgres from **`.env`** (e.g. Docker). Typical when mirroring the deployed stack behind your proxy — **not** the same as everyday SQLite dev.
+
+```bash
+cp .env.example .env
+# Set DATABASE_URL to postgresql://trackify:trackify_dev@localhost:5435/trackify (see comments in .env.example)
+
+npm install
+npm run db:up
+
+# Install deps, generate Postgres client, apply migrations
+npm run setup:dev
+
 npm run dev
 ```
 
-Dev server runs on port 3002 → https://dev.trackify.ranajakub.com
+Port **3002**. **`npm run dev`** expects **`DATABASE_URL=postgresql://…`** (production-like).
 
 ### ⚠️ IMPORTANT: Hot Reload vs Restart
 
 **DO NOT restart the dev server for code changes** - hot reload handles it automatically.
 
 **DO restart the dev server after:**
+
 - Prisma schema changes (`prisma/schema.prisma`)
 - `package.json` changes
 - Environment variable changes (`.env`)
 - Server crashed
 
-**After Prisma schema changes:**
+**After PostgreSQL schema changes** (`prisma/schema.prisma`):
+
 ```bash
-npx prisma db push      # Sync database
-npx prisma generate     # Regenerate client
-# Then restart dev server - Prisma client is cached!
+npx prisma migrate dev   # or migrate deploy against a staging DB
+npx prisma generate
 pkill -f 'tsx server' && npm run dev
 ```
 
+**After SQLite-only edits** (`prisma/schema.sqlite.prisma`): regenerate with `npm run setup:sqlite`, then restart the dev server.
+
+**Never run `prisma migrate deploy` when `DATABASE_URL` is a `file:` SQLite URL** — use `npm run setup:sqlite` (`db push`) instead.
+
 **Check if dev is already running:**
+
 ```bash
 lsof -i :3002  # Shows process if running
 ```
@@ -76,6 +117,7 @@ npm run deploy "feat: add new feature"
 ```
 
 The deploy script handles the full workflow:
+
 1. **Commit** all changes in dev directory
 2. **Push** to GitHub
 3. **Pull** latest code to prod directory (`/root/trackify-prod`)
@@ -86,11 +128,11 @@ The deploy script handles the full workflow:
 
 ## Server Configuration
 
-| Environment | Directory | Port | URL | Command |
-|-------------|-----------|------|-----|---------|
-| Development | `/root/trackify` | 3002 | https://dev.trackify.ranajakub.com | `npm run dev` |
-| Production | `/root/trackify-prod` | 3000 | https://trackify.ranajakub.com | `npm run deploy` |
-| Database | - | 5435 | localhost (Docker) | - |
+| Environment | Directory             | Port | URL                                                              | Command          |
+| ----------- | --------------------- | ---- | ---------------------------------------------------------------- | ---------------- |
+| Development | `/root/trackify`      | 3002 | [https://dev.time.ranajakub.com](https://dev.time.ranajakub.com) | `npm run dev`    |
+| Production  | `/root/trackify-prod` | 3000 | [https://time.ranajakub.com](https://time.ranajakub.com)         | `npm run deploy` |
+| Database    | -                     | 5435 | localhost (Docker)                                               | -                |
 
 **Note:** Dev and prod use separate directories to avoid build conflicts. The deploy script automatically pulls latest code and builds in the prod directory.
 
@@ -117,10 +159,12 @@ pkill -f 'node dist/index.js'
 Copy `.env.example` to `.env` and configure:
 
 ```env
-DATABASE_URL="postgresql://user:pass@localhost:5435/trackify"
-NEXTAUTH_URL="https://dev.trackify.ranajakub.com"
+DATABASE_URL="file:./dev.db"              # local dev (SQLite → prisma/dev.db)
+# DATABASE_URL="postgresql://…"           # production / staging / optional Docker dev only
+NEXTAUTH_URL="http://localhost:3002"    # npm run dev:local / dev:sqlite
 NEXTAUTH_SECRET="generate-a-secret"
-ANTHROPIC_API_KEY="your-anthropic-api-key"
+ANTHROPIC_API_KEY=""     # optional — AI chat
+SMTP_* / SMTP_FROM=""    # optional — password reset emails
 ```
 
 ## Project Structure
@@ -148,13 +192,17 @@ ANTHROPIC_API_KEY="your-anthropic-api-key"
 - Verify compiled output: `grep claude-sonnet-5 /root/trackify-prod/.next/server/app/api/chat/route.js`
 
 **Login not working?**
+
 - Check `NEXTAUTH_URL` matches your domain
 - Verify database is running: `docker ps | grep postgres`
 
 **Socket disconnected (red dot)?**
+
 - Check server logs: `tail -f /tmp/trackify-prod.log`
 - Verify WebSocket connection in browser DevTools
 
 **Port already in use?**
+
 - Kill zombie processes: `pkill -f 'tsx server'`
 - Or use deploy script which handles this automatically
+

@@ -61,7 +61,7 @@ npm install --silent
 # Step 6: Generate Prisma client
 echo ""
 echo "🔧 Step 6: Generating Prisma client..."
-npx prisma generate --schema=prisma/schema.prisma > /dev/null
+node ./node_modules/prisma/build/index.js generate --schema=prisma/schema.prisma > /dev/null
 
 # Step 7: Clean and build
 echo ""

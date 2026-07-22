@@ -1,0 +1,214 @@
+// SQLite schema for local development without PostgreSQL/Docker.
+// Sync DB with: npm run setup:sqlite
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                     String                 @id @default(uuid())
+  email                  String                 @unique
+  password               String
+  aiTargetHoursPer100Czk Float?
+  tasks                  Task[]
+  passwordResets         PasswordReset[]
+  conversations          Conversation[]
+  activeTimers           ActiveTimer[]
+  apiTokens              ApiToken[]
+  taskGroups             TaskGroup[]
+  billingTasks           BillingTask[]
+  paymentRecords         PaymentRecord[]
+  aiSubscriptionPresets  AiSubscriptionPreset[]
+  aiSubscriptionPeriods  AiSubscriptionPeriod[]
+
+  @@map("trackify_user")
+}
+
+model PasswordReset {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  expiresAt DateTime
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@map("trackify_password_reset")
+}
+
+model Task {
+  id                  String               @id @default(uuid())
+  name                String
+  hidden              Boolean              @default(false)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @default(now()) @updatedAt
+  userId              String
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskGroupId         String?
+  taskGroup           TaskGroup?           @relation(fields: [taskGroupId], references: [id], onDelete: SetNull)
+  events              Event[]
+  activeTimers        ActiveTimer[]
+  billingTask         BillingTask?
+
+  @@index([userId, hidden])
+  @@index([taskGroupId])
+  @@map("trackify_task")
+}
+
+model Event {
+  id               String           @id @default(uuid())
+  from             DateTime         @default(now())
+  to               DateTime
+  name             String           @default("Time entry")
+  taskId           String
+  task             Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  paymentRecordId  String?
+  paymentRecord    PaymentRecord?   @relation(fields: [paymentRecordId], references: [id], onDelete: SetNull)
+  paidAmount       Float?
+
+  @@index([taskId, from])
+  @@index([paymentRecordId])
+  @@map("trackify_event")
+}
+
+model BillingTask {
+  id             String   @id @default(uuid())
+  taskId         String   @unique
+  task           Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hourlyRate     Float
+  currency       String   @default("CZK")
+  roundingMins   Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId])
+  @@map("trackify_billing_task")
+}
+
+model PaymentRecord {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paidAt       DateTime
+  note         String?
+  totalAmount  Float
+  totalMinutes Int
+  currency     String   @default("CZK")
+  events       Event[]
+  createdAt    DateTime @default(now())
+
+  @@index([userId, paidAt])
+  @@map("trackify_payment_record")
+}
+
+model Conversation {
+  id        String        @id @default(uuid())
+  title     String?
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  ChatMessage[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([userId, updatedAt])
+  @@map("trackify_conversation")
+}
+
+model ChatMessage {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  content        String
+  // Prisma 5 SQLite has no Json — store AI SDK payload as JSON text (see chatMessagePartsForDb)
+  parts          String?
+  createdAt      DateTime     @default(now())
+
+  @@map("trackify_chat_message")
+}
+
+model ActiveTimer {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  startTime DateTime
+  createdAt DateTime @default(now())
+
+  @@map("trackify_active_timer")
+}
+
+model TaskGroup {
+  id        String   @id @default(uuid())
+  name      String
+  color     String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks     Task[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("trackify_task_group")
+}
+
+model ApiToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  name      String   @default("Mobile App")
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  lastUsedAt DateTime?
+
+  @@index([token])
+  @@map("trackify_api_token")
+}
+
+model AiSubscriptionPreset {
+  id          String                 @id @default(uuid())
+  userId      String
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  providerKey String?
+  isBuiltIn   Boolean                @default(false)
+  sortOrder   Int                    @default(0)
+  createdAt   DateTime               @default(now())
+  periods     AiSubscriptionPeriod[]
+
+  @@index([userId, sortOrder])
+  @@map("trackify_ai_subscription_preset")
+}
+
+model AiSubscriptionPeriod {
+  id        String               @id @default(uuid())
+  userId    String
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  presetId  String?
+  preset    AiSubscriptionPreset? @relation(fields: [presetId], references: [id], onDelete: SetNull)
+  name      String
+  price     Float
+  currency  String               @default("CZK")
+  startsAt  DateTime
+  endsAt    DateTime?
+  depletedAt DateTime?
+  billingKind String              @default("purchase")
+  billingCadence String           @default("monthly")
+  billingEmail String?
+  billingProviderUrl String?
+  note      String?
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  @@index([userId, startsAt])
+  @@index([userId, endsAt])
+  @@map("trackify_ai_subscription_period")
+}

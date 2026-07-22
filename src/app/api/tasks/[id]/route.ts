@@ -8,6 +8,11 @@ const updateTaskSchema = z.object({
   hidden: z.boolean().optional(),
 });
 
+function devErrorDetail(error: unknown): string | undefined {
+  if (process.env.NODE_ENV !== "development") return undefined;
+  return error instanceof Error ? error.message : String(error);
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -19,23 +24,36 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const task = await prisma.task.findFirst({
-    where: {
-      id,
-      userId: user.id,
-    },
-    include: {
-      events: {
-        orderBy: { from: "desc" },
+  try {
+    const task = await prisma.task.findFirst({
+      where: {
+        id,
+        userId: user.id,
       },
-    },
-  });
+      include: {
+        events: {
+          orderBy: { from: "desc" },
+        },
+        taskGroup: { select: { id: true, name: true, color: true } },
+      },
+    });
 
-  if (!task) {
-    return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    if (!task) {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(task);
+  } catch (error) {
+    console.error(`GET /api/tasks/${id}:`, error);
+    const detail = devErrorDetail(error);
+    return NextResponse.json(
+      {
+        error: "Internal server error",
+        ...(detail ? { detail } : {}),
+      },
+      { status: 500 }
+    );
   }
-
-  return NextResponse.json(task);
 }
 
 export async function PUT(
@@ -69,6 +87,7 @@ export async function PUT(
       data,
       include: {
         events: true,
+        taskGroup: { select: { id: true, name: true, color: true } },
       },
     });
 

@@ -1,3 +1,4 @@
+import { chatMessagePartsForDb } from "@/lib/database-mode";
 import { anthropic } from "@ai-sdk/anthropic";
 import { streamText, tool, stepCountIs, convertToModelMessages } from "ai";
 import { z } from "zod";
@@ -41,7 +42,7 @@ function createTools(userId: string, timezone: string) {
       execute: async () => {
         const tasks = await prisma.task.findMany({
           where: { userId, hidden: false },
-          include: { events: true },
+          include: { events: true, taskGroup: { select: { id: true, name: true, color: true } } },
           orderBy: { name: "asc" },
         });
 
@@ -54,6 +55,9 @@ function createTools(userId: string, timezone: string) {
           return {
             id: t.id,
             name: t.name,
+            groupId: t.taskGroup?.id ?? null,
+            groupName: t.taskGroup?.name ?? null,
+            groupColor: t.taskGroup?.color ?? null,
             totalTime: formatDuration(totalMs),
             lastActivity: formatDate(lastEvent?.from || null, timezone),
           };
@@ -62,24 +66,43 @@ function createTools(userId: string, timezone: string) {
     }),
 
     findTask: tool({
-      description: "Find a task by name (fuzzy matching). Use this before creating events to get the task ID.",
+      description:
+        "Find a task by name (fuzzy matching). Use this before creating events to get the task ID. When several tasks share the same name, use groupId/groupName to pick the right one.",
       inputSchema: z.object({
         query: z.string().describe("The task name to search for (partial match OK)"),
       }),
       execute: async ({ query }) => {
+        const taskSelect = {
+          id: true,
+          name: true,
+          taskGroup: { select: { id: true, name: true, color: true } },
+        } as const;
+
+        const mapTask = (t: {
+          id: string;
+          name: string;
+          taskGroup: { id: string; name: string; color: string | null } | null;
+        }) => ({
+          id: t.id,
+          name: t.name,
+          groupId: t.taskGroup?.id ?? null,
+          groupName: t.taskGroup?.name ?? null,
+          groupColor: t.taskGroup?.color ?? null,
+        });
+
         const tasks = await prisma.task.findMany({
           where: {
             userId,
             hidden: false,
-            name: { contains: query, mode: "insensitive" },
+            name: { contains: query },
           },
-          select: { id: true, name: true },
+          select: taskSelect,
         });
 
         if (tasks.length === 0) {
           const allTasks = await prisma.task.findMany({
             where: { userId, hidden: false },
-            select: { id: true, name: true },
+            select: taskSelect,
           });
 
           const queryWords = query.toLowerCase().split(/\s+/);
@@ -88,15 +111,38 @@ function createTools(userId: string, timezone: string) {
           );
 
           return matches.length > 0
-            ? { found: true, tasks: matches }
+            ? { found: true, tasks: matches.map(mapTask) }
             : {
                 found: false,
                 message: `No task matching "${query}" found`,
-                availableTasks: allTasks.map((t) => t.name),
+                availableTasks: allTasks.map((t) =>
+                  t.taskGroup ? `${t.name} (group: ${t.taskGroup.name})` : t.name
+                ),
               };
         }
 
-        return { found: true, tasks };
+        return { found: true, tasks: tasks.map(mapTask) };
+      },
+    }),
+
+    listTaskGroups: tool({
+      description:
+        "List the user's saved task groups (names, IDs, and which tasks are in each). Use this when the user asks about groups or before assigning setTaskGroupMembership.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const groups = await prisma.taskGroup.findMany({
+          where: { userId },
+          orderBy: { name: "asc" },
+          include: { tasks: { select: { id: true, name: true } } },
+        });
+
+        return groups.map((g) => ({
+          id: g.id,
+          name: g.name,
+          color: g.color,
+          taskCount: g.tasks.length,
+          tasks: g.tasks.map((t) => ({ id: t.id, name: t.name })),
+        }));
       },
     }),
 
@@ -288,6 +334,7 @@ function createTools(userId: string, timezone: string) {
         const tasks = await prisma.task.findMany({
           where: { userId, hidden: false },
           include: {
+            taskGroup: { select: { name: true } },
             events: {
               where: { 
                 from: { 
@@ -302,6 +349,7 @@ function createTools(userId: string, timezone: string) {
         const taskStats = tasks
           .map((t) => ({
             name: t.name,
+            groupName: t.taskGroup?.name ?? null,
             totalMs: t.events.reduce((sum, e) => sum + (e.to.getTime() - e.from.getTime()), 0),
           }))
           .filter((t) => t.totalMs > 0)
@@ -318,10 +366,27 @@ function createTools(userId: string, timezone: string) {
           totalTime: `${totalHours}h ${totalMinutes}m`,
           taskBreakdown: taskStats.map((t) => ({
             name: t.name,
+            group: t.groupName,
             time: `${Math.floor(t.totalMs / 3600000)}h ${Math.floor((t.totalMs % 3600000) / 60000)}m`,
           })),
         };
       },
+    }),
+
+    setTaskGroupMembership: tool({
+      description:
+        "Add a task to a saved group, or remove it from any group. Each task may belong to at most one group. Use listTaskGroups for group IDs. If the task is already in a different group, refuse unless the user first removes it (approve only when groupId matches the current group, or when clearing membership).",
+      inputSchema: z.object({
+        taskId: z.string(),
+        groupId: z
+          .string()
+          .nullable()
+          .optional()
+          .describe(
+            "Target group ID from listTaskGroups. Pass null to remove the task from its group."
+          ),
+      }),
+      // No execute - requires approval
     }),
 
     deleteEvent: tool({
@@ -391,7 +456,7 @@ export async function POST(req: Request) {
         conversationId: conversation.id,
         role: "user",
         content: userMessageText,
-        parts: lastMessage.parts || null,
+        parts: chatMessagePartsForDb(lastMessage.parts ?? null) as never,
       },
     });
 
@@ -428,6 +493,11 @@ export async function POST(req: Request) {
 Today: ${todayInUserTz.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.
 Current time: ${todayInUserTz.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}.
 User's timezone: ${timezone}.
+
+**Task groups:**
+- Tasks can be in at most one **saved group** (a named label). Tools "listTasks" and "findTask" return groupId / groupName when set. "listTaskGroups" lists groups and member tasks.
+- Duplicate task names are disambiguated by group (e.g. two tasks both named "Coding" in different groups).
+- "setTaskGroupMembership" changes group membership (requires user approval). Use a null groupId to remove a task from its group.
 
 **Using getStats for time statistics:**
 Use presets for common periods:
@@ -513,7 +583,9 @@ Use markdown: **bold** for emphasis, tables for data, keep responses concise.`,
             conversationId: conversation.id,
             role: "assistant",
             content: text || "",
-            parts: assistantParts.length > 0 ? assistantParts : undefined,
+            parts: chatMessagePartsForDb(
+              assistantParts.length > 0 ? assistantParts : undefined
+            ) as never,
           },
         });
 
