@@ -1,6 +1,7 @@
 import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
+import { createHash } from "node:crypto";
 import { prisma } from "./prisma";
 
 class InvalidEmail extends CredentialsSignin {
@@ -37,10 +38,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           throw new InvalidEmail();
         }
 
-        const isValid = await bcrypt.compare(
-          credentials.password as string,
-          user.password
-        );
+        const password = credentials.password as string;
+        const stored = user.password;
+        let isValid = false;
+        if (stored.startsWith("$2")) {
+          isValid = await bcrypt.compare(password, stored);
+        } else if (/^[a-f0-9]{64}$/i.test(stored)) {
+          // Legacy SHA-256 hex hashes from older Trackify builds
+          const digest = createHash("sha256").update(password).digest("hex");
+          isValid = digest.toLowerCase() === stored.toLowerCase();
+        }
 
         if (!isValid) {
           throw new InvalidPassword();
