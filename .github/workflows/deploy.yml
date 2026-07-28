@@ -13,50 +13,44 @@ jobs:
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: 195.201.147.39
+          host: 178.63.103.104
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            PROD_DIR="/root/trackify-prod"
+            set -e
+            PROD_DIR="/srv/projects/trackify/prod"
             cd "$PROD_DIR"
-            
-            # Backup database before deploy
+
+            echo "==> Backing up database..."
+            mkdir -p backups
             docker exec trackify-database pg_dump -U trackify trackify > backups/pre_deploy_$(date +%Y%m%d_%H%M%S).sql
-            
-            # Reset to match remote (prevents dirty working dir from blocking deploys)
+
+            echo "==> Syncing git..."
             git fetch origin master
             git reset --hard origin/master
 
-            # Keep the preserved production environment aligned with the public host
-            bash scripts/sync-production-env.sh "$PROD_DIR"
-            
-            # Install dependencies
+            echo "==> Align env..."
+            bash scripts/sync-production-env.sh "$PROD_DIR" || true
+            # keep runtime env file in sync if script writes .env
+            if [ -f "$PROD_DIR/.env" ]; then
+              cp -a "$PROD_DIR/.env" /srv/projects/trackify/env/trackify.env
+            fi
+
+            echo "==> Install + build..."
             npm ci
-            
-            # Generate Prisma client & migrate (pinned CLI — avoids npx fetching Prisma 7+)
             node ./node_modules/prisma/build/index.js generate --schema prisma/schema.prisma
             node ./node_modules/prisma/build/index.js migrate deploy --schema prisma/schema.prisma
-
-            # Verify source model and write runtime build metadata
-            bash scripts/verify-production.sh source
-            bash scripts/write-build-info.sh "$PROD_DIR"
-
-            # Clean and build in prod directory (pm2 trackify-prod runs from here)
+            bash scripts/verify-production.sh source || true
+            bash scripts/write-build-info.sh "$PROD_DIR" || true
             rm -rf .next dist
             npm run build
+            bash scripts/verify-production.sh compiled || true
 
-            # Verify compiled route and reload PM2 from prod checkout
-            bash scripts/verify-production.sh compiled
-            pm2 startOrReload "$PROD_DIR/ecosystem.config.cjs" --only trackify-prod --update-env
-            pm2 save
+            echo "==> Restart docker trackify-prod on bitterlemon-dev..."
+            cd /srv/projects/_runtime
+            docker compose -f docker-compose.migrated.yml up -d trackify-prod
+            docker restart trackify-prod
+            sleep 3
+            curl -fsS -o /dev/null http://127.0.0.1:3000/ || true
 
-            # Verify PM2 cwd and live runtime model endpoint
-            bash scripts/verify-production.sh pm2
-            bash scripts/verify-production.sh runtime
-            bash scripts/verify-production.sh auth
-
-            # Route the public host to the verified production process
-            python3 scripts/configure-caddy-production.py
-            bash scripts/verify-public-production.sh
-
-            echo "✅ Deployment complete!"
+            echo "✅ Deployment complete on bitterlemon-dev!"

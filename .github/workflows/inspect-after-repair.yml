@@ -38,7 +38,7 @@ jobs:
             -o ServerAliveInterval=10 \
             -o ServerAliveCountMax=3 \
             -i "$key_file" \
-            root@195.201.147.39 \
+            root@178.63.103.104 \
             'bash -s' < scripts/diagnose-production.sh | tee "$output_file"
           ssh_status="${PIPESTATUS[0]}"
           set -e

@@ -42,7 +42,7 @@ jobs:
             -o ServerAliveInterval=10 \
             -o ServerAliveCountMax=3 \
             -i "$key_file" \
-            root@195.201.147.39 \
+            root@178.63.103.104 \
             'bash -s' <<'REMOTE_SCRIPT' | tee "$output_file"
           set -euo pipefail
 
