@@ -49,3 +49,10 @@ build-info.json
 # Tauri desktop app
 apps/desktop/node_modules
 apps/desktop/src-tauri/target
+
+# workbench host leftovers
+/backups/
+*.bak*
+*.backup*
+._*
+**/._*
