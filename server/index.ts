@@ -5,6 +5,14 @@ import { parse } from "url";
 import next from "next";
 import { Server as SocketIOServer } from "socket.io";
 import { prisma } from "../src/lib/prisma";
+import {
+  emitToUser,
+  getActiveTimers,
+  persistTimerStart,
+  persistTimerStartTime,
+  persistTimerStop,
+  setRealtimeIo,
+} from "../src/lib/timer-runtime";
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "0.0.0.0";
@@ -67,10 +75,17 @@ app.prepare().then(async () => {
       methods: ["GET", "POST"],
       credentials: true,
     },
+    pingInterval: 25000,
+    pingTimeout: 60000,
   });
+  setRealtimeIo(io);
 
   // Store active timers per user - load from DB on startup
-  const activeTimers = await loadActiveTimers();
+  const loadedTimers = await loadActiveTimers();
+  const activeTimers = getActiveTimers();
+  for (const [userId, timer] of loadedTimers) {
+    activeTimers.set(userId, timer);
+  }
   console.log(`Loaded ${activeTimers.size} active timer(s) from database`);
 
   io.on("connection", (socket) => {
@@ -147,44 +162,33 @@ app.prepare().then(async () => {
       }
     });
 
-    socket.on("timer:start", async (data: { taskId: string }) => {
+    socket.on("timer:start", async (data: { taskId: string; startTime?: number }) => {
       if (!userId) return;
 
-      const startTime = Date.now();
+      const now = Date.now();
+      let startTime = typeof data.startTime === "number" ? data.startTime : now;
+      if (Number.isNaN(startTime) || startTime > now + 5000) {
+        startTime = now;
+      }
 
       try {
-        // Persist to DB first - only update memory if successful
-        await prisma.activeTimer.upsert({
-          where: { userId },
-          create: {
-            userId,
-            taskId: data.taskId,
-            startTime: new Date(startTime),
-          },
-          update: {
-            taskId: data.taskId,
-            startTime: new Date(startTime),
-          },
-        });
+        await persistTimerStart(userId, data.taskId, startTime);
+        const stored = activeTimers.get(userId);
+        if (stored) {
+          stored.socketIds.add(socket.id);
+        }
 
-        // Only update in-memory state after successful DB write
-        activeTimers.set(userId, {
-          taskId: data.taskId,
-          startTime,
-          socketIds: new Set([socket.id]),
-        });
-
-        // Broadcast to all user's devices
-        io.to(`user:${userId}`).emit("timer:started", {
+        emitToUser(userId, "timer:started", {
           taskId: data.taskId,
           startTime,
         });
       } catch (error) {
         console.error(`Failed to start timer for user ${userId}:`, error);
-        // Notify client of failure
         socket.emit("timer:error", {
           action: "start",
-          message: "Failed to start timer. Please try again.",
+          message: error instanceof Error && error.message === "Task not found"
+            ? "Task not found"
+            : "Failed to start timer. Please try again.",
         });
       }
     });
@@ -193,26 +197,17 @@ app.prepare().then(async () => {
       if (!userId) return;
 
       try {
-        // Remove from DB first
-        await prisma.activeTimer.delete({
-          where: { userId },
-        }).catch(() => {
-          // Ignore if not found - may have been cleaned up
-        });
-
-        // Only update in-memory state after successful DB operation
-        activeTimers.delete(userId);
-
-        // Broadcast stop to all user's devices
-        io.to(`user:${userId}`).emit("timer:stopped", {
-          taskId: data.taskId,
-          duration: data.duration,
-        });
+        const stopped = await persistTimerStop(userId, data.taskId);
+        if (stopped) {
+          emitToUser(userId, "timer:stopped", {
+            taskId: data.taskId,
+            duration: data.duration,
+          });
+        }
       } catch (error) {
         console.error(`Failed to stop timer for user ${userId}:`, error);
-        // Still try to broadcast stop to prevent UI being stuck
         activeTimers.delete(userId);
-        io.to(`user:${userId}`).emit("timer:stopped", {
+        emitToUser(userId, "timer:stopped", {
           taskId: data.taskId,
           duration: data.duration,
         });
@@ -274,22 +269,8 @@ app.prepare().then(async () => {
           return;
         }
 
-        // Update in database
-        await prisma.activeTimer.update({
-          where: { userId },
-          data: {
-            startTime: new Date(newStartTime),
-          },
-        });
-
-        // Update in-memory state
-        activeTimers.set(userId, {
-          ...timer,
-          startTime: newStartTime,
-        });
-
-        // Broadcast update to all user's devices
-        io.to(`user:${userId}`).emit("timer:start-updated", {
+        await persistTimerStartTime(userId, data.taskId, newStartTime);
+        emitToUser(userId, "timer:start-updated", {
           taskId: data.taskId,
           startTime: newStartTime,
         });
@@ -318,7 +299,7 @@ app.prepare().then(async () => {
       // Clear in-memory timer if task is being deleted
       const timer = activeTimers.get(userId);
       if (timer && timer.taskId === taskId) {
-        activeTimers.delete(userId);
+        void persistTimerStop(userId);
       }
       
       io.to(`user:${userId}`).emit("task:deleted", taskId);

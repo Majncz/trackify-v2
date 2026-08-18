@@ -29,6 +29,7 @@ interface TaskItemProps {
   onStop: () => void;
   isLoading?: boolean;
   pendingConfirmation?: boolean;
+  liveMs?: number;
 }
 
 export function TaskItem({
@@ -38,6 +39,7 @@ export function TaskItem({
   onStop,
   isLoading,
   pendingConfirmation,
+  liveMs = 0,
 }: TaskItemProps) {
   const router = useRouter();
   const group = task.taskGroup ?? null;
@@ -103,7 +105,7 @@ export function TaskItem({
             isLoading && "animate-pulse opacity-70"
           )}
         >
-          Total: {formatDurationWords(totalTime)}
+          Total: {formatDurationWords(totalTime + liveMs)}
         </p>
 
         <div className="mt-auto">

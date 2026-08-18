@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { validateNoOverlap, OverlapError } from "@/lib/event-overlap";
+import { emitToUser, persistTimerStop } from "@/lib/timer-runtime";
 import { z } from "zod";
 
 const eventSchema = z.object({
@@ -103,6 +104,17 @@ export async function POST(request: NextRequest) {
         },
       },
     });
+
+    const active = await prisma.activeTimer.findFirst({
+      where: { userId: user.id, taskId },
+    });
+    if (active) {
+      await persistTimerStop(user.id, taskId);
+      emitToUser(user.id, "timer:stopped", {
+        taskId,
+        duration: Math.max(0, eventTo.getTime() - eventFrom.getTime()),
+      });
+    }
 
     return NextResponse.json(event, { status: 201 });
   } catch (error) {

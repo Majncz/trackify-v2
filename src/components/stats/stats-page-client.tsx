@@ -2,6 +2,8 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useTasks } from "@/hooks/use-tasks";
+import { useLiveTimer } from "@/hooks/use-timer";
+import { tasksWithLiveTimer } from "@/lib/live-timer";
 import { useGroups } from "@/hooks/use-groups";
 import type { TaskGroup } from "@/hooks/use-groups";
 import { groupAccentHex, resolveGroupAccent } from "@/lib/group-accent";
@@ -384,9 +386,25 @@ function GroupColorPresetGrid({
 export function StatsPageClient() {
   const { tasks, isLoading: tasksLoading } = useTasks();
   const { groups, isLoading: groupsLoading, createGroup, updateGroup, deleteGroup } = useGroups();
+  const liveTimer = useLiveTimer();
+  const [liveNow, setLiveNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!liveTimer.running || !liveTimer.startTime) return;
+    const tick = () => setLiveNow(Date.now());
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [liveTimer.running, liveTimer.startTime, liveTimer.taskId]);
+
   const visibleTasks = useMemo(
-    () => tasks.filter((t) => !t.hidden),
-    [tasks]
+    () =>
+      tasksWithLiveTimer(
+        tasks.filter((t) => !t.hidden),
+        liveTimer,
+        liveNow
+      ),
+    [tasks, liveTimer.running, liveTimer.taskId, liveTimer.startTime, liveNow]
   );
 
   // Date range

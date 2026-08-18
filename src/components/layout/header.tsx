@@ -8,8 +8,14 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 export function Header() {
-  const { isConnected } = useSocket();
+  const { connectionStatus } = useSocket();
   const pathname = usePathname();
+  const statusTitle =
+    connectionStatus === "connected"
+      ? "Connected"
+      : connectionStatus === "reconnecting"
+        ? "Reconnecting"
+        : "Disconnected";
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b pt-[env(safe-area-inset-top,0px)]">
@@ -19,11 +25,14 @@ export function Header() {
           <span
             className={cn(
               "h-1.5 w-1.5 rounded-full transition-colors relative",
-              isConnected 
-                ? "bg-green-500 animate-pulse-dot shadow-[0_0_6px_rgba(34,197,94,0.6)]" 
-                : "bg-red-500 animate-pulse-dot-slow shadow-[0_0_6px_rgba(239,68,68,0.4)]"
+              connectionStatus === "connected" &&
+                "bg-green-500 animate-pulse-dot shadow-[0_0_6px_rgba(34,197,94,0.6)]",
+              connectionStatus === "reconnecting" &&
+                "bg-amber-400 animate-pulse-dot shadow-[0_0_6px_rgba(245,158,11,0.55)]",
+              connectionStatus === "disconnected" &&
+                "bg-red-500 animate-pulse-dot-slow shadow-[0_0_6px_rgba(239,68,68,0.4)]"
             )}
-            title={isConnected ? "Connected" : "Disconnected"}
+            title={statusTitle}
           />
         </Link>
         <div className="hidden md:flex items-center gap-1">

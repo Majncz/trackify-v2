@@ -2,6 +2,8 @@
 
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { useTasks } from "@/hooks/use-tasks";
+import { useLiveTimer } from "@/hooks/use-timer";
+import { tasksWithLiveTimer } from "@/lib/live-timer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { createPortal } from "react-dom";
@@ -367,12 +369,27 @@ interface ChartDataPoint {
 
 export function TimeChart() {
   const { tasks, isLoading } = useTasks();
+  const liveTimer = useLiveTimer();
+  const [liveNow, setLiveNow] = useState(() => Date.now());
   const [duration, setDuration] = useState<Duration>("weekly");
   const [offset, setOffset] = useState(0);
+
+  useEffect(() => {
+    if (!liveTimer.running || !liveTimer.startTime) return;
+    const tick = () => setLiveNow(Date.now());
+    tick();
+    const id = window.setInterval(tick, 10000);
+    return () => window.clearInterval(id);
+  }, [liveTimer.running, liveTimer.startTime, liveTimer.taskId]);
 
   const visibleTasks = useMemo(
     () => tasks.filter((t) => !t.hidden),
     [tasks]
+  );
+
+  const chartTasks = useMemo(
+    () => tasksWithLiveTimer(visibleTasks, liveTimer, liveNow),
+    [visibleTasks, liveTimer.running, liveTimer.taskId, liveTimer.startTime, liveNow]
   );
 
   const yearlyTaskColors = useMemo(() => {
@@ -385,7 +402,7 @@ export function TimeChart() {
 
   // Calculate max Y value for weekly view (not used for yearly)
   const maxYWeekly = useMemo(() => {
-    const allEvents = visibleTasks.flatMap((t) =>
+    const allEvents = chartTasks.flatMap((t) => {
       t.events.map((e) => ({ 
         ...e, 
         from: new Date(e.from),
@@ -429,7 +446,7 @@ export function TimeChart() {
     if (maxHours <= 50) return 50;
     if (maxHours <= 100) return 100;
     return Math.ceil(maxHours / 50) * 50;
-  }, [visibleTasks]);
+  }, [chartTasks]);
 
   // Calculate date range and chart data (only used for weekly view, not yearly)
   const { chartData, dateLabel, topTasks, hasOther } = useMemo(() => {
@@ -446,7 +463,7 @@ export function TimeChart() {
     const dateLabel = `${format(rangeStart, "MMM d")} - ${format(rangeEnd, "MMM d, yyyy")}`;
 
     // Calculate total time per task in this period (with proper overlap calculation)
-    const taskTotals: { id: string; name: string; total: number }[] = visibleTasks.map((task) => {
+    const taskTotals: { id: string; name: string; total: number }[] = chartTasks.map((task) => {
       let total = 0;
       task.events.forEach((event) => {
         const eventFrom = new Date(event.from);
@@ -474,7 +491,7 @@ export function TimeChart() {
 
       // Add top tasks
       topTasks.forEach((taskInfo) => {
-        const task = visibleTasks.find((t) => t.id === taskInfo.id);
+        const task = chartTasks.find((t) => t.id === taskInfo.id);
         if (!task) return;
 
         let taskTime = 0;
@@ -491,7 +508,7 @@ export function TimeChart() {
       if (hasOther) {
         let otherTime = 0;
         otherTasks.forEach((taskInfo) => {
-          const task = visibleTasks.find((t) => t.id === taskInfo.id);
+          const task = chartTasks.find((t) => t.id === taskInfo.id);
           if (!task) return;
 
           task.events.forEach((event) => {
@@ -507,7 +524,7 @@ export function TimeChart() {
     });
 
     return { chartData: data, dateLabel, topTasks, hasOther };
-  }, [duration, offset, visibleTasks]);
+  }, [duration, offset, chartTasks]);
 
   // Assign colors to top tasks
   const taskColors = useMemo(() => {
@@ -518,8 +535,14 @@ export function TimeChart() {
     if (hasOther) {
       colors["Other"] = OTHER_COLOR;
     }
+    if (liveTimer.taskId) {
+      const liveTask = visibleTasks.find((task) => task.id === liveTimer.taskId);
+      if (liveTask && !colors[liveTask.name]) {
+        colors[liveTask.name] = yearlyTaskColors[liveTask.name] ?? TASK_COLORS[0];
+      }
+    }
     return colors;
-  }, [topTasks, hasOther]);
+  }, [topTasks, hasOther, liveTimer.taskId, visibleTasks, yearlyTaskColors]);
 
   // Load 1000 days (~2.7 years) of history for the scrollable days view
   const DAYS_TO_LOAD = 1000;
@@ -528,7 +551,7 @@ export function TimeChart() {
   const eventsByDate = useMemo(() => {
     const index: Map<string, Array<{ taskName: string; from: Date; to: Date }>> = new Map();
     
-    visibleTasks.forEach((task) => {
+    chartTasks.forEach((task) => {
       task.events.forEach((event) => {
         const eventFrom = new Date(event.from);
         const eventTo = new Date(event.to);
@@ -545,7 +568,7 @@ export function TimeChart() {
     });
     
     return index;
-  }, [visibleTasks]);
+  }, [chartTasks]);
 
   const weekViewData = useMemo(() => {
     if (duration !== "weekly") return null;

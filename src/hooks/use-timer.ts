@@ -1,13 +1,38 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type ReactNode,
+} from "react";
+import { useSession } from "next-auth/react";
 import { useSocket } from "./use-socket";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  adoptServerRunning,
+  clearRunning,
+  enqueueStart,
+  enqueueStop,
+  hasPendingWork,
+  markRunningSynced,
+  pendingStopTaskIds,
+  readTimerQueue,
+  updateRunningStart,
+} from "@/lib/timer-draft";
+import { fetchServerTimer, persistStoppedTimer } from "@/lib/timer-sync";
+import {
+  kickTimerDurability,
+  TIMER_SYNC_EVENT,
+  type TimerSyncDetail,
+} from "@/lib/timer-durability";
 
 interface TimerState {
   taskId: string | null;
   startTime: number | null;
-  elapsed: number;
   running: boolean;
 }
 
@@ -32,92 +57,126 @@ interface TimerErrorData {
   message: string;
 }
 
-interface Event {
-  id: string;
-  taskId: string;
-  name: string;
-  from: string;
-  to: string;
-}
-
-interface Task {
-  id: string;
-  name: string;
-  events: Event[];
-}
-
-export function useTimer() {
+function useTimerController() {
+  const { data: session } = useSession();
+  const userId = session?.user?.id;
   const [state, setState] = useState<TimerState>({
     taskId: null,
     startTime: null,
-    elapsed: 0,
     running: false,
   });
   const [socketError, setSocketError] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState(false);
-  const [pendingSaveTaskId, setPendingSaveTaskId] = useState<string | null>(null);
+  const [pendingSaveTaskIds, setPendingSaveTaskIds] = useState<string[]>([]);
 
-  const intervalRef = useRef<NodeJS.Timeout>();
   const stateRef = useRef(state);
   const previousStartTimeRef = useRef<number | null>(null);
+  const userIdRef = useRef<string | undefined>(userId);
   const { emit, on, isConnected, requestTimerState } = useSocket();
   const queryClient = useQueryClient();
+  const [startError, setStartError] = useState<Error | null>(null);
 
-  // Keep ref in sync with state for callbacks
+  userIdRef.current = userId;
+
+  const refreshPendingStops = useCallback(() => {
+    setPendingSaveTaskIds(pendingStopTaskIds(readTimerQueue(userIdRef.current)));
+  }, []);
+
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
-  // Update elapsed time
-  useEffect(() => {
-    if (state.running && state.startTime) {
-      intervalRef.current = setInterval(() => {
-        setState((prev) => ({
-          ...prev,
-          elapsed: Math.max(0, Date.now() - prev.startTime!),
-        }));
-      }, 100);
-    }
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [state.running, state.startTime]);
-
-  // Listen for real-time updates
-  useEffect(() => {
-    const unsubStart = on("timer:started", (data) => {
-      const { taskId, startTime } = data as TimerStartedData;
-      setPendingConfirmation(false);
-      // Only update if not already running this task (avoids overwriting local state)
-      if (stateRef.current.taskId === taskId && stateRef.current.running) {
-        return;
-      }
+  const applyRunning = useCallback(
+    (taskId: string, startTime: number, pending: boolean) => {
+      setPendingConfirmation(pending);
       setState({
         taskId,
         startTime,
-        elapsed: Math.max(0, Date.now() - startTime),
         running: true,
       });
+    },
+    []
+  );
+
+  const applyIdle = useCallback(() => {
+    setState({
+      taskId: null,
+      startTime: null,
+      running: false,
+    });
+  }, []);
+
+  useEffect(() => {
+    function onSync(event: Event) {
+      const detail = (event as CustomEvent<TimerSyncDetail>).detail;
+      if (!detail) return;
+      refreshPendingStops();
+      if (detail.result === "ok" && detail.kind === "running") {
+        if (stateRef.current.taskId === detail.taskId) {
+          setPendingConfirmation(false);
+          setStartError(null);
+        }
+        return;
+      }
+      if (detail.result === "ok" && detail.kind === "stopping") {
+        setPendingConfirmation(false);
+        queryClient.invalidateQueries({ queryKey: ["events"] });
+        queryClient.invalidateQueries({ queryKey: ["stats"] });
+        queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        return;
+      }
+      if (detail.result === "rejected" && detail.kind === "running") {
+        setStartError(new Error(detail.error));
+        if (stateRef.current.taskId === detail.taskId) {
+          setPendingConfirmation(false);
+          applyIdle();
+        }
+        return;
+      }
+      if (detail.result === "rejected" && detail.kind === "stopping") {
+        setStartError(new Error(detail.error));
+      }
+    }
+
+    window.addEventListener(TIMER_SYNC_EVENT, onSync);
+    return () => window.removeEventListener(TIMER_SYNC_EVENT, onSync);
+  }, [applyIdle, queryClient, refreshPendingStops]);
+
+  useEffect(() => {
+    const unsubStart = on("timer:started", (data) => {
+      const { taskId, startTime } = data as TimerStartedData;
+      const queue = readTimerQueue(userIdRef.current);
+      if (hasPendingWork(queue)) return;
+      adoptServerRunning({
+        userId: userIdRef.current,
+        taskId,
+        startTime,
+      });
+      if (stateRef.current.taskId === taskId && stateRef.current.running) {
+        setPendingConfirmation(false);
+        return;
+      }
+      applyRunning(taskId, startTime, false);
     });
 
-    const unsubStop = on("timer:stopped", () => {
-      // Don't clear pendingConfirmation here if we're saving an event
-      // The REST createEvent.onSettled will clear pendingSaveTaskId
-      if (!stateRef.current.running) {
-        // Already stopped locally (optimistic), wait for REST to confirm
-      } else {
-        setPendingConfirmation(false);
+    const unsubStop = on("timer:stopped", (data) => {
+      const stopped = data as { taskId?: string };
+      const queue = readTimerQueue(userIdRef.current);
+      if (hasPendingWork(queue)) return;
+      if (
+        stopped.taskId &&
+        stateRef.current.taskId &&
+        stopped.taskId !== stateRef.current.taskId
+      ) {
+        return;
       }
-      setState({
-        taskId: null,
-        startTime: null,
-        elapsed: 0,
-        running: false,
-      });
-      // Invalidate queries to refresh stats
+      if (queue.running && stopped.taskId && queue.running.taskId === stopped.taskId) {
+        clearRunning(userIdRef.current);
+      }
+      if (stateRef.current.running) {
+        setPendingConfirmation(false);
+        applyIdle();
+      }
       queryClient.invalidateQueries({ queryKey: ["events"] });
       queryClient.invalidateQueries({ queryKey: ["stats"] });
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
@@ -125,26 +184,27 @@ export function useTimer() {
 
     const unsubState = on("timer:state", (data) => {
       const { taskId, startTime, running } = data as TimerStateData;
+      const queue = readTimerQueue(userIdRef.current);
+      if (hasPendingWork(queue)) return;
       if (running) {
-        setState({
+        adoptServerRunning({
+          userId: userIdRef.current,
           taskId,
           startTime,
-          elapsed: Math.max(0, Date.now() - startTime),
-          running: true,
         });
+        applyRunning(taskId, startTime, false);
       }
     });
 
     const unsubStartUpdated = on("timer:start-updated", (data) => {
       const { taskId, startTime } = data as TimerStartUpdatedData;
-      // Only update if this is the current running timer
       if (stateRef.current.taskId === taskId && stateRef.current.running) {
+        updateRunningStart(startTime, userIdRef.current);
+        markRunningSynced(userIdRef.current);
         setState({
           ...stateRef.current,
           startTime,
-          elapsed: Math.max(0, Date.now() - startTime),
         });
-        // Clear the previous start time ref since update succeeded
         previousStartTimeRef.current = null;
       }
     });
@@ -152,12 +212,10 @@ export function useTimer() {
     const unsubError = on("timer:error", (data) => {
       const { action, message } = data as TimerErrorData;
       if (action === "update-start") {
-        // Roll back optimistic update if we have a previous start time
         if (previousStartTimeRef.current !== null && stateRef.current.running) {
           setState({
             ...stateRef.current,
             startTime: previousStartTimeRef.current,
-            elapsed: Math.max(0, Date.now() - previousStartTimeRef.current),
           });
         }
         previousStartTimeRef.current = null;
@@ -172,80 +230,59 @@ export function useTimer() {
       unsubStartUpdated();
       unsubError();
     };
-  }, [on, queryClient]);
+  }, [on, queryClient, applyIdle, applyRunning]);
 
-  // Request timer state when socket connects
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrate() {
+      const queue = readTimerQueue(userId);
+      refreshPendingStops();
+      if (queue.running) {
+        applyRunning(queue.running.taskId, queue.running.startTime, !queue.running.synced);
+      }
+
+      const server = await fetchServerTimer();
+      if (cancelled) return;
+
+      const current = readTimerQueue(userId);
+      if (hasPendingWork(current)) {
+        kickTimerDurability();
+        return;
+      }
+
+      if (server.status === "unknown") {
+        return;
+      }
+
+      if (server.status === "ok" && server.running) {
+        adoptServerRunning({
+          userId,
+          taskId: server.taskId,
+          startTime: server.startTime,
+        });
+        applyRunning(server.taskId, server.startTime, false);
+        return;
+      }
+
+      if (server.status === "ok" && !server.running && current.running?.synced) {
+        clearRunning(userId);
+        applyIdle();
+      }
+    }
+
+    void hydrate();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, applyIdle, applyRunning, refreshPendingStops]);
+
   useEffect(() => {
     if (isConnected) {
       requestTimerState();
+      kickTimerDurability();
     }
   }, [isConnected, requestTimerState]);
-
-  const createEvent = useMutation({
-    mutationFn: async (data: {
-      taskId: string;
-      name: string;
-      from: string; // ISO timestamp of when the timer started
-      to: string;   // ISO timestamp of when the timer ended
-    }) => {
-      const res = await fetch("/api/events", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to create event");
-      }
-      return res.json();
-    },
-    onMutate: async (newEvent) => {
-      // Cancel outgoing refetches so they don't overwrite our optimistic update
-      await queryClient.cancelQueries({ queryKey: ["tasks"] });
-      await queryClient.cancelQueries({ queryKey: ["stats"] });
-
-      // Snapshot previous values
-      const previousTasks = queryClient.getQueryData(["tasks"]);
-
-      // Optimistically update tasks cache with new event
-      queryClient.setQueryData(["tasks"], (old: Task[] | undefined) => {
-        if (!old) return old;
-        return old.map((task) => {
-          if (task.id === newEvent.taskId) {
-            return {
-              ...task,
-              events: [
-                ...task.events,
-                {
-                  id: `temp-${Date.now()}`,
-                  taskId: newEvent.taskId,
-                  name: newEvent.name,
-                  from: newEvent.from,
-                  to: newEvent.to,
-                },
-              ],
-            };
-          }
-          return task;
-        });
-      });
-
-      return { previousTasks };
-    },
-    onError: (_err, _newEvent, context) => {
-      // Roll back on error
-      if (context?.previousTasks) {
-        queryClient.setQueryData(["tasks"], context.previousTasks);
-      }
-    },
-    onSettled: () => {
-      // Sync with server after mutation completes
-      setPendingSaveTaskId(null);
-      queryClient.invalidateQueries({ queryKey: ["events"] });
-      queryClient.invalidateQueries({ queryKey: ["stats"] });
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-    },
-  });
 
   const stopTimer = useCallback(() => {
     const currentState = stateRef.current;
@@ -255,59 +292,55 @@ export function useTimer() {
     const startTime = currentState.startTime;
     const endTime = Date.now();
 
-    // IMMEDIATELY update UI - user sees instant response
-    setPendingConfirmation(true);
-    setPendingSaveTaskId(taskId);
-    setState({
-      taskId: null,
-      startTime: null,
-      elapsed: 0,
-      running: false,
-    });
-
-    const duration = endTime - startTime;
-    emit("timer:stop", { taskId, duration });
-
-    // Save to database in background (don't block UI)
-    createEvent.mutate({
+    enqueueStop({
+      userId: userIdRef.current,
       taskId,
-      name: "Time entry",
-      from: new Date(startTime).toISOString(),
-      to: new Date(endTime).toISOString(),
+      startTime,
+      endTime,
     });
-  }, [emit, createEvent]);
+    refreshPendingStops();
+    setPendingConfirmation(true);
+    applyIdle();
+
+    emit("timer:stop", { taskId, duration: endTime - startTime });
+    void persistStoppedTimer(taskId);
+    kickTimerDurability();
+  }, [emit, applyIdle, refreshPendingStops]);
 
   const startTimer = useCallback(
     (taskId: string) => {
-      // If a timer is already running, stop it first (saves the event)
-      if (stateRef.current.running && stateRef.current.taskId) {
-        stopTimer();
+      const previous = stateRef.current;
+      if (previous.running && previous.taskId && previous.startTime) {
+        emit("timer:stop", {
+          taskId: previous.taskId,
+          duration: Date.now() - previous.startTime,
+        });
+        void persistStoppedTimer(previous.taskId);
       }
 
       const startTime = Date.now();
-      setPendingConfirmation(true);
-      emit("timer:start", { taskId });
-      setState({
+      enqueueStart({
+        userId: userIdRef.current,
         taskId,
         startTime,
-        elapsed: 0,
-        running: true,
       });
+      refreshPendingStops();
+      setStartError(null);
+      applyRunning(taskId, startTime, true);
+      emit("timer:start", { taskId, startTime });
+      kickTimerDurability();
     },
-    [emit, stopTimer]
+    [emit, applyRunning, refreshPendingStops]
   );
 
-  // Clear error after it's been shown
   const clearError = useCallback(() => {
-    createEvent.reset();
-  }, [createEvent]);
+    setStartError(null);
+  }, []);
 
   const adjustStartTimeMutation = useMutation({
     mutationFn: async (newStartTime: number): Promise<void> => {
-      // Clear any previous socket error at the start
       setSocketError(null);
 
-      // First validate the new start time
       const validateRes = await fetch("/api/timer/validate-start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -321,27 +354,37 @@ export function useTimer() {
         throw new Error(errorData.error || "Failed to validate start time");
       }
 
-      // If validation passes, emit socket event to update start time
       const currentState = stateRef.current;
       if (!currentState.taskId || !currentState.running) {
         throw new Error("No active timer to adjust");
       }
 
-      // Store previous start time for potential rollback if socket fails
       previousStartTimeRef.current = currentState.startTime;
+      updateRunningStart(newStartTime, userIdRef.current);
 
-      // Emit the update request - the socket will handle the update
-      // and broadcast timer:start-updated to all devices
+      const updateRes = await fetch("/api/timer", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          taskId: currentState.taskId,
+          newStartTime: new Date(newStartTime).toISOString(),
+        }),
+      });
+
+      if (!updateRes.ok) {
+        const errorData = await updateRes.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to update start time");
+      }
+
+      markRunningSynced(userIdRef.current);
       emit("timer:update-start", {
         taskId: currentState.taskId,
         newStartTime,
       });
 
-      // Optimistically update local state immediately
       setState({
         ...currentState,
         startTime: newStartTime,
-        elapsed: Math.max(0, Date.now() - newStartTime),
       });
     },
   });
@@ -358,21 +401,64 @@ export function useTimer() {
     setSocketError(null);
   }, [adjustStartTimeMutation]);
 
-  // Combine mutation error with socket error
   const adjustError = adjustStartTimeMutation.error || (socketError ? new Error(socketError) : null);
+  const pendingSaveTaskId = pendingSaveTaskIds[0] ?? null;
 
   return {
     ...state,
     pendingConfirmation,
     pendingSaveTaskId,
+    pendingSaveTaskIds,
     startTimer,
     stopTimer,
     adjustStartTime,
-    isCreatingEvent: createEvent.isPending,
-    createEventError: createEvent.error,
+    isCreatingEvent: pendingSaveTaskIds.length > 0,
+    createEventError: startError,
     isAdjustingStartTime: adjustStartTimeMutation.isPending,
     adjustStartTimeError: adjustError,
     clearError,
     clearAdjustError,
   };
+}
+
+type TimerContextValue = ReturnType<typeof useTimerController>;
+
+const TimerContext = createContext<TimerContextValue | null>(null);
+
+export function TimerProvider({ children }: { children: ReactNode }) {
+  const value = useTimerController();
+  return <TimerContext.Provider value={value}>{children}</TimerContext.Provider>;
+}
+
+export function useLiveTimer() {
+  const ctx = useContext(TimerContext);
+  if (!ctx) {
+    throw new Error("useLiveTimer must be used within a TimerProvider");
+  }
+  return {
+    running: ctx.running,
+    taskId: ctx.taskId,
+    startTime: ctx.startTime,
+  };
+}
+
+export function useTimer() {
+  const ctx = useContext(TimerContext);
+  if (!ctx) {
+    throw new Error("useTimer must be used within a TimerProvider");
+  }
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!ctx.running || !ctx.startTime) {
+      setElapsed(0);
+      return;
+    }
+    const tick = () => setElapsed(Math.max(0, Date.now() - ctx.startTime!));
+    tick();
+    const id = window.setInterval(tick, 100);
+    return () => window.clearInterval(id);
+  }, [ctx.running, ctx.startTime]);
+
+  return { ...ctx, elapsed };
 }

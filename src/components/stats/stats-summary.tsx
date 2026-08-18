@@ -1,12 +1,28 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useStats } from "@/hooks/use-stats";
+import { useLiveTimer } from "@/hooks/use-timer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDurationWords } from "@/lib/utils";
+import { liveTodayMs } from "@/lib/live-timer";
 
 export function StatsSummary() {
   const { data: stats, isLoading } = useStats();
+  const { running, startTime } = useLiveTimer();
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!running || !startTime) return;
+    const tick = () => setNow(Date.now());
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [running, startTime]);
+
+  const liveAll = running && startTime ? Math.max(0, now - startTime) : 0;
+  const liveToday = running && startTime ? liveTodayMs(startTime, now) : 0;
 
   if (isLoading) {
     return (
@@ -39,7 +55,9 @@ export function StatsSummary() {
         </CardHeader>
         <CardContent>
           <p className="text-2xl font-bold">
-            {formatDurationWords(stats?.todayTotal ?? 0)}
+            {formatDurationWords((stats?.todayTotal ?? 0) + liveToday, {
+              seconds: liveToday > 0,
+            })}
           </p>
         </CardContent>
       </Card>
@@ -49,7 +67,9 @@ export function StatsSummary() {
         </CardHeader>
         <CardContent>
           <p className="text-2xl font-bold">
-            {formatDurationWords(stats?.grandTotal ?? 0)}
+            {formatDurationWords((stats?.grandTotal ?? 0) + liveAll, {
+              seconds: liveAll > 0,
+            })}
           </p>
         </CardContent>
       </Card>

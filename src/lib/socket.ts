@@ -9,6 +9,12 @@ export function getSocket(): Socket {
     socket = io({
       path: "/socket.io",
       autoConnect: false,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 400,
+      reconnectionDelayMax: 4000,
+      timeout: 10000,
+      transports: ["websocket", "polling"],
     });
   }
   return socket;

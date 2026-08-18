@@ -27,7 +27,7 @@ export function TaskList() {
     stopTimer,
     adjustStartTime,
     pendingConfirmation,
-    pendingSaveTaskId,
+    pendingSaveTaskIds,
     isCreatingEvent,
     createEventError,
     isAdjustingStartTime,
@@ -107,7 +107,7 @@ export function TaskList() {
       {createEventError && (
         <Alert variant="destructive" className="relative">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Failed to save time entry</AlertTitle>
+          <AlertTitle>Failed to save</AlertTitle>
           <AlertDescription>
             {createEventError.message}
           </AlertDescription>
@@ -180,8 +180,11 @@ export function TaskList() {
               isActive={taskId === task.id && running}
               onStart={() => startTimer(task.id)}
               onStop={stopTimer}
-              isLoading={isCreatingEvent && (taskId === task.id || pendingSaveTaskId === task.id)}
-              pendingConfirmation={(pendingConfirmation && taskId === task.id) || pendingSaveTaskId === task.id}
+              isLoading={isCreatingEvent && (taskId === task.id || pendingSaveTaskIds.includes(task.id))}
+              pendingConfirmation={
+                (pendingConfirmation && taskId === task.id) || pendingSaveTaskIds.includes(task.id)
+              }
+              liveMs={running && taskId === task.id ? elapsed : 0}
             />
               ))}
             </div>

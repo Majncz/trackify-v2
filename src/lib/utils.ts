@@ -17,13 +17,20 @@ export function formatDuration(ms: number): string {
   return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
-export function formatDurationWords(ms: number): string {
+export function formatDurationWords(ms: number, opts?: { seconds?: boolean }): string {
   if (ms === 0) return "0s";
 
   const totalSeconds = Math.floor(ms / 1000);
   const seconds = totalSeconds % 60;
   const minutes = Math.floor(totalSeconds / 60) % 60;
   const hours = Math.floor(totalSeconds / 3600);
+
+  if (opts?.seconds) {
+    if (hours === 0 && minutes === 0) return `${seconds}s`;
+    if (hours === 0) return `${minutes}m ${seconds}s`;
+    if (minutes === 0) return `${hours}h ${seconds}s`;
+    return `${hours}h ${minutes}m ${seconds}s`;
+  }
 
   // Less than a minute - show seconds
   if (hours === 0 && minutes === 0) return `${seconds}s`;
