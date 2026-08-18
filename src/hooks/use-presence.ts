@@ -12,11 +12,22 @@ export type PresenceEntry = {
   todayMs: number;
 };
 
+export type LeaderboardEntry = {
+  userId: string;
+  name: string;
+  todayMs: number;
+  startTime: number | null;
+  taskName: string | null;
+};
+
 export function usePresence() {
   const queryClient = useQueryClient();
   const { on } = useSocket();
 
-  const query = useQuery<{ tracking: PresenceEntry[] }>({
+  const query = useQuery<{
+    tracking: PresenceEntry[];
+    leaderboard: LeaderboardEntry[];
+  }>({
     queryKey: ["presence"],
     queryFn: async () => {
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -37,6 +48,7 @@ export function usePresence() {
 
   return {
     tracking: query.data?.tracking ?? [],
+    leaderboard: query.data?.leaderboard ?? [],
     isLoading: query.isLoading,
   };
 }
