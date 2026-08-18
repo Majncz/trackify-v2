@@ -21,8 +21,6 @@ interface AdjustTimerDialogProps {
   error?: string | null;
 }
 
-type DragKind = "start" | "end" | null;
-
 interface BusySpan {
   from: number;
   to: number;
@@ -32,13 +30,9 @@ interface BusySpan {
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 const MIN_DURATION = MINUTE;
-const NOW_MAGNET = 75 * 1000;
-const THUMB = 28;
-const INSET = 18;
-const MIN_WINDOW = 20 * MINUTE;
+const THUMB = 24;
+const INSET = 16;
 const MAX_WINDOW = 12 * HOUR;
-const MIN_SESSION_PX = 88;
-const LABEL_GAP = 56;
 
 function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
@@ -66,23 +60,25 @@ function agoLabel(ms: number, now: number) {
   return `${hours}h ${rest}m ago`;
 }
 
-function viewSpan(start: number, end: number, width: number) {
-  const duration = Math.max(end - start, 15 * 1000);
-  const usable = Math.max(width - INSET * 2, 160);
-  const zoomed = duration * (usable / MIN_SESSION_PX);
-  return clamp(Math.max(zoomed, duration + 12 * MINUTE), MIN_WINDOW, MAX_WINDOW);
+function windowFor(start: number, openedAt: number) {
+  const duration = Math.max(openedAt - start, MINUTE);
+  const leftPad = duration < 45 * MINUTE ? 45 * MINUTE : Math.min(Math.max(duration * 0.2, 20 * MINUTE), 90 * MINUTE);
+  return {
+    from: Math.max(openedAt - MAX_WINDOW, start - leftPad),
+    to: openedAt,
+  };
 }
 
-function minStartForEnd(end: number, busy: BusySpan[], windowStart: number) {
-  let min = windowStart;
+function minStartForEnd(end: number, busy: BusySpan[], from: number) {
+  let min = from;
   for (const span of busy) {
     if (span.from < end) min = Math.max(min, span.to);
   }
   return min;
 }
 
-function maxEndForStart(start: number, busy: BusySpan[], now: number) {
-  let max = now;
+function maxEndForStart(start: number, busy: BusySpan[], to: number) {
+  let max = to;
   for (const span of busy) {
     if (span.to > start) max = Math.min(max, span.from);
   }
@@ -99,15 +95,13 @@ export function AdjustTimerDialog({
   error,
 }: AdjustTimerDialogProps) {
   const { tasks } = useTasks();
-  const trackRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<DragKind>(null);
   const onClearErrorRef = useRef(onClearError);
-  const [width, setWidth] = useState(0);
-  const [now, setNow] = useState(() => Date.now());
+  const [clockNow, setClockNow] = useState(() => Date.now());
+  const [openedAt, setOpenedAt] = useState(() => Date.now());
+  const [rangeFrom, setRangeFrom] = useState(() => windowFor(currentStartTime, Date.now()).from);
   const [startTime, setStartTime] = useState(currentStartTime);
   const [endTime, setEndTime] = useState<number | null>(null);
-  const [dragging, setDragging] = useState<DragKind>(null);
-  const [viewStart, setViewStart] = useState<number | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     onClearErrorRef.current = onClearError;
@@ -115,54 +109,26 @@ export function AdjustTimerDialog({
 
   useEffect(() => {
     if (!open) return;
-    const freshNow = Date.now();
-    setNow(freshNow);
+    const at = Date.now();
+    const win = windowFor(currentStartTime, at);
+    setOpenedAt(at);
+    setClockNow(at);
+    setRangeFrom(win.from);
     setStartTime(currentStartTime);
     setEndTime(null);
-    setViewStart(null);
     onClearErrorRef.current?.();
   }, [open, currentStartTime]);
 
-  useLayoutEffect(() => {
-    if (!open) {
-      setWidth(0);
-      return;
-    }
-    let observer: ResizeObserver | null = null;
-    let frame = 0;
-    const attach = () => {
-      const node = trackRef.current;
-      if (!node) {
-        frame = requestAnimationFrame(attach);
-        return;
-      }
-      const measure = () => {
-        const next = node.clientWidth;
-        if (next > 0) setWidth(next);
-      };
-      measure();
-      observer = new ResizeObserver(measure);
-      observer.observe(node);
-    };
-    attach();
-    return () => {
-      cancelAnimationFrame(frame);
-      observer?.disconnect();
-    };
-  }, [open]);
-
   useEffect(() => {
     if (!open || dragging) return;
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    const id = window.setInterval(() => setClockNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, [open, dragging]);
 
-  const effectiveEnd = endTime ?? now;
+  const rangeTo = openedAt;
   const stillRunning = endTime == null;
-  const durationMs = Math.max(0, effectiveEnd - startTime);
-  const computedSpan = viewSpan(startTime, effectiveEnd, width || 360);
-  const from = viewStart ?? effectiveEnd - computedSpan;
-  const span = Math.max(1, now - from);
+  const sliderEnd = endTime ?? rangeTo;
+  const durationMs = Math.max(0, (stillRunning ? clockNow : sliderEnd) - startTime);
 
   const busy = useMemo<BusySpan[]>(() => {
     return tasks.flatMap((task) =>
@@ -174,102 +140,51 @@ export function AdjustTimerDialog({
     );
   }, [tasks]);
 
-  const xFor = useCallback(
-    (time: number) => {
-      if (width <= 0) return INSET;
-      const usable = Math.max(1, width - INSET * 2);
-      return Math.round(INSET + ((time - from) / span) * usable);
+  const setStartFromPointer = useCallback(
+    (time: number, snap: boolean) => {
+      const at = snap ? snapMinute(time) : time;
+      const max = sliderEnd - MIN_DURATION;
+      const min = minStartForEnd(sliderEnd, busy, rangeFrom);
+      setStartTime(clamp(at, min, max));
     },
-    [from, span, width]
+    [busy, rangeFrom, sliderEnd]
   );
 
-  const applyDrag = useCallback(
-    (kind: DragKind, clientX: number) => {
-      const rect = trackRef.current?.getBoundingClientRect();
-      if (!rect || !kind) return;
-      const usable = Math.max(1, rect.width - INSET * 2);
-      const ratio = clamp((clientX - rect.left - INSET) / usable, 0, 1);
-      const at = snapMinute(from + ratio * span);
-
-      if (kind === "start") {
-        const min = minStartForEnd(effectiveEnd, busy, from);
-        const max = effectiveEnd - MIN_DURATION;
-        const next = clamp(at, min, max);
-        setStartTime(next);
-        if (next <= from + span * 0.08) {
-          setViewStart(Math.max(now - MAX_WINDOW, from - 15 * MINUTE));
-        }
-        return;
-      }
-
-      const min = startTime + MIN_DURATION;
-      const max = maxEndForStart(startTime, busy, now);
-      if (at >= now - NOW_MAGNET && max >= now - NOW_MAGNET) {
+  const setEndFromPointer = useCallback(
+    (time: number, snap: boolean) => {
+      const at = snap ? snapMinute(time) : time;
+      if (at >= rangeTo - MINUTE / 2) {
         setEndTime(null);
         return;
       }
+      const min = startTime + MIN_DURATION;
+      const max = maxEndForStart(startTime, busy, rangeTo);
       setEndTime(clamp(at, min, max));
     },
-    [busy, effectiveEnd, from, now, span, startTime]
+    [busy, rangeTo, startTime]
   );
-
-  const onThumbDown = (kind: DragKind) => (event: React.PointerEvent) => {
-    if (isSaving) return;
-    event.preventDefault();
-    event.stopPropagation();
-    dragRef.current = kind;
-    setDragging(kind);
-  };
-
-  useEffect(() => {
-    if (!dragging) return;
-    const move = (event: PointerEvent) => applyDrag(dragRef.current, event.clientX);
-    const up = () => {
-      dragRef.current = null;
-      setDragging(null);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-    return () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-    };
-  }, [applyDrag, dragging]);
-
-  const onTrackDown = (event: React.PointerEvent) => {
-    if (isSaving || width <= 0) return;
-    const startX = xFor(startTime);
-    const endX = xFor(effectiveEnd);
-    const localX = event.clientX - event.currentTarget.getBoundingClientRect().left;
-    const kind: DragKind = Math.abs(localX - startX) <= Math.abs(localX - endX) ? "start" : "end";
-    dragRef.current = kind;
-    setDragging(kind);
-    applyDrag(kind, event.clientX);
-  };
 
   const handleSave = async () => {
     try {
-      await onSave({ startTime, endTime });
+      await onSave({
+        startTime: snapMinute(startTime),
+        endTime: endTime == null ? null : snapMinute(endTime),
+      });
       onOpenChange(false);
     } catch {
       // Parent shows the error
     }
   };
 
-  const startX = xFor(startTime);
-  const endX = xFor(effectiveEnd);
-  const thumbsClose = endX - startX < LABEL_GAP;
-  const ready = width > 40;
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg overflow-x-hidden">
+      <DialogContent className="sm:max-w-lg">
         <DialogTitle>Fix this session</DialogTitle>
         <DialogDescription className="hidden">
-          Drag the start or end of this session.
+          Drag when the session started and when it should stop.
         </DialogDescription>
 
-        <div className="space-y-5 pt-1">
+        <div className="space-y-6 pt-1">
           <div>
             <p className="font-mono text-4xl font-semibold tabular-nums tracking-tight">
               {formatDurationWords(durationMs)}
@@ -277,84 +192,43 @@ export function AdjustTimerDialog({
             <p className="mt-1 text-sm text-muted-foreground">
               {stillRunning
                 ? `Started ${clock(startTime)} · still running`
-                : `Started ${clock(startTime)} · stopped ${clock(effectiveEnd)}`}
+                : `Started ${clock(startTime)} · stopped ${clock(sliderEnd)}`}
             </p>
           </div>
 
-          <div className="space-y-4">
-            <div
-              ref={trackRef}
-              className="relative h-[4.5rem] touch-none select-none px-0"
-              onPointerDown={onTrackDown}
-            >
-              <div
-                className="absolute top-[34px] h-1.5 rounded-full bg-muted"
-                style={{ left: INSET, right: INSET }}
-              />
-              {ready &&
-                busy.map((block) => {
-                  const left = xFor(Math.max(block.from, from));
-                  const right = xFor(Math.min(block.to, now));
-                  if (block.to <= from || block.from >= now || right - left < 2) return null;
-                  return (
-                    <div
-                      key={`${block.from}-${block.to}-${block.name}`}
-                      title={block.name}
-                      className="absolute top-[34px] h-1.5 rounded-full bg-neutral-400/70"
-                      style={{ left, width: Math.max(3, right - left) }}
-                    />
-                  );
-                })}
-              {ready && (
-                <div
-                  className="absolute top-[34px] h-1.5 rounded-full bg-foreground"
-                  style={{
-                    left: startX,
-                    width: Math.max(THUMB, endX - startX),
-                  }}
-                />
-              )}
-              {ready && (
-                <>
-                  <Thumb
-                    x={startX}
-                    timeLabel={clock(startTime)}
-                    labelSide={thumbsClose ? "left" : "center"}
-                    active={dragging === "start"}
-                    stacked={thumbsClose && dragging !== "start"}
-                    ariaLabel="Start"
-                    onPointerDown={onThumbDown("start")}
-                  />
-                  <Thumb
-                    x={endX}
-                    timeLabel={stillRunning ? "Now" : clock(effectiveEnd)}
-                    labelSide={thumbsClose ? "right" : "center"}
-                    active={dragging === "end"}
-                    stacked={thumbsClose && dragging === "start"}
-                    ariaLabel={stillRunning ? "Now" : "Stop"}
-                    onPointerDown={onThumbDown("end")}
-                  />
-                </>
-              )}
-            </div>
+          <SliderRow
+            label="Started"
+            valueLabel={clock(startTime)}
+            rangeFrom={rangeFrom}
+            rangeTo={rangeTo}
+            thumbTime={startTime}
+            fillFrom={sliderEnd}
+            busy={busy}
+            disabled={isSaving}
+            onDragStart={() => setDragging(true)}
+            onDrag={(time, snap) => setStartFromPointer(time, snap)}
+            onDragEnd={() => setDragging(false)}
+          />
 
-            <div className="flex items-start justify-between gap-4 text-sm">
-              <div>
-                <p className="text-muted-foreground">Started</p>
-                <p className="font-mono text-base tabular-nums">{clock(startTime)}</p>
-                <p className="text-muted-foreground">{agoLabel(startTime, now)}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-muted-foreground">{stillRunning ? "Still running" : "Stopped"}</p>
-                <p className="font-mono text-base tabular-nums">
-                  {stillRunning ? "Now" : clock(effectiveEnd)}
-                </p>
-                {!stillRunning && (
-                  <p className="text-muted-foreground">{agoLabel(effectiveEnd, now)}</p>
-                )}
-              </div>
-            </div>
-          </div>
+          <SliderRow
+            label={stillRunning ? "Still running" : "Stopped"}
+            valueLabel={stillRunning ? "Now" : clock(sliderEnd)}
+            rangeFrom={rangeFrom}
+            rangeTo={rangeTo}
+            thumbTime={sliderEnd}
+            fillFrom={startTime}
+            busy={busy}
+            disabled={isSaving}
+            onDragStart={() => setDragging(true)}
+            onDrag={(time, snap) => setEndFromPointer(time, snap)}
+            onDragEnd={() => setDragging(false)}
+          />
+
+          {!stillRunning && (
+            <p className="text-sm text-muted-foreground">
+              Stops {agoLabel(sliderEnd, clockNow)}.
+            </p>
+          )}
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -363,7 +237,7 @@ export function AdjustTimerDialog({
               Cancel
             </Button>
             <Button onClick={handleSave} disabled={isSaving}>
-              {isSaving ? "Saving…" : stillRunning ? "Save start time" : `Stop ${agoLabel(effectiveEnd, now)}`}
+              {isSaving ? "Saving…" : stillRunning ? "Save start time" : `Stop ${agoLabel(sliderEnd, clockNow)}`}
             </Button>
           </div>
         </div>
@@ -372,50 +246,131 @@ export function AdjustTimerDialog({
   );
 }
 
-function Thumb({
-  x,
-  timeLabel,
-  labelSide,
-  active,
-  stacked,
-  ariaLabel,
-  onPointerDown,
+function SliderRow({
+  label,
+  valueLabel,
+  rangeFrom,
+  rangeTo,
+  thumbTime,
+  fillFrom,
+  busy,
+  disabled,
+  onDragStart,
+  onDrag,
+  onDragEnd,
 }: {
-  x: number;
-  timeLabel: string;
-  labelSide: "left" | "center" | "right";
-  active: boolean;
-  stacked: boolean;
-  ariaLabel: string;
-  onPointerDown: (event: React.PointerEvent) => void;
+  label: string;
+  valueLabel: string;
+  rangeFrom: number;
+  rangeTo: number;
+  thumbTime: number;
+  fillFrom: number;
+  busy: BusySpan[];
+  disabled?: boolean;
+  onDragStart: () => void;
+  onDrag: (time: number, snap: boolean) => void;
+  onDragEnd: () => void;
 }) {
-  const labelLeft =
-    labelSide === "left" ? x - 70 : labelSide === "right" ? x + 6 : x - 28;
+  const trackRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef(false);
+  const [width, setWidth] = useState(0);
+  const span = Math.max(1, rangeTo - rangeFrom);
+  const usable = Math.max(1, width - INSET * 2);
+
+  useLayoutEffect(() => {
+    const node = trackRef.current;
+    if (!node) return;
+    const measure = () => {
+      if (node.clientWidth > 0) setWidth(node.clientWidth);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const xFor = (time: number) => INSET + ((time - rangeFrom) / span) * usable;
+  const timeForClientX = (clientX: number) => {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect) return thumbTime;
+    const ratio = clamp((clientX - rect.left - INSET) / usable, 0, 1);
+    return rangeFrom + ratio * span;
+  };
+
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      if (!dragging.current) return;
+      onDrag(timeForClientX(event.clientX), false);
+    };
+    const up = (event: PointerEvent) => {
+      if (!dragging.current) return;
+      dragging.current = false;
+      onDrag(timeForClientX(event.clientX), true);
+      onDragEnd();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+  });
+
+  const thumbX = xFor(thumbTime);
+  const fillLeft = xFor(Math.min(fillFrom, thumbTime));
+  const fillRight = xFor(Math.max(fillFrom, thumbTime));
 
   return (
-    <>
-      <p
-        className="pointer-events-none absolute top-0 w-[56px] font-mono text-xs tabular-nums leading-none text-foreground"
-        style={{
-          left: Math.round(labelLeft),
-          textAlign: labelSide === "right" ? "left" : labelSide === "left" ? "right" : "center",
+    <div>
+      <div className="mb-2 flex items-baseline justify-between gap-3 text-sm">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-mono text-base font-medium tabular-nums">{valueLabel}</span>
+      </div>
+      <div
+        ref={trackRef}
+        className="relative h-7 touch-none select-none"
+        onPointerDown={(event) => {
+          if (disabled) return;
+          event.preventDefault();
+          dragging.current = true;
+          onDragStart();
+          onDrag(timeForClientX(event.clientX), false);
         }}
       >
-        {timeLabel}
-      </p>
-      <button
-        type="button"
-        aria-label={ariaLabel}
-        className="absolute top-[27px] h-7 w-7 rounded-full bg-white"
-        style={{
-          left: Math.round(x - THUMB / 2),
-          zIndex: active ? 3 : stacked ? 1 : 2,
-          boxShadow: active
-            ? "0 2px 8px rgba(0,0,0,0.22), 0 0 0 5px rgba(0,0,0,0.08)"
-            : "0 1px 3px rgba(0,0,0,0.22), 0 0 0 1px rgba(0,0,0,0.08)",
-        }}
-        onPointerDown={onPointerDown}
-      />
-    </>
+        <div
+          className="absolute top-[11px] h-1.5 rounded-full bg-muted"
+          style={{ left: INSET, right: INSET }}
+        />
+        {width > 0 &&
+          busy.map((block) => {
+            if (block.to <= rangeFrom || block.from >= rangeTo) return null;
+            const left = xFor(Math.max(block.from, rangeFrom));
+            const right = xFor(Math.min(block.to, rangeTo));
+            return (
+              <div
+                key={`${block.from}-${block.to}-${block.name}`}
+                title={block.name}
+                className="absolute top-[11px] h-1.5 rounded-full bg-neutral-400/70"
+                style={{ left, width: Math.max(3, right - left) }}
+              />
+            );
+          })}
+        {width > 0 && (
+          <div
+            className="absolute top-[11px] h-1.5 rounded-full bg-foreground"
+            style={{ left: fillLeft, width: Math.max(2, fillRight - fillLeft) }}
+          />
+        )}
+        {width > 0 && (
+          <div
+            className="absolute top-0.5 h-6 w-6 rounded-full bg-white"
+            style={{
+              left: Math.round(thumbX - THUMB / 2),
+              boxShadow: "0 1px 3px rgba(0,0,0,0.22), 0 0 0 1px rgba(0,0,0,0.08)",
+            }}
+          />
+        )}
+      </div>
+    </div>
   );
 }
