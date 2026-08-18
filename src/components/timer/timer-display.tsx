@@ -30,7 +30,7 @@ export function TimerDisplay({ milliseconds, size = "md", onClick, clickable = f
         clickable && onClick && "cursor-pointer hover:opacity-80 transition-opacity",
         pending && "animate-pending-pulse"
       )}
-      title={clickable ? "Click to adjust start time" : pending ? "Syncing with server..." : undefined}
+      title={clickable ? "Click to edit this session" : pending ? "Syncing with server..." : undefined}
     >
       {formatted}
     </span>

@@ -337,71 +337,108 @@ function useTimerController() {
     setStartError(null);
   }, []);
 
-  const adjustStartTimeMutation = useMutation({
-    mutationFn: async (newStartTime: number): Promise<void> => {
+  const finishSessionMutation = useMutation({
+    mutationFn: async ({
+      startTime: nextStart,
+      endTime,
+    }: {
+      startTime: number;
+      endTime: number | null;
+    }): Promise<void> => {
       setSocketError(null);
-
-      const validateRes = await fetch("/api/timer/validate-start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          newStartTime: new Date(newStartTime).toISOString(),
-        }),
-      });
-
-      if (!validateRes.ok) {
-        const errorData = await validateRes.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to validate start time");
-      }
-
       const currentState = stateRef.current;
-      if (!currentState.taskId || !currentState.running) {
+      if (!currentState.taskId || !currentState.running || !currentState.startTime) {
         throw new Error("No active timer to adjust");
       }
 
-      previousStartTimeRef.current = currentState.startTime;
-      updateRunningStart(newStartTime, userIdRef.current);
-
-      const updateRes = await fetch("/api/timer", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          taskId: currentState.taskId,
-          newStartTime: new Date(newStartTime).toISOString(),
-        }),
-      });
-
-      if (!updateRes.ok) {
-        const errorData = await updateRes.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to update start time");
+      const taskId = currentState.taskId;
+      const now = Date.now();
+      const startTime = nextStart;
+      if (startTime > now) {
+        throw new Error("Start time cannot be in the future");
       }
 
-      markRunningSynced(userIdRef.current);
-      emit("timer:update-start", {
-        taskId: currentState.taskId,
-        newStartTime,
-      });
+      if (endTime == null) {
+        if (startTime === currentState.startTime) return;
 
-      setState({
-        ...currentState,
-        startTime: newStartTime,
+        const validateRes = await fetch("/api/timer/validate-start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            newStartTime: new Date(startTime).toISOString(),
+          }),
+        });
+
+        if (!validateRes.ok) {
+          const errorData = await validateRes.json().catch(() => ({}));
+          throw new Error(errorData.error || "Failed to validate start time");
+        }
+
+        previousStartTimeRef.current = currentState.startTime;
+        updateRunningStart(startTime, userIdRef.current);
+
+        const updateRes = await fetch("/api/timer", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            taskId,
+            newStartTime: new Date(startTime).toISOString(),
+          }),
+        });
+
+        if (!updateRes.ok) {
+          const errorData = await updateRes.json().catch(() => ({}));
+          throw new Error(errorData.error || "Failed to update start time");
+        }
+
+        markRunningSynced(userIdRef.current);
+        emit("timer:update-start", { taskId, newStartTime: startTime });
+        setState({ ...currentState, startTime });
+        return;
+      }
+
+      const stopAt = Math.min(endTime, now);
+      if (stopAt <= startTime) {
+        throw new Error("End time must be after start time");
+      }
+
+      previousStartTimeRef.current = currentState.startTime;
+      updateRunningStart(startTime, userIdRef.current);
+      enqueueStop({
+        userId: userIdRef.current,
+        taskId,
+        startTime,
+        endTime: stopAt,
       });
+      refreshPendingStops();
+      setPendingConfirmation(true);
+      applyIdle();
+      emit("timer:stop", { taskId, duration: stopAt - startTime });
+      void persistStoppedTimer(taskId);
+      kickTimerDurability();
     },
   });
 
+  const finishSession = useCallback(
+    async (session: { startTime: number; endTime: number | null }) => {
+      return finishSessionMutation.mutateAsync(session);
+    },
+    [finishSessionMutation]
+  );
+
   const adjustStartTime = useCallback(
     async (newStartTime: number) => {
-      return adjustStartTimeMutation.mutateAsync(newStartTime);
+      return finishSession({ startTime: newStartTime, endTime: null });
     },
-    [adjustStartTimeMutation]
+    [finishSession]
   );
 
   const clearAdjustError = useCallback(() => {
-    adjustStartTimeMutation.reset();
+    finishSessionMutation.reset();
     setSocketError(null);
-  }, [adjustStartTimeMutation]);
+  }, [finishSessionMutation]);
 
-  const adjustError = adjustStartTimeMutation.error || (socketError ? new Error(socketError) : null);
+  const adjustError = finishSessionMutation.error || (socketError ? new Error(socketError) : null);
   const pendingSaveTaskId = pendingSaveTaskIds[0] ?? null;
 
   return {
@@ -411,10 +448,11 @@ function useTimerController() {
     pendingSaveTaskIds,
     startTimer,
     stopTimer,
+    finishSession,
     adjustStartTime,
     isCreatingEvent: pendingSaveTaskIds.length > 0,
     createEventError: startError,
-    isAdjustingStartTime: adjustStartTimeMutation.isPending,
+    isAdjustingStartTime: finishSessionMutation.isPending,
     adjustStartTimeError: adjustError,
     clearError,
     clearAdjustError,

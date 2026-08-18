@@ -193,10 +193,7 @@ export function enqueueStop(
         name: input.name ?? "Time entry",
       },
     ],
-    running:
-      queue.running && queue.running.taskId === input.taskId && queue.running.startTime === input.startTime
-        ? null
-        : queue.running,
+    running: queue.running && queue.running.taskId === input.taskId ? null : queue.running,
   };
   writeTimerQueue(next);
   return next;

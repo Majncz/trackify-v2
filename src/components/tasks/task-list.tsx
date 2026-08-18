@@ -25,7 +25,7 @@ export function TaskList() {
     startTime,
     startTimer,
     stopTimer,
-    adjustStartTime,
+    finishSession,
     pendingConfirmation,
     pendingSaveTaskIds,
     isCreatingEvent,
@@ -219,9 +219,9 @@ export function TaskList() {
           open={isAdjustDialogOpen}
           onOpenChange={setIsAdjustDialogOpen}
           currentStartTime={startTime}
-          onAdjust={adjustStartTime}
+          onSave={finishSession}
           onClearError={clearAdjustError}
-          isAdjusting={isAdjustingStartTime}
+          isSaving={isAdjustingStartTime}
           error={
             adjustStartTimeError instanceof Error
               ? adjustStartTimeError.message
