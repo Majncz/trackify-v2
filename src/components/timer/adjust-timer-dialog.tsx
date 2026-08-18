@@ -5,15 +5,9 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { formatDuration } from "@/lib/utils";
-import { AlertCircle } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { formatDurationWords } from "@/lib/utils";
 import { useTasks } from "@/hooks/use-tasks";
 import { cn } from "@/lib/utils";
 
@@ -27,66 +21,67 @@ interface AdjustTimerDialogProps {
   error?: string | null;
 }
 
-interface Event {
-  id: string;
-  from: string;
-  to: string;
-  name: string;
-  taskId: string;
-}
-
-type FocusField = "start" | "end" | "duration";
+type DragKind = "start" | "end" | "body" | null;
 
 const MINUTE = 60 * 1000;
+const HOUR = 60 * MINUTE;
+const MIN_DURATION = MINUTE;
+const PAD = 28;
+const NOW_MAGNET = 90 * 1000;
 
-function pad(n: number) {
-  return String(n).padStart(2, "0");
+function clamp(n: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, n));
 }
 
-function toTimeValue(timestamp: number) {
-  const date = new Date(timestamp);
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+function snapTime(ms: number) {
+  const five = Math.round(ms / (5 * MINUTE)) * 5 * MINUTE;
+  if (Math.abs(ms - five) < 50 * 1000) return five;
+  return Math.round(ms / MINUTE) * MINUTE;
 }
 
-function toDateValue(timestamp: number) {
-  const date = new Date(timestamp);
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
-function fromDateAndTime(dateValue: string, timeValue: string, fallbackSeconds = 0) {
-  const [year, month, day] = dateValue.split("-").map(Number);
-  const [hours, minutes] = timeValue.split(":").map(Number);
-  const next = new Date(year, month - 1, day, hours, minutes, fallbackSeconds, 0);
-  return next.getTime();
-}
-
-function sameDay(a: number, b: number) {
-  const left = new Date(a);
-  const right = new Date(b);
-  return (
-    left.getFullYear() === right.getFullYear() &&
-    left.getMonth() === right.getMonth() &&
-    left.getDate() === right.getDate()
-  );
-}
-
-function dayLabel(timestamp: number, now: number) {
-  if (sameDay(timestamp, now)) return "Today";
-  const yesterday = now - 24 * 60 * 60 * 1000;
-  if (sameDay(timestamp, yesterday)) return "Yesterday";
-  return new Date(timestamp).toLocaleDateString(undefined, {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
-}
-
-function formatClock(timestamp: number) {
-  return new Date(timestamp).toLocaleTimeString(undefined, {
+function clock(ms: number) {
+  return new Date(ms).toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
   });
+}
+
+function dayHint(ms: number, now: number) {
+  const a = new Date(ms);
+  const b = new Date(now);
+  if (a.getDate() === b.getDate() && a.getMonth() === b.getMonth()) return null;
+  return a.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
+function timeToX(time: number, width: number, winStart: number, winEnd: number) {
+  const span = Math.max(1, winEnd - winStart);
+  return PAD + ((time - winStart) / span) * (width - PAD * 2);
+}
+
+function xToTime(clientX: number, rect: DOMRect, winStart: number, winEnd: number) {
+  const span = Math.max(1, winEnd - winStart);
+  const t = clamp((clientX - rect.left - PAD) / (rect.width - PAD * 2), 0, 1);
+  return winStart + t * span;
+}
+
+function ticksFor(winStart: number, winEnd: number) {
+  const span = winEnd - winStart;
+  const step = span <= 2 * HOUR ? 15 * MINUTE : span <= 6 * HOUR ? 30 * MINUTE : HOUR;
+  const first = Math.ceil(winStart / step) * step;
+  const ticks: number[] = [];
+  for (let t = first; t <= winEnd; t += step) ticks.push(t);
+  return ticks;
+}
+
+function initialWindow(start: number, now: number) {
+  const duration = Math.max(now - start, MINUTE);
+  const leftPad = clamp(duration * 0.35, 45 * MINUTE, 3 * HOUR);
+  let winStart = start - leftPad;
+  const earliest = now - 18 * HOUR;
+  winStart = Math.max(winStart, earliest);
+  if (now - winStart < 90 * MINUTE) winStart = now - 90 * MINUTE;
+  return winStart;
 }
 
 export function AdjustTimerDialog({
@@ -98,360 +93,415 @@ export function AdjustTimerDialog({
   isSaving = false,
   error,
 }: AdjustTimerDialogProps) {
+  const { tasks } = useTasks();
+  const trackRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{
+    kind: DragKind;
+    grabOffset: number;
+    lastX: number;
+  }>({ kind: null, grabOffset: 0, lastX: 0 });
+  const onClearErrorRef = useRef(onClearError);
+  const [width, setWidth] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
   const [startTime, setStartTime] = useState(currentStartTime);
   const [endTime, setEndTime] = useState<number | null>(null);
-  const [focus, setFocus] = useState<FocusField>("end");
-  const [now, setNow] = useState(() => Date.now());
-  const [localError, setLocalError] = useState<string | null>(null);
-  const { tasks } = useTasks();
-  const onClearErrorRef = useRef(onClearError);
+  const [winStart, setWinStart] = useState(() => initialWindow(currentStartTime, Date.now()));
+  const [dragging, setDragging] = useState<DragKind>(null);
+  const [slide, setSlide] = useState(0);
+  const [slideArmed, setSlideArmed] = useState(false);
+  const slideTrackRef = useRef<HTMLDivElement>(null);
+  const slideDrag = useRef(false);
 
   useEffect(() => {
     onClearErrorRef.current = onClearError;
   }, [onClearError]);
 
-  const allEvents = useMemo(() => {
-    const events: Array<Event & { taskName: string }> = [];
-    tasks.forEach((task) => {
-      task.events.forEach((event) => {
-        events.push({ ...event, taskName: task.name });
-      });
-    });
-    return events;
-  }, [tasks]);
-
-  const effectiveEnd = endTime ?? now;
-  const durationMs = Math.max(0, effectiveEnd - startTime);
-  const stillRunning = endTime == null;
-
-  const checkOverlap = useCallback(
-    (from: number, to: number) => {
-      if (to <= from) return { overlaps: true as const };
-      for (const event of allEvents) {
-        const eventStart = new Date(event.from).getTime();
-        const eventEnd = new Date(event.to).getTime();
-        if (from < eventEnd && eventStart < to) {
-          return { overlaps: true as const, event };
-        }
-      }
-      return { overlaps: false as const };
-    },
-    [allEvents]
-  );
-
-  const overlapError = useMemo(() => {
-    if (startTime === currentStartTime && stillRunning) return null;
-    const overlap = checkOverlap(startTime, effectiveEnd);
-    if (overlap.overlaps && "event" in overlap && overlap.event) {
-      const event = overlap.event;
-      const when = new Date(event.from).toLocaleString();
-      return `Overlaps with “${event.taskName}: ${event.name}” (${when})`;
-    }
-    if (effectiveEnd <= startTime) return "End needs to be after start";
-    if (startTime > now) return "Start cannot be in the future";
-    if (endTime != null && endTime > now + 2000) return "End cannot be in the future";
-    return null;
-  }, [startTime, currentStartTime, stillRunning, checkOverlap, effectiveEnd, now, endTime]);
-
   useEffect(() => {
     if (!open) return;
+    const freshNow = Date.now();
+    setNow(freshNow);
     setStartTime(currentStartTime);
     setEndTime(null);
-    setFocus("end");
-    setLocalError(null);
-    setNow(Date.now());
+    setWinStart(initialWindow(currentStartTime, freshNow));
+    setSlide(0);
+    setSlideArmed(false);
     onClearErrorRef.current?.();
   }, [open, currentStartTime]);
 
   useEffect(() => {
-    if (!open || !stillRunning) return;
+    if (!open) return;
+    const node = trackRef.current;
+    if (!node) return;
+    const measure = () => setWidth(node.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || dragging) return;
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, [open, stillRunning]);
+  }, [open, dragging]);
 
-  const applyStart = (next: number) => {
-    if (next > now) {
-      setLocalError("Start cannot be in the future");
-      return;
-    }
-    if (next >= effectiveEnd) {
-      setLocalError("Start needs to be before the end");
-      return;
-    }
-    setStartTime(next);
-    setLocalError(null);
-  };
+  const allEvents = useMemo(() => {
+    return tasks.flatMap((task) =>
+      task.events.map((event) => ({
+        from: new Date(event.from).getTime(),
+        to: new Date(event.to).getTime(),
+        name: `${task.name}: ${event.name}`,
+      }))
+    );
+  }, [tasks]);
 
-  const applyEnd = (next: number | null) => {
-    if (next == null) {
-      setEndTime(null);
-      setLocalError(null);
-      return;
-    }
-    const clamped = Math.min(next, now);
-    if (clamped <= startTime) {
-      setLocalError("End needs to be after start");
-      return;
-    }
-    setEndTime(clamped);
-    setLocalError(null);
-  };
-
-  const pinEnd = () => {
-    applyEnd(now);
-    setFocus("end");
-  };
-
-  const setDurationMinutes = (totalMinutes: number) => {
-    const next = Math.max(1, totalMinutes) * MINUTE;
-    applyStart(effectiveEnd - next);
-    setFocus("duration");
-  };
-
-  const nudge = (minutes: number) => {
-    const delta = minutes * MINUTE;
-    if (focus === "start") {
-      applyStart(startTime + delta);
-      return;
-    }
-    if (focus === "end") {
-      applyEnd((endTime ?? now) + delta);
-      return;
-    }
-    setDurationMinutes(Math.round(durationMs / MINUTE) + minutes);
-  };
-
-  const handleApply = async () => {
-    if (stillRunning && startTime === currentStartTime) {
-      onOpenChange(false);
-      return;
-    }
-    setLocalError(null);
-    try {
-      await onSave({ startTime, endTime });
-      onOpenChange(false);
-    } catch {
-      // Parent surfaces the mutation error
-    }
-  };
-
-  const hours = Math.floor(durationMs / 3_600_000);
-  const minutes = Math.floor((durationMs % 3_600_000) / MINUTE);
+  const effectiveEnd = endTime ?? now;
+  const stillRunning = endTime == null;
+  const durationMs = Math.max(0, effectiveEnd - startTime);
   const changed = startTime !== currentStartTime || !stillRunning;
-  const applyLabel = stillRunning ? "Keep running" : `Stop at ${formatClock(effectiveEnd)}`;
+  const winEnd = now;
+
+  const overlaps = useMemo(() => {
+    return allEvents.filter((event) => startTime < event.to && event.from < effectiveEnd);
+  }, [allEvents, startTime, effectiveEnd]);
+
+  const startX = width ? timeToX(startTime, width, winStart, winEnd) : 0;
+  const endX = width ? timeToX(effectiveEnd, width, winStart, winEnd) : 0;
+
+  const commit = useCallback(async () => {
+    if (isSaving || overlaps.length) return;
+    if (!changed) {
+      onOpenChange(false);
+      return;
+    }
+    await onSave({ startTime, endTime });
+    onOpenChange(false);
+  }, [changed, endTime, isSaving, onOpenChange, onSave, overlaps.length, startTime]);
+
+  const applyDrag = useCallback(
+    (kind: DragKind, clientX: number) => {
+      const rect = trackRef.current?.getBoundingClientRect();
+      if (!rect || !kind) return;
+      const raw = xToTime(clientX, rect, winStart, winEnd);
+      const grabbed = snapTime(raw);
+
+      if (kind === "start") {
+        const next = clamp(grabbed, winStart, effectiveEnd - MIN_DURATION);
+        setStartTime(next);
+        if (next < winStart + (winEnd - winStart) * 0.06) {
+          setWinStart((prev) => Math.max(now - 18 * HOUR, prev - 20 * MINUTE));
+        }
+        return;
+      }
+
+      if (kind === "end") {
+        if (grabbed >= now - NOW_MAGNET) {
+          setEndTime(null);
+          return;
+        }
+        setEndTime(clamp(grabbed, startTime + MIN_DURATION, now));
+        return;
+      }
+
+      const span = effectiveEnd - startTime;
+      let nextStart = snapTime(raw - dragRef.current.grabOffset);
+      nextStart = clamp(nextStart, winStart, now - span);
+      const nextEnd = nextStart + span;
+      setStartTime(nextStart);
+      if (nextEnd >= now - NOW_MAGNET) setEndTime(null);
+      else setEndTime(Math.min(nextEnd, now));
+    },
+    [effectiveEnd, now, startTime, winEnd, winStart]
+  );
+
+  const onPointerDown = (kind: DragKind) => (event: React.PointerEvent) => {
+    if (isSaving) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = trackRef.current?.getBoundingClientRect();
+    const at = rect ? xToTime(event.clientX, rect, winStart, winEnd) : startTime;
+    dragRef.current = {
+      kind,
+      grabOffset: kind === "body" ? at - startTime : 0,
+      lastX: event.clientX,
+    };
+    setDragging(kind);
+    if (kind === "end" && stillRunning) {
+      setEndTime(now);
+    }
+  };
+
+  useEffect(() => {
+    if (!dragging) return;
+    const move = (event: PointerEvent) => {
+      applyDrag(dragRef.current.kind, event.clientX);
+    };
+    const up = (event: PointerEvent) => {
+      if (dragRef.current.kind === "end") {
+        const rect = trackRef.current?.getBoundingClientRect();
+        if (rect) {
+          const at = xToTime(event.clientX, rect, winStart, winEnd);
+          if (at >= Date.now() - NOW_MAGNET) setEndTime(null);
+        }
+      }
+      dragRef.current.kind = null;
+      setDragging(null);
+      try {
+        navigator.vibrate?.(10);
+      } catch {
+        // ignore
+      }
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+  }, [applyDrag, dragging, winEnd, winStart]);
+
+  useEffect(() => {
+    const node = trackRef.current;
+    if (!open || !node) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const delta = event.deltaY > 0 ? 20 * MINUTE : -20 * MINUTE;
+      setWinStart((prev) => clamp(prev + delta, Date.now() - 18 * HOUR, startTime - 15 * MINUTE));
+    };
+    node.addEventListener("wheel", onWheel, { passive: false });
+    return () => node.removeEventListener("wheel", onWheel);
+  }, [open, startTime]);
+
+  const onSlidePointerDown = (event: React.PointerEvent) => {
+    if (isSaving || !changed || overlaps.length) return;
+    slideDrag.current = true;
+    event.preventDefault();
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const move = (event: PointerEvent) => {
+      if (!slideDrag.current || !slideTrackRef.current) return;
+      const rect = slideTrackRef.current.getBoundingClientRect();
+      const max = rect.width - 56;
+      setSlide(clamp(event.clientX - rect.left - 28, 0, max));
+    };
+    const up = () => {
+      if (!slideDrag.current || !slideTrackRef.current) return;
+      slideDrag.current = false;
+      const max = slideTrackRef.current.clientWidth - 56;
+      setSlide((current) => {
+        if (current > max * 0.82) {
+          setSlideArmed(true);
+          void commit().catch(() => {
+            setSlideArmed(false);
+            setSlide(0);
+          });
+          return max;
+        }
+        return 0;
+      });
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+  }, [commit, open]);
+
+  const ticks = useMemo(() => ticksFor(winStart, winEnd), [winStart, winEnd]);
+  const slideLabel = stillRunning
+    ? "Slide to keep it running"
+    : `Slide to stop at ${clock(effectiveEnd)}`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[440px]">
-        <DialogHeader>
-          <DialogTitle>Edit this session</DialogTitle>
-          <DialogDescription>
-            Change when it started, or set when it should have ended. Apply keeps it
-            running unless you pick an end time.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent
+        className={cn(
+          "sm:max-w-2xl gap-0 border-0 bg-[#0e0f12] p-0 text-white overflow-hidden",
+          "[&>button]:text-white/60 [&>button]:hover:text-white"
+        )}
+      >
+        <DialogTitle className="sr-only">Edit this session</DialogTitle>
+        <DialogDescription className="sr-only">
+          Drag the start or end of the clip on the timeline. Leave the end on now to
+          keep tracking, or pull it left to stop earlier.
+        </DialogDescription>
 
-        <div className="space-y-4 py-1">
-          <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-2">
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => setFocus("start")}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") setFocus("start");
-              }}
-              className={cn(
-                "rounded-xl border p-3 text-left transition-colors",
-                focus === "start" ? "border-primary bg-primary/5" : "bg-card"
-              )}
-            >
-              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                Started
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">{dayLabel(startTime, now)}</p>
-              <Input
-                type="time"
-                value={toTimeValue(startTime)}
-                onFocus={() => setFocus("start")}
-                onChange={(e) => {
-                  if (!e.target.value) return;
-                  applyStart(fromDateAndTime(toDateValue(startTime), e.target.value));
-                }}
-                disabled={isSaving}
-                className="mt-2 h-10 border-0 bg-transparent px-0 text-lg font-semibold shadow-none"
-              />
-              {!sameDay(startTime, now) && (
-                <Input
-                  type="date"
-                  value={toDateValue(startTime)}
-                  onFocus={() => setFocus("start")}
-                  onChange={(e) => {
-                    if (!e.target.value) return;
-                    applyStart(fromDateAndTime(e.target.value, toTimeValue(startTime)));
-                  }}
-                  disabled={isSaving}
-                  className="mt-1 h-8 text-xs"
-                />
-              )}
-            </div>
-
-            <div className="flex items-center text-muted-foreground">→</div>
-
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                if (stillRunning) pinEnd();
-                else setFocus("end");
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  if (stillRunning) pinEnd();
-                  else setFocus("end");
-                }
-              }}
-              className={cn(
-                "rounded-xl border p-3 text-left transition-colors",
-                focus === "end" ? "border-primary bg-primary/5" : "bg-card"
-              )}
-            >
-              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                Ended
-              </p>
-              {stillRunning ? (
-                <>
-                  <p className="mt-1 text-xs text-muted-foreground">Still running</p>
-                  <p className="mt-2 text-lg font-semibold tabular-nums">Now</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Tap to stop earlier</p>
-                </>
-              ) : (
-                <>
-                  <p className="mt-1 text-xs text-muted-foreground">{dayLabel(endTime!, now)}</p>
-                  <Input
-                    type="time"
-                    value={toTimeValue(endTime!)}
-                    onFocus={() => setFocus("end")}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => {
-                      if (!e.target.value) return;
-                      applyEnd(fromDateAndTime(toDateValue(endTime!), e.target.value));
-                    }}
-                    disabled={isSaving}
-                    className="mt-2 h-10 border-0 bg-transparent px-0 text-lg font-semibold shadow-none"
-                  />
-                  <button
-                    type="button"
-                    className="mt-1 text-xs text-primary hover:underline"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      applyEnd(null);
-                      setFocus("end");
-                    }}
-                  >
-                    Back to now
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          <div
-            className={cn(
-              "rounded-xl border p-3",
-              focus === "duration" ? "border-primary bg-primary/5" : "bg-muted/50"
-            )}
-            onClick={() => setFocus("duration")}
-          >
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Duration
+        <div className="px-5 pt-6 pb-2 pr-12">
+          <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-white/40">
+            This session
+          </p>
+          <div className="mt-3 flex items-end justify-between gap-4">
+            <p className="font-mono text-5xl font-semibold tabular-nums leading-none tracking-tight">
+              {formatDurationWords(durationMs)}
             </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Input
-                type="number"
-                min={0}
-                inputMode="numeric"
-                value={hours}
-                onFocus={() => setFocus("duration")}
-                onChange={(e) => {
-                  const nextHours = Math.max(0, Number(e.target.value) || 0);
-                  setDurationMinutes(nextHours * 60 + minutes);
-                }}
-                disabled={isSaving}
-                className="h-10 w-14 text-center text-lg font-semibold"
-              />
-              <span className="text-sm text-muted-foreground">h</span>
-              <Input
-                type="number"
-                min={0}
-                max={59}
-                inputMode="numeric"
-                value={minutes}
-                onFocus={() => setFocus("duration")}
-                onChange={(e) => {
-                  const nextMinutes = Math.min(59, Math.max(0, Number(e.target.value) || 0));
-                  setDurationMinutes(hours * 60 + nextMinutes);
-                }}
-                disabled={isSaving}
-                className="h-10 w-14 text-center text-lg font-semibold"
-              />
-              <span className="text-sm text-muted-foreground">m</span>
-              <span className="ml-auto font-mono text-sm tabular-nums text-muted-foreground">
-                {formatDuration(durationMs)}
-              </span>
-            </div>
-            <div className="mt-3 flex items-center justify-between gap-2">
-              <p className="text-xs text-muted-foreground">
-                {focus === "end"
-                  ? "Nudges the end time"
-                  : focus === "start"
-                    ? "Nudges the start time"
-                    : stillRunning
-                      ? "Nudges how long you’ve been on this"
-                      : "Nudges duration from the end"}
-              </p>
-              <div className="flex gap-1.5">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={isSaving}
-                  onClick={() => nudge(-5)}
-                >
-                  −5
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={isSaving}
-                  onClick={() => nudge(5)}
-                >
-                  +5
-                </Button>
-              </div>
-            </div>
+            <p className="text-right text-sm text-white/55">
+              <span className="font-mono tabular-nums">{clock(startTime)}</span>
+              {dayHint(startTime, now) ? (
+                <span className="text-white/35"> {dayHint(startTime, now)}</span>
+              ) : null}
+              <span className="mx-1.5 text-white/25">→</span>
+              {stillRunning ? (
+                <span className="text-rose-400">now</span>
+              ) : (
+                <span className="font-mono tabular-nums">{clock(effectiveEnd)}</span>
+              )}
+            </p>
           </div>
-
-          {(error || localError || overlapError) && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error || localError || overlapError}</AlertDescription>
-            </Alert>
-          )}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleApply}
-            disabled={isSaving || !!localError || !!overlapError}
+        <div className="px-3 pb-2 pt-4">
+          <div
+            ref={trackRef}
+            className="relative h-36 touch-none select-none overflow-hidden rounded-2xl bg-[#18191d]"
           >
-            {isSaving ? "Saving…" : changed ? applyLabel : "Done"}
-          </Button>
-        </DialogFooter>
+            {width > 0 &&
+              ticks.map((tick) => {
+                const x = timeToX(tick, width, winStart, winEnd);
+                const labelHour = new Date(tick).getMinutes() === 0;
+                return (
+                  <div
+                    key={tick}
+                    className="absolute top-0 bottom-0"
+                    style={{ left: x }}
+                  >
+                    <div
+                      className={cn(
+                        "w-px",
+                        labelHour ? "h-full bg-white/15" : "h-8 bg-white/8"
+                      )}
+                    />
+                    <span className="absolute top-2 left-1.5 text-[10px] tabular-nums text-white/35">
+                      {clock(tick)}
+                    </span>
+                  </div>
+                );
+              })}
+
+            {width > 0 &&
+              allEvents.map((event) => {
+                const left = timeToX(event.from, width, winStart, winEnd);
+                const right = timeToX(event.to, width, winStart, winEnd);
+                if (right < PAD || left > width - PAD) return null;
+                return (
+                  <div
+                    key={`${event.from}-${event.to}-${event.name}`}
+                    title={event.name}
+                    className="absolute top-12 h-12 rounded-sm bg-white/10"
+                    style={{ left, width: Math.max(3, right - left) }}
+                  />
+                );
+              })}
+
+            {width > 0 && (
+              <>
+                <div
+                  className={cn(
+                    "absolute top-12 h-12 rounded-md shadow-[0_0_0_1px_rgba(255,255,255,0.15)]",
+                    overlaps.length
+                      ? "bg-rose-500/80"
+                      : "bg-gradient-to-r from-amber-400 to-orange-500"
+                  )}
+                  style={{ left: startX, width: Math.max(8, endX - startX) }}
+                  onPointerDown={onPointerDown("body")}
+                />
+
+                <Handle
+                  x={startX}
+                  label={clock(startTime)}
+                  active={dragging === "start"}
+                  onPointerDown={onPointerDown("start")}
+                />
+                <Handle
+                  x={endX}
+                  label={stillRunning ? "NOW" : clock(effectiveEnd)}
+                  now={stillRunning}
+                  active={dragging === "end"}
+                  onPointerDown={onPointerDown("end")}
+                />
+              </>
+            )}
+
+            <p className="pointer-events-none absolute bottom-2 left-0 right-0 text-center text-[11px] text-white/30">
+              {dragging === "end" || !stillRunning
+                ? "Pull the right edge left to stop earlier · snap it back to now to keep going"
+                : "Drag the ends like a film strip · scroll to zoom"}
+            </p>
+          </div>
+        </div>
+
+        {(error || overlaps.length > 0) && (
+          <p className="px-5 pb-2 text-sm text-rose-300">
+            {error ||
+              `This clip overlaps “${overlaps[0].name}”. Nudge it off that block.`}
+          </p>
+        )}
+
+        <div className="p-4 pt-2">
+          <div
+            ref={slideTrackRef}
+            className={cn(
+              "relative h-14 overflow-hidden rounded-full bg-white/8",
+              (!changed || overlaps.length > 0 || isSaving) && "opacity-40"
+            )}
+            onPointerDown={onSlidePointerDown}
+          >
+            <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-white/50">
+              {isSaving ? "Saving…" : !changed ? "Drag the clip to change it" : slideLabel}
+            </p>
+            <div
+              className={cn(
+                "absolute top-1.5 left-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white text-[#0e0f12] shadow-lg",
+                slideArmed && "bg-amber-400"
+              )}
+              style={{ transform: `translateX(${slide}px)` }}
+            >
+              <span className="text-lg leading-none">›</span>
+            </div>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function Handle({
+  x,
+  label,
+  now = false,
+  active,
+  onPointerDown,
+}: {
+  x: number;
+  label: string;
+  now?: boolean;
+  active: boolean;
+  onPointerDown: (event: React.PointerEvent) => void;
+}) {
+  return (
+    <div
+      className="absolute top-8 -ml-3 flex w-6 cursor-ew-resize flex-col items-center"
+      style={{ left: x }}
+      onPointerDown={onPointerDown}
+    >
+      <span
+        className={cn(
+          "mb-1 rounded-full px-1.5 py-0.5 font-mono text-[10px] tabular-nums",
+          now ? "bg-rose-500 text-white" : "bg-white text-[#0e0f12]",
+          active && "scale-110"
+        )}
+      >
+        {label}
+      </span>
+      <div
+        className={cn(
+          "h-16 w-3 rounded-full shadow-md",
+          now ? "bg-rose-500" : "bg-white",
+          active && "ring-2 ring-white/40"
+        )}
+      />
+    </div>
   );
 }
