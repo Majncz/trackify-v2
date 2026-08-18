@@ -2,12 +2,13 @@
 
 ## CRITICAL RULES - DO NOT VIOLATE
 
-### 1. NEVER deploy without explicit user request
-- Only run `npm run deploy` when the user explicitly says "deploy", "deploy it", "push to prod", etc.
-- Never deploy automatically after completing a feature
+### 1. ALWAYS deploy after a user-facing change
+- Do not wait for the user to say “deploy”. After finishing the work, ship it.
+- How: commit, `npx next build` (must produce `.next/BUILD_ID`), compile `server/index.ts` into `dist`, `cage trackify-dev -- systemctl restart trackify-ui`, health-check `https://trackify.ranajakub.com`, then `git push origin master`.
+- Do **not** use `npm run deploy`, GitHub Actions, or `push-prod`. Those are stale.
 
-### 1b. NEVER push to default branch (`master` / `main`) unless the user explicitly asks
-- Commit and push work on a named feature branch (e.g. `taryk`), never `git push origin master` unless they clearly say to update main/master.
+### 1b. Production is `master`
+- User-facing Trackify work ships on `master`. Push `origin master` as part of deploy.
 
 ### 2. NEVER build or restart dev server for code changes  
 - Hot reload is active - just save files and refresh browser
@@ -45,9 +46,9 @@
 3. User refreshes browser
 4. Done
 
-## When User Says "Deploy"
+## Deploy (do this every time)
 
-Only then run: `npm run deploy "commit message"`
+After a user-facing change: commit → production Next build + server `tsc` → restart `trackify-ui` in the `trackify-dev` cage → health-check → `git push origin master`.
 
 ## Database Migrations
 
