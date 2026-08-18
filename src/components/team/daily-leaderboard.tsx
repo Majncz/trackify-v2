@@ -35,7 +35,9 @@ export function DailyLeaderboard() {
           <p className="text-xs text-muted-foreground">Who’s grinding the most today</p>
         </div>
         <ol className="space-y-2">
-          {leaderboard.map((row, index) => {
+          {leaderboard
+            .filter((row) => row.todayMs > 0 || row.startTime)
+            .map((row, index) => {
             const live = row.startTime ? liveTodayMs(row.startTime, now) : 0;
             const total = row.todayMs + live;
             const isYou = row.userId === session?.user?.id;

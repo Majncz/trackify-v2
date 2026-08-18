@@ -91,6 +91,7 @@ export async function GET(request: NextRequest) {
         taskName: live?.taskName ?? null,
       };
     })
+    .filter((row) => row.todayMs > 0 || row.startTime)
     .sort((a, b) => {
       const aLive = a.startTime ? Date.now() - a.startTime : 0;
       const bLive = b.startTime ? Date.now() - b.startTime : 0;
