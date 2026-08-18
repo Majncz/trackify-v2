@@ -6,6 +6,11 @@ import { format } from "date-fns";
 import type { YearlyContributionData } from "@/lib/yearly-contribution-data";
 import { formatHeatMinutes } from "@/lib/format-heat-minutes";
 import {
+  YEARLY_HEAT_COLORS,
+  workingDayMinutes,
+  yearlyHeatColor,
+} from "@/lib/yearly-heat-color";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -114,12 +119,10 @@ export function YearlyContributionCalendar({
     }
   }, [scrollRef, totalColumns]);
 
-  const getOpacity = (value: number, max: number) => {
-    if (value <= 0) return 0.15;
-    const intensity = value / max;
-    const scaled = Math.pow(intensity, 0.4);
-    return 0.2 + scaled * 0.8;
-  };
+  const workingSorted = useMemo(
+    () => workingDayMinutes(data.grid),
+    [data.grid]
+  );
 
   const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -166,8 +169,7 @@ export function YearlyContributionCalendar({
       const cellStyle = {
         width: CELL_SIZE,
         height: CELL_SIZE,
-        backgroundColor: "#10b981" as const,
-        opacity: getOpacity(minutes, data.maxMinutes),
+        backgroundColor: yearlyHeatColor(minutes, workingSorted),
       };
 
       if (!day) {
@@ -300,6 +302,21 @@ export function YearlyContributionCalendar({
             </div>
           </div>
         </div>
+      </div>
+      <div className="mt-3 flex items-center justify-end gap-1.5 text-[10px] text-muted-foreground">
+        <span>Less</span>
+        {YEARLY_HEAT_COLORS.map((color) => (
+          <span
+            key={color}
+            className="rounded-[2px]"
+            style={{
+              width: CELL_SIZE,
+              height: CELL_SIZE,
+              backgroundColor: color,
+            }}
+          />
+        ))}
+        <span>More</span>
       </div>
     </div>
   );
