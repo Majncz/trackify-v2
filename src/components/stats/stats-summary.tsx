@@ -55,9 +55,7 @@ export function StatsSummary() {
         </CardHeader>
         <CardContent>
           <p className="text-2xl font-bold">
-            {formatDurationWords((stats?.todayTotal ?? 0) + liveToday, {
-              seconds: liveToday > 0,
-            })}
+            {formatDurationWords((stats?.todayTotal ?? 0) + liveToday)}
           </p>
         </CardContent>
       </Card>
@@ -67,9 +65,7 @@ export function StatsSummary() {
         </CardHeader>
         <CardContent>
           <p className="text-2xl font-bold">
-            {formatDurationWords((stats?.grandTotal ?? 0) + liveAll, {
-              seconds: liveAll > 0,
-            })}
+            {formatDurationWords((stats?.grandTotal ?? 0) + liveAll)}
           </p>
         </CardContent>
       </Card>

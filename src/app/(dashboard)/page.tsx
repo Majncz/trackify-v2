@@ -2,6 +2,7 @@ import { TaskList } from "@/components/tasks/task-list";
 import { StatsSummary } from "@/components/stats/stats-summary";
 import { TimeChart } from "@/components/stats/time-chart";
 import { CreateTaskModal } from "@/components/tasks/create-task-modal";
+import { NowTracking } from "@/components/team/now-tracking";
 
 export default function DashboardPage() {
   return (
@@ -18,6 +19,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      <NowTracking />
       <TaskList />
       <TimeChart />
       <StatsSummary />

@@ -27,6 +27,10 @@ export function emitToUser(userId: string, event: string, payload: unknown) {
   g.__trackifyIo?.to(`user:${userId}`).emit(event, payload);
 }
 
+export function emitPresenceChanged() {
+  g.__trackifyIo?.emit("presence:changed");
+}
+
 export async function persistTimerStart(
   userId: string,
   taskId: string,
@@ -60,6 +64,7 @@ export async function persistTimerStart(
     startTime,
     socketIds: existing?.socketIds ?? new Set(),
   });
+  emitPresenceChanged();
 }
 
 export async function persistTimerStop(userId: string, taskId?: string) {
@@ -78,6 +83,7 @@ export async function persistTimerStop(userId: string, taskId?: string) {
 
   await prisma.activeTimer.deleteMany({ where: { userId } });
   getActiveTimers().delete(userId);
+  emitPresenceChanged();
   return true;
 }
 
@@ -115,4 +121,5 @@ export async function persistTimerStartTime(
       socketIds: new Set(),
     });
   }
+  emitPresenceChanged();
 }
