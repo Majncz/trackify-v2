@@ -10,7 +10,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { formatDurationWords } from "@/lib/utils";
 import { useTasks } from "@/hooks/use-tasks";
-import { cn } from "@/lib/utils";
 
 interface AdjustTimerDialogProps {
   open: boolean;
@@ -24,10 +23,17 @@ interface AdjustTimerDialogProps {
 
 type DragKind = "start" | "end" | null;
 
+interface BusySpan {
+  from: number;
+  to: number;
+  name: string;
+}
+
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 const MIN_DURATION = MINUTE;
 const NOW_MAGNET = 75 * 1000;
+const THUMB = 28;
 
 function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
@@ -61,8 +67,20 @@ function rangeStartFor(start: number, now: number) {
   return Math.max(earliest, padded);
 }
 
-function pct(time: number, from: number, to: number) {
-  return clamp(((time - from) / Math.max(1, to - from)) * 100, 0, 100);
+function minStartForEnd(end: number, busy: BusySpan[], windowStart: number) {
+  let min = windowStart;
+  for (const span of busy) {
+    if (span.from < end) min = Math.max(min, span.to);
+  }
+  return min;
+}
+
+function maxEndForStart(start: number, busy: BusySpan[], now: number) {
+  let max = now;
+  for (const span of busy) {
+    if (span.to > start) max = Math.min(max, span.from);
+  }
+  return max;
 }
 
 export function AdjustTimerDialog({
@@ -78,6 +96,7 @@ export function AdjustTimerDialog({
   const trackRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragKind>(null);
   const onClearErrorRef = useRef(onClearError);
+  const [width, setWidth] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   const [startTime, setStartTime] = useState(currentStartTime);
   const [endTime, setEndTime] = useState<number | null>(null);
@@ -96,30 +115,42 @@ export function AdjustTimerDialog({
   }, [open, currentStartTime]);
 
   useEffect(() => {
+    if (!open) return;
+    const node = trackRef.current;
+    if (!node) return;
+    const measure = () => setWidth(node.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [open]);
+
+  useEffect(() => {
     if (!open || dragging) return;
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, [open, dragging]);
 
   const from = rangeStartFor(Math.min(currentStartTime, startTime), now);
+  const span = Math.max(1, now - from);
   const effectiveEnd = endTime ?? now;
   const stillRunning = endTime == null;
   const durationMs = Math.max(0, effectiveEnd - startTime);
-  const startPct = pct(startTime, from, now);
-  const endPct = pct(effectiveEnd, from, now);
 
-  const overlapName = useMemo(() => {
-    for (const task of tasks) {
-      for (const event of task.events) {
-        const eventStart = new Date(event.from).getTime();
-        const eventEnd = new Date(event.to).getTime();
-        if (startTime < eventEnd && eventStart < effectiveEnd) {
-          return `${task.name}: ${event.name}`;
-        }
-      }
-    }
-    return null;
-  }, [tasks, startTime, effectiveEnd]);
+  const busy = useMemo<BusySpan[]>(() => {
+    return tasks.flatMap((task) =>
+      task.events.map((event) => ({
+        from: new Date(event.from).getTime(),
+        to: new Date(event.to).getTime(),
+        name: `${task.name}: ${event.name}`,
+      }))
+    );
+  }, [tasks]);
+
+  const xFor = useCallback(
+    (time: number) => Math.round(((time - from) / span) * width),
+    [from, span, width]
+  );
 
   const applyDrag = useCallback(
     (kind: DragKind, clientX: number) => {
@@ -129,17 +160,21 @@ export function AdjustTimerDialog({
       const at = snapMinute(from + ratio * (now - from));
 
       if (kind === "start") {
-        setStartTime(clamp(at, from, effectiveEnd - MIN_DURATION));
+        const min = minStartForEnd(effectiveEnd, busy, from);
+        const max = effectiveEnd - MIN_DURATION;
+        setStartTime(clamp(at, min, max));
         return;
       }
 
-      if (at >= now - NOW_MAGNET) {
+      const min = startTime + MIN_DURATION;
+      const max = maxEndForStart(startTime, busy, now);
+      if (at >= now - NOW_MAGNET && max >= now - NOW_MAGNET) {
         setEndTime(null);
         return;
       }
-      setEndTime(clamp(at, startTime + MIN_DURATION, now));
+      setEndTime(clamp(at, min, max));
     },
-    [effectiveEnd, from, now, startTime]
+    [busy, effectiveEnd, from, now, startTime]
   );
 
   const onThumbDown = (kind: DragKind) => (event: React.PointerEvent) => {
@@ -166,13 +201,11 @@ export function AdjustTimerDialog({
   }, [applyDrag, dragging]);
 
   const onTrackDown = (event: React.PointerEvent) => {
-    if (isSaving) return;
-    const rect = trackRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const ratio = clamp((event.clientX - rect.left) / rect.width, 0, 1);
-    const startDist = Math.abs(ratio * 100 - startPct);
-    const endDist = Math.abs(ratio * 100 - endPct);
-    const kind: DragKind = startDist <= endDist ? "start" : "end";
+    if (isSaving || !width) return;
+    const startX = xFor(startTime);
+    const endX = xFor(effectiveEnd);
+    const localX = event.clientX - event.currentTarget.getBoundingClientRect().left;
+    const kind: DragKind = Math.abs(localX - startX) <= Math.abs(localX - endX) ? "start" : "end";
     dragRef.current = kind;
     setDragging(kind);
     applyDrag(kind, event.clientX);
@@ -187,20 +220,18 @@ export function AdjustTimerDialog({
     }
   };
 
-  const outcome = stillRunning
-    ? `Keep running. It will look like you started at ${clock(startTime)}.`
-    : `Stop the timer as if you finished ${agoLabel(effectiveEnd, now)} (${clock(effectiveEnd)}).`;
+  const startX = xFor(startTime);
+  const endX = xFor(effectiveEnd);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogTitle>Fix this session</DialogTitle>
-        <DialogDescription>
-          Left knob is when you started. Right knob is when you stopped. Leave the
-          right one on Now if you are still working.
+        <DialogDescription className="sr-only">
+          Drag the start or end of this session.
         </DialogDescription>
 
-        <div className="space-y-6 pt-2">
+        <div className="space-y-5 pt-1">
           <div>
             <p className="font-mono text-4xl font-semibold tabular-nums tracking-tight">
               {formatDurationWords(durationMs)}
@@ -212,66 +243,80 @@ export function AdjustTimerDialog({
             </p>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div
               ref={trackRef}
-              className="relative h-12 touch-none select-none"
+              className="relative h-16 touch-none select-none"
               onPointerDown={onTrackDown}
             >
-              <div className="absolute top-1/2 right-0 left-0 h-2 -translate-y-1/2 rounded-full bg-muted" />
-              <div
-                className={cn(
-                  "absolute top-1/2 h-2 -translate-y-1/2 rounded-full",
-                  overlapName ? "bg-destructive" : "bg-primary"
-                )}
-                style={{ left: `${startPct}%`, width: `${Math.max(1, endPct - startPct)}%` }}
-              />
+              <div className="absolute right-0 left-0 top-[30px] h-1.5 rounded-full bg-muted" />
+              {width > 0 &&
+                busy.map((block) => {
+                  const left = xFor(block.from);
+                  const right = xFor(block.to);
+                  if (right < 0 || left > width) return null;
+                  return (
+                    <div
+                      key={`${block.from}-${block.to}-${block.name}`}
+                      title={block.name}
+                      className="absolute top-[30px] h-1.5 rounded-full bg-neutral-400/70"
+                      style={{
+                        left: clamp(left, 0, width),
+                        width: Math.max(3, clamp(right, 0, width) - clamp(left, 0, width)),
+                      }}
+                    />
+                  );
+                })}
+              {width > 0 && (
+                <div
+                  className="absolute top-[30px] h-1.5 rounded-full bg-foreground"
+                  style={{
+                    left: startX,
+                    width: Math.max(4, endX - startX),
+                  }}
+                />
+              )}
               <Thumb
-                pct={startPct}
+                x={startX}
+                timeLabel={clock(startTime)}
                 active={dragging === "start"}
-                label="Start"
+                ariaLabel="Start"
                 onPointerDown={onThumbDown("start")}
               />
               <Thumb
-                pct={endPct}
+                x={endX}
+                timeLabel={stillRunning ? "Now" : clock(effectiveEnd)}
                 active={dragging === "end"}
-                label={stillRunning ? "Now" : "Stop"}
-                emphasis={stillRunning}
+                ariaLabel={stillRunning ? "Now" : "Stop"}
                 onPointerDown={onThumbDown("end")}
               />
             </div>
 
             <div className="flex items-start justify-between gap-4 text-sm">
               <div>
-                <p className="font-medium">Started</p>
-                <p className="font-mono tabular-nums">{clock(startTime)}</p>
+                <p className="text-muted-foreground">Started</p>
+                <p className="font-mono text-base tabular-nums">{clock(startTime)}</p>
                 <p className="text-muted-foreground">{agoLabel(startTime, now)}</p>
               </div>
               <div className="text-right">
-                <p className="font-medium">{stillRunning ? "Still running" : "Stopped"}</p>
-                <p className="font-mono tabular-nums">
+                <p className="text-muted-foreground">{stillRunning ? "Still running" : "Stopped"}</p>
+                <p className="font-mono text-base tabular-nums">
                   {stillRunning ? "Now" : clock(effectiveEnd)}
                 </p>
-                <p className="text-muted-foreground">
-                  {stillRunning ? "Drag left to stop earlier" : agoLabel(effectiveEnd, now)}
-                </p>
+                {!stillRunning && (
+                  <p className="text-muted-foreground">{agoLabel(effectiveEnd, now)}</p>
+                )}
               </div>
             </div>
           </div>
 
-          <p className="rounded-lg bg-muted px-3 py-2 text-sm">{outcome}</p>
-
-          {(error || overlapName) && (
-            <p className="text-sm text-destructive">
-              {error || `This overlaps “${overlapName}”. Move a knob off that time.`}
-            </p>
-          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
 
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={isSaving || Boolean(overlapName)}>
+            <Button onClick={handleSave} disabled={isSaving}>
               {isSaving ? "Saving…" : stillRunning ? "Save start time" : `Stop ${agoLabel(effectiveEnd, now)}`}
             </Button>
           </div>
@@ -282,31 +327,37 @@ export function AdjustTimerDialog({
 }
 
 function Thumb({
-  pct: position,
+  x,
+  timeLabel,
   active,
-  label,
-  emphasis = false,
+  ariaLabel,
   onPointerDown,
 }: {
-  pct: number;
+  x: number;
+  timeLabel: string;
   active: boolean;
-  label: string;
-  emphasis?: boolean;
+  ariaLabel: string;
   onPointerDown: (event: React.PointerEvent) => void;
 }) {
   return (
-    <button
-      type="button"
-      aria-label={label}
-      className={cn(
-        "absolute top-1/2 z-10 flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 bg-background shadow-md",
-        emphasis ? "border-rose-500 text-rose-600" : "border-primary",
-        active && "scale-110"
-      )}
-      style={{ left: `${position}%` }}
-      onPointerDown={onPointerDown}
+    <div
+      className="absolute top-0"
+      style={{ left: Math.round(x - THUMB / 2), width: THUMB }}
     >
-      <span className="text-[10px] font-bold leading-none">{label}</span>
-    </button>
+      <p className="mb-1 text-center font-mono text-xs tabular-nums leading-none text-foreground">
+        {timeLabel}
+      </p>
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        className="block h-7 w-7 rounded-full bg-white"
+        style={{
+          boxShadow: active
+            ? "0 2px 8px rgba(0,0,0,0.22), 0 0 0 5px rgba(0,0,0,0.08)"
+            : "0 1px 3px rgba(0,0,0,0.22), 0 0 0 1px rgba(0,0,0,0.08)",
+        }}
+        onPointerDown={onPointerDown}
+      />
+    </div>
   );
 }
