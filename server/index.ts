@@ -83,9 +83,9 @@ app.prepare().then(async () => {
   // Store active timers per user - load from DB on startup
   const loadedTimers = await loadActiveTimers();
   const activeTimers = getActiveTimers();
-  for (const [userId, timer] of loadedTimers) {
+  loadedTimers.forEach((timer, userId) => {
     activeTimers.set(userId, timer);
-  }
+  });
   console.log(`Loaded ${activeTimers.size} active timer(s) from database`);
 
   io.on("connection", (socket) => {

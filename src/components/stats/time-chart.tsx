@@ -402,11 +402,11 @@ export function TimeChart() {
 
   // Calculate max Y value for weekly view (not used for yearly)
   const maxYWeekly = useMemo(() => {
-    const allEvents = chartTasks.flatMap((t) => {
-      t.events.map((e) => ({ 
-        ...e, 
+    const allEvents = chartTasks.flatMap((t) =>
+      t.events.map((e) => ({
+        ...e,
         from: new Date(e.from),
-        to: new Date(e.to)
+        to: new Date(e.to),
       }))
     );
 
