@@ -12,6 +12,7 @@ model User {
   id                     String                 @id @default(uuid())
   email                  String                 @unique
   password               String
+  displayName            String?
   /// Target tracked hours per 100 CZK spend (effectiveness baseline). Null = rolling median of past periods.
   aiTargetHoursPer100Czk Float?
   tasks                  Task[]

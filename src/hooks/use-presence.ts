@@ -9,6 +9,7 @@ export type PresenceEntry = {
   name: string;
   taskName: string;
   startTime: number;
+  todayMs: number;
 };
 
 export function usePresence() {
@@ -18,7 +19,10 @@ export function usePresence() {
   const query = useQuery<{ tracking: PresenceEntry[] }>({
     queryKey: ["presence"],
     queryFn: async () => {
-      const res = await fetch("/api/presence");
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const res = await fetch(
+        `/api/presence?timezone=${encodeURIComponent(timezone)}`
+      );
       if (!res.ok) throw new Error("Failed to load who's tracking");
       return res.json();
     },

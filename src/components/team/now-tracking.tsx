@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { Card, CardContent } from "@/components/ui/card";
 import { usePresence, type PresenceEntry } from "@/hooks/use-presence";
 import { formatDurationWords } from "@/lib/utils";
+import { liveTodayMs } from "@/lib/live-timer";
 
 const VERBS = ["is on", "is grinding", "is deep in", "is hammering"] as const;
 
@@ -62,6 +63,10 @@ export function NowTracking() {
                 <p className="min-w-0 leading-snug font-medium">
                   {person.name} {verb} {person.taskName} ·{" "}
                   {formatDurationWords(elapsed)}
+                  <span className="text-muted-foreground font-normal">
+                    {" "}
+                    · {formatDurationWords(person.todayMs + liveTodayMs(person.startTime, now))} today
+                  </span>
                 </p>
               </li>
             );
