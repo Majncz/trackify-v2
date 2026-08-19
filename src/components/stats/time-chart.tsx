@@ -881,28 +881,33 @@ interface WeekCalendarViewProps {
   eventsByDate: Map<string, DayEvent[]>;
 }
 
-const WEEKLY_CELL_HEIGHT = 14;
 const WEEKLY_GAP = 2;
 const WEEKLY_CONTAINER_HEIGHT = 240;
 const WEEKLY_BUFFER_ROWS = 5;
 const WEEKLY_LABEL_WIDTH = 52;
-const WEEKLY_MAX_SQUARES_PER_HOUR = 4;
-const WEEKLY_MIN_CELL_WIDTH = 9;
-const WEEKLY_TARGET_CELL_WIDTH = 14;
+const WEEKLY_MAX_SQUARES_PER_HOUR = 6;
+const WEEKLY_MIN_SQUARE = 10;
+const WEEKLY_TARGET_SQUARE = 12;
 
-function weeklySquaresPerHour(availableWidth: number) {
-  if (availableWidth <= 0) return 1;
-  let best = 1;
+function weeklyGridMetrics(availableWidth: number) {
+  if (availableWidth <= 0) {
+    return { squaresPerHour: 1, cellSize: WEEKLY_TARGET_SQUARE };
+  }
+  let best = { squaresPerHour: 1, cellSize: WEEKLY_MIN_SQUARE };
   let bestDist = Infinity;
   for (let sph = 1; sph <= WEEKLY_MAX_SQUARES_PER_HOUR; sph++) {
     const n = 24 * sph;
-    const width = (availableWidth - (n - 1) * WEEKLY_GAP) / n;
-    if (width < WEEKLY_MIN_CELL_WIDTH) continue;
-    const dist = Math.abs(width - WEEKLY_TARGET_CELL_WIDTH);
+    const size = Math.floor((availableWidth - (n - 1) * WEEKLY_GAP) / n);
+    if (size < WEEKLY_MIN_SQUARE) continue;
+    const dist = Math.abs(size - WEEKLY_TARGET_SQUARE);
     if (dist < bestDist) {
-      best = sph;
+      best = { squaresPerHour: sph, cellSize: size };
       bestDist = dist;
     }
+  }
+  if (bestDist === Infinity) {
+    const size = Math.max(8, Math.floor((availableWidth - 23 * WEEKLY_GAP) / 24));
+    return { squaresPerHour: 1, cellSize: size };
   }
   return best;
 }
@@ -984,9 +989,10 @@ function WeekCalendarView({
   }, []);
 
   const availableWidth = Math.max(0, containerWidth - WEEKLY_LABEL_WIDTH - WEEKLY_GAP);
-  const squaresPerHour = weeklySquaresPerHour(availableWidth);
+  const { squaresPerHour, cellSize } = weeklyGridMetrics(availableWidth);
   const totalSquaresPerRow = 24 * squaresPerHour;
-  const rowHeight = WEEKLY_CELL_HEIGHT + WEEKLY_GAP;
+  const hourColWidth = cellSize * squaresPerHour + (squaresPerHour - 1) * WEEKLY_GAP;
+  const rowHeight = cellSize + WEEKLY_GAP;
   
   const totalRows = displayDays.length;
   const totalHeight = totalRows * rowHeight;
@@ -1088,7 +1094,7 @@ function WeekCalendarView({
         <div
           className="grid min-w-0"
           style={{
-            gridTemplateColumns: "repeat(24, minmax(0, 1fr))",
+            gridTemplateColumns: `repeat(24, ${hourColWidth}px)`,
             gap: `${WEEKLY_GAP}px`,
           }}
         >
@@ -1134,9 +1140,9 @@ function WeekCalendarView({
                     {format(day, "MMM d")}
                   </span>
                   <div
-                    className="grid min-w-0 w-full"
+                    className="grid min-w-0"
                     style={{
-                      gridTemplateColumns: `repeat(${totalSquaresPerRow}, minmax(0, 1fr))`,
+                      gridTemplateColumns: `repeat(${totalSquaresPerRow}, ${cellSize}px)`,
                       gap: `${WEEKLY_GAP}px`,
                     }}
                   >
@@ -1162,8 +1168,8 @@ function WeekCalendarView({
                             : getOpacity(0, data.maxMinutes);
 
                         const cubeStyle = {
-                          width: "100%",
-                          height: WEEKLY_CELL_HEIGHT,
+                          width: cellSize,
+                          height: cellSize,
                           backgroundColor: baseColor,
                           opacity: baseOpacity,
                         };
