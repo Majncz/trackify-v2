@@ -130,6 +130,18 @@ export function SessionRangeSlider({
   const trackRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragKind>(null);
   const viewFromRef = useRef(viewFrom);
+  const latestRef = useRef({
+    startTime,
+    endTime,
+    busy,
+    viewTo,
+    earliest,
+    allowLiveEnd,
+    usable: 1,
+    onViewFrom,
+    onStartTime,
+    onEndTime,
+  });
   const [width, setWidth] = useState(0);
   const [dragging, setDragging] = useState<DragKind>(null);
 
@@ -137,11 +149,27 @@ export function SessionRangeSlider({
     viewFromRef.current = viewFrom;
   }, [viewFrom]);
 
+  latestRef.current = {
+    startTime,
+    endTime,
+    busy,
+    viewTo,
+    earliest,
+    allowLiveEnd,
+    usable: Math.max(1, width - INSET * 2),
+    onViewFrom,
+    onStartTime,
+    onEndTime,
+  };
+
   useLayoutEffect(() => {
     const node = trackRef.current;
     if (!node) return;
     const measure = () => {
-      if (node.clientWidth > 0) setWidth(node.clientWidth);
+      const next = node.clientWidth;
+      if (next > 0) {
+        setWidth((prev) => (prev === next ? prev : next));
+      }
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -164,39 +192,37 @@ export function SessionRangeSlider({
     [span, usable, viewFrom, width]
   );
 
-  const applyDrag = useCallback(
-    (kind: DragKind, clientX: number, snap: boolean) => {
-      const rect = trackRef.current?.getBoundingClientRect();
-      if (!rect || !kind) return;
-      const from = viewFromRef.current;
-      const localSpan = Math.max(1, viewTo - from);
-      const ratio = clamp((clientX - rect.left - INSET) / usable, 0, 1);
-      let at = from + ratio * localSpan;
-      if (snap) at = snapMinute(at);
+  const applyDrag = useCallback((kind: DragKind, clientX: number, snap: boolean) => {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect || !kind) return;
+    const latest = latestRef.current;
+    const from = viewFromRef.current;
+    const localSpan = Math.max(1, latest.viewTo - from);
+    const ratio = clamp((clientX - rect.left - INSET) / latest.usable, 0, 1);
+    let at = from + ratio * localSpan;
+    if (snap) at = snapMinute(at);
 
-      if (kind === "start") {
-        if (ratio <= 0.03 && from > earliest) {
-          const nextFrom = Math.max(earliest, from - 8 * MINUTE);
-          viewFromRef.current = nextFrom;
-          onViewFrom(nextFrom);
-          at = nextFrom;
-        }
-        const min = minStartForEnd(endTime, busy, earliest);
-        const max = endTime - MIN_DURATION;
-        onStartTime(clamp(at, min, max));
-        return;
+    if (kind === "start") {
+      if (ratio <= 0.03 && from > latest.earliest) {
+        const nextFrom = Math.max(latest.earliest, from - 8 * MINUTE);
+        viewFromRef.current = nextFrom;
+        latest.onViewFrom(nextFrom);
+        at = nextFrom;
       }
+      const min = minStartForEnd(latest.endTime, latest.busy, latest.earliest);
+      const max = latest.endTime - MIN_DURATION;
+      latest.onStartTime(clamp(at, min, max));
+      return;
+    }
 
-      const min = startTime + MIN_DURATION;
-      const max = maxEndForStart(startTime, busy, viewTo);
-      if (allowLiveEnd && at >= viewTo - MINUTE / 2) {
-        onEndTime(null);
-        return;
-      }
-      onEndTime(clamp(at, min, max));
-    },
-    [allowLiveEnd, busy, earliest, endTime, onEndTime, onStartTime, onViewFrom, startTime, usable, viewTo]
-  );
+    const min = latest.startTime + MIN_DURATION;
+    const max = maxEndForStart(latest.startTime, latest.busy, latest.viewTo);
+    if (latest.allowLiveEnd && at >= latest.viewTo - MINUTE / 2) {
+      latest.onEndTime(null);
+      return;
+    }
+    latest.onEndTime(clamp(at, min, max));
+  }, []);
 
   useEffect(() => {
     if (!dragging) return;

@@ -62,7 +62,9 @@ export function AdjustTimerDialog({
     setStartTime(currentStartTime);
     setEndTime(null);
     onClearError?.();
-  }, [open, currentStartTime, onClearError]);
+    // Only re-seed when the dialog opens or the live start changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, currentStartTime]);
 
   useEffect(() => {
     if (!open || dragging) return;
@@ -105,7 +107,7 @@ export function AdjustTimerDialog({
   return (
     <Dialog open={open} onOpenChange={dismissSafe}>
       <DialogContent
-        className="sm:max-w-lg"
+        className="sm:max-w-lg overflow-x-hidden"
         onPointerDownOutside={(event) => {
           if (sliderGestureBlocksUi()) event.preventDefault();
         }}

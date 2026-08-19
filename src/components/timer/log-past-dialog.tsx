@@ -121,7 +121,7 @@ export function LogPastDialog({
   return (
     <Dialog open={open} onOpenChange={dismissSafe}>
       <DialogContent
-        className="sm:max-w-lg"
+        className="sm:max-w-lg overflow-x-hidden"
         onPointerDownOutside={(event) => {
           if (sliderGestureBlocksUi()) event.preventDefault();
         }}
