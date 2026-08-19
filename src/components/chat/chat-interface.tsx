@@ -129,6 +129,7 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const conversationIdRef = useRef(conversationId);
+  const skipNextConversationLoad = useRef(false);
 
   function updateConversationId(id: string | null) {
     conversationIdRef.current = id;
@@ -163,14 +164,22 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
 
     if (!conversationId) {
       setMessages([]);
+      prevConversationId.current = null;
       return;
     }
 
-    // If switching to a different conversation, clear messages immediately
-    const isNewConversation = prevConversationId.current !== conversationId;
-    if (isNewConversation) {
+    const previous = prevConversationId.current;
+    prevConversationId.current = conversationId;
+
+    // First send creates a conversation, then this effect would wipe the
+    // optimistic user message before the assistant stream arrives.
+    if (skipNextConversationLoad.current) {
+      skipNextConversationLoad.current = false;
+      return;
+    }
+
+    if (previous !== conversationId) {
       setMessages([]);
-      prevConversationId.current = conversationId;
     }
 
     let cancelled = false;
@@ -182,7 +191,6 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
         if (res.ok) {
           const dbMessages = await res.json();
           if (cancelled) return;
-          // If no messages in DB, keep it empty (already cleared above)
           if (dbMessages.length === 0) return;
           const uiMessages = dbMessages.map((msg: { id: string; role: string; content: string; parts?: unknown[] }) => ({
             id: msg.id,
@@ -210,6 +218,7 @@ export function ChatInterface({ variant = "page", showTabBar = true, header }: C
       const res = await fetch("/api/conversations", { method: "POST" });
       if (res.ok) {
         const newConv = await res.json();
+        skipNextConversationLoad.current = true;
         conversationIdRef.current = newConv.id;
         setConversationId(newConv.id);
         return newConv.id;
