@@ -15,7 +15,8 @@ export function DailyLeaderboard() {
   const { leaderboard, isLoading } = usePresence();
   const [now, setNow] = useState(() => Date.now());
 
-  const anyoneLive = leaderboard.some((row) => row.startTime);
+  const rows = leaderboard.filter((row) => row.todayMs > 0 || row.startTime);
+  const anyoneLive = rows.some((row) => row.startTime);
 
   useEffect(() => {
     if (!anyoneLive) return;
@@ -23,7 +24,7 @@ export function DailyLeaderboard() {
     return () => window.clearInterval(id);
   }, [anyoneLive]);
 
-  if (isLoading || leaderboard.length === 0) {
+  if (isLoading || rows.length === 0) {
     return null;
   }
 
@@ -32,13 +33,15 @@ export function DailyLeaderboard() {
       <CardContent className="py-4 space-y-3">
         <div>
           <p className="text-base font-semibold">Today’s leaderboard</p>
-          <p className="text-xs text-muted-foreground">Who’s grinding the most today</p>
+          <p className="text-xs text-muted-foreground">
+            {anyoneLive ? "Live times, updating as people track" : "Who’s grinding the most today"}
+          </p>
         </div>
         <ol className="space-y-2">
-          {leaderboard
-            .filter((row) => row.todayMs > 0 || row.startTime)
-            .map((row, index) => {
+          {rows.map((row, index) => {
+            const isLive = Boolean(row.startTime);
             const live = row.startTime ? liveTodayMs(row.startTime, now) : 0;
+            const sessionMs = row.startTime ? Math.max(0, now - row.startTime) : 0;
             const total = row.todayMs + live;
             const isYou = row.userId === session?.user?.id;
             return (
@@ -46,7 +49,8 @@ export function DailyLeaderboard() {
                 key={row.userId}
                 className={cn(
                   "flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 min-w-0",
-                  isYou && "bg-primary/5"
+                  isLive && "bg-emerald-500/10 ring-1 ring-inset ring-emerald-500/25",
+                  !isLive && isYou && "bg-primary/5"
                 )}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
@@ -61,13 +65,22 @@ export function DailyLeaderboard() {
                     {MEDALS[index] ?? index + 1}
                   </span>
                   <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">
-                      {row.name}
-                      {isYou ? " · you" : ""}
+                    <p className="flex items-center gap-1.5 text-sm font-medium min-w-0">
+                      {isLive && (
+                        <span className="relative flex h-2 w-2 shrink-0">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
+                          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                        </span>
+                      )}
+                      <span className="truncate">
+                        {row.name}
+                        {isYou ? " · you" : ""}
+                      </span>
                     </p>
-                    {row.taskName && (
-                      <p className="text-xs text-muted-foreground truncate">
-                        Live on {row.taskName}
+                    {isLive && row.taskName && (
+                      <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400 truncate">
+                        Live · {row.taskName}
+                        {sessionMs > 0 ? ` · ${formatDurationWords(sessionMs)} this stretch` : ""}
                       </p>
                     )}
                   </div>
