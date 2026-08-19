@@ -1,8 +1,15 @@
 "use client";
 
 import { useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useSocket } from "./use-socket";
+
+function localDayKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 export type PresenceEntry = {
   userId: string;
@@ -20,24 +27,27 @@ export type LeaderboardEntry = {
   taskName: string | null;
 };
 
-export function usePresence() {
+export function usePresence(day: string) {
   const queryClient = useQueryClient();
   const { on } = useSocket();
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const query = useQuery<{
     tracking: PresenceEntry[];
     leaderboard: LeaderboardEntry[];
+    day: string;
+    isToday: boolean;
   }>({
-    queryKey: ["presence"],
+    queryKey: ["presence", day],
     queryFn: async () => {
-      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const res = await fetch(
-        `/api/presence?timezone=${encodeURIComponent(timezone)}`
+        `/api/presence?timezone=${encodeURIComponent(timezone)}&day=${encodeURIComponent(day)}`
       );
       if (!res.ok) throw new Error("Failed to load who's tracking");
       return res.json();
     },
-    refetchInterval: 15_000,
+    refetchInterval: day === localDayKey() ? 15_000 : false,
+    placeholderData: keepPreviousData,
   });
 
   useEffect(() => {
@@ -49,6 +59,7 @@ export function usePresence() {
   return {
     tracking: query.data?.tracking ?? [],
     leaderboard: query.data?.leaderboard ?? [],
+    isToday: query.data?.isToday ?? true,
     isLoading: query.isLoading,
   };
 }

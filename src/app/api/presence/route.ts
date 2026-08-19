@@ -3,15 +3,22 @@ import { getAuthUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { liveOverlapMs } from "@/lib/live-timer";
 import { personName } from "@/lib/display-name";
-import { endOfDay, startOfDay } from "date-fns";
+import { endOfDay, format, startOfDay } from "date-fns";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
 
-function todayWindowUtc(timezone: string) {
-  const now = new Date();
-  const nowInTz = toZonedTime(now, timezone);
+function dayWindowUtc(timezone: string, dayKey: string | null) {
+  const nowInTz = toZonedTime(new Date(), timezone);
+  const todayKey = format(startOfDay(nowInTz), "yyyy-MM-dd");
+  const key = dayKey && /^\d{4}-\d{2}-\d{2}$/.test(dayKey) && dayKey <= todayKey ? dayKey : todayKey;
+  const [year, month, day] = key.split("-").map(Number);
+  const wall = startOfDay(nowInTz);
+  wall.setFullYear(year, month - 1, day);
+  wall.setHours(0, 0, 0, 0);
   return {
-    start: fromZonedTime(startOfDay(nowInTz), timezone),
-    end: fromZonedTime(endOfDay(nowInTz), timezone),
+    start: fromZonedTime(startOfDay(wall), timezone),
+    end: fromZonedTime(endOfDay(wall), timezone),
+    day: key,
+    isToday: key === todayKey,
   };
 }
 
@@ -22,24 +29,27 @@ export async function GET(request: NextRequest) {
   }
 
   const timezone = request.nextUrl.searchParams.get("timezone") || "UTC";
-  const { start: todayStart, end: todayEnd } = todayWindowUtc(timezone);
+  const requestedDay = request.nextUrl.searchParams.get("day");
+  const { start: dayStart, end: dayEnd, day, isToday } = dayWindowUtc(timezone, requestedDay);
 
   const [users, timers, events] = await Promise.all([
     prisma.user.findMany({
       select: { id: true, email: true, displayName: true },
       orderBy: { email: "asc" },
     }),
-    prisma.activeTimer.findMany({
-      include: {
-        user: { select: { id: true, email: true, displayName: true } },
-        task: { select: { name: true, hidden: true } },
-      },
-      orderBy: { startTime: "asc" },
-    }),
+    isToday
+      ? prisma.activeTimer.findMany({
+          include: {
+            user: { select: { id: true, email: true, displayName: true } },
+            task: { select: { name: true, hidden: true } },
+          },
+          orderBy: { startTime: "asc" },
+        })
+      : Promise.resolve([]),
     prisma.event.findMany({
       where: {
-        from: { lt: todayEnd },
-        to: { gt: todayStart },
+        from: { lt: dayEnd },
+        to: { gt: dayStart },
       },
       select: {
         from: true,
@@ -49,16 +59,16 @@ export async function GET(request: NextRequest) {
     }),
   ]);
 
-  const todayByUser = new Map<string, number>();
+  const dayByUser = new Map<string, number>();
   for (const event of events) {
     const extra = liveOverlapMs(
       event.from.getTime(),
       event.to.getTime(),
-      todayStart.getTime(),
-      todayEnd.getTime()
+      dayStart.getTime(),
+      dayEnd.getTime()
     );
     const id = event.task.userId;
-    todayByUser.set(id, (todayByUser.get(id) ?? 0) + extra);
+    dayByUser.set(id, (dayByUser.get(id) ?? 0) + extra);
   }
 
   const visibleTimers = timers.filter((timer) => !timer.task.hidden);
@@ -77,16 +87,16 @@ export async function GET(request: NextRequest) {
     name: personName(timer.user),
     taskName: timer.task.name,
     startTime: timer.startTime.getTime(),
-    todayMs: todayByUser.get(timer.user.id) ?? 0,
+    todayMs: dayByUser.get(timer.user.id) ?? 0,
   }));
 
   const leaderboard = users
     .map((row) => {
-      const live = liveByUser.get(row.id);
+      const live = isToday ? liveByUser.get(row.id) : undefined;
       return {
         userId: row.id,
         name: personName(row),
-        todayMs: todayByUser.get(row.id) ?? 0,
+        todayMs: dayByUser.get(row.id) ?? 0,
         startTime: live?.startTime ?? null,
         taskName: live?.taskName ?? null,
       };
@@ -98,5 +108,5 @@ export async function GET(request: NextRequest) {
       return b.todayMs + bLive - (a.todayMs + aLive) || a.name.localeCompare(b.name);
     });
 
-  return NextResponse.json({ tracking, leaderboard });
+  return NextResponse.json({ tracking, leaderboard, day, isToday });
 }

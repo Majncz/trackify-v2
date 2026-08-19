@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
+import { addDays, format } from "date-fns";
+import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePresence } from "@/hooks/use-presence";
 import { useStats } from "@/hooks/use-stats";
@@ -12,17 +15,26 @@ import { liveTodayMs } from "@/lib/live-timer";
 import { cn } from "@/lib/utils";
 
 const MEDALS = ["1", "2", "3"] as const;
+const MAX_LOOKBACK_DAYS = 400;
+
+function parseDayKey(key: string) {
+  const [year, month, day] = key.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
 
 export function DailyLeaderboard() {
   const { data: session } = useSession();
-  const { leaderboard, isLoading: presenceLoading } = usePresence();
+  const [day, setDay] = useState(() => localDayKey());
+  const today = localDayKey();
+  const isToday = day === today;
+  const { leaderboard, isLoading: presenceLoading } = usePresence(day);
   const { data: stats, isLoading: statsLoading } = useStats();
   const { running, startTime } = useLiveTimer();
   const [now, setNow] = useState(() => Date.now());
 
-  const rows = leaderboard.filter((row) => row.todayMs > 0 || row.startTime);
-  const anyoneLive = rows.some((row) => row.startTime);
-  const liveClock = anyoneLive || (running && Boolean(startTime));
+  const rows = leaderboard.filter((row) => row.todayMs > 0 || (isToday && row.startTime));
+  const anyoneLive = isToday && rows.some((row) => row.startTime);
+  const liveClock = isToday && (anyoneLive || (running && Boolean(startTime)));
 
   useEffect(() => {
     if (!liveClock) return;
@@ -30,12 +42,22 @@ export function DailyLeaderboard() {
     return () => window.clearInterval(id);
   }, [liveClock]);
 
-  const liveAll = running && startTime ? Math.max(0, now - startTime) : 0;
-  const liveToday = running && startTime ? liveTodayMs(startTime, now) : 0;
-  const todayTotal = (stats?.todayTotal ?? 0) + liveToday;
+  const liveAll = isToday && running && startTime ? Math.max(0, now - startTime) : 0;
+  const liveToday = isToday && running && startTime ? liveTodayMs(startTime, now) : 0;
+  const yourRow = rows.find((row) => row.userId === session?.user?.id);
+  const dayTotal = isToday
+    ? (stats?.todayTotal ?? 0) + liveToday
+    : yourRow?.todayMs ?? 0;
   const allTimeTotal = (stats?.grandTotal ?? 0) + liveAll;
 
-  if (presenceLoading && statsLoading) {
+  const label = useMemo(() => {
+    if (isToday) return "Today";
+    return format(parseDayKey(day), "EEE d MMM");
+  }, [day, isToday]);
+
+  const earliest = localDayKey(addDays(parseDayKey(today), -MAX_LOOKBACK_DAYS));
+
+  if (presenceLoading && statsLoading && isToday) {
     return (
       <Card>
         <CardContent className="py-4 space-y-3">
@@ -51,16 +73,50 @@ export function DailyLeaderboard() {
       <CardContent className="py-4 space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <p className="text-base font-semibold">Today’s leaderboard</p>
-            <p className="text-xs text-muted-foreground">
-              {anyoneLive ? "Live times, updating as people track" : "Who’s grinding the most today"}
+            <p className="text-base font-semibold">
+              {isToday ? "Today’s leaderboard" : "Leaderboard"}
             </p>
+            <p className="text-xs text-muted-foreground">
+              {isToday
+                ? anyoneLive
+                  ? "Live times, updating as people track"
+                  : "Who’s grinding the most today"
+                : "How the grind looked that day"}
+            </p>
+            <div className="mt-2 inline-flex items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+                aria-label="Previous day"
+                disabled={day <= earliest}
+                onClick={() => setDay(localDayKey(addDays(parseDayKey(day), -1)))}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <div className="inline-flex min-w-[8.5rem] items-center justify-center gap-1.5 rounded-md border border-input bg-background px-2.5 py-1 text-sm font-medium tabular-nums">
+                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                {label}
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+                aria-label="Next day"
+                disabled={isToday}
+                onClick={() => setDay(localDayKey(addDays(parseDayKey(day), 1)))}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
           <div className="flex shrink-0 gap-6 sm:text-right">
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Today</p>
+              <p className="text-xs font-medium text-muted-foreground">{isToday ? "Today" : "That day"}</p>
               <p className="text-lg font-bold tabular-nums leading-tight">
-                {statsLoading ? "—" : formatDurationWords(todayTotal)}
+                {formatDurationWords(dayTotal)}
               </p>
             </div>
             <div>
@@ -71,12 +127,12 @@ export function DailyLeaderboard() {
             </div>
           </div>
         </div>
-        {rows.length > 0 && (
+        {rows.length > 0 ? (
           <ol className="space-y-2">
             {rows.map((row, index) => {
-              const isLive = Boolean(row.startTime);
-              const live = row.startTime ? liveTodayMs(row.startTime, now) : 0;
-              const sessionMs = row.startTime ? Math.max(0, now - row.startTime) : 0;
+              const isLive = isToday && Boolean(row.startTime);
+              const live = isLive && row.startTime ? liveTodayMs(row.startTime, now) : 0;
+              const sessionMs = isLive && row.startTime ? Math.max(0, now - row.startTime) : 0;
               const total = row.todayMs + live;
               const isYou = row.userId === session?.user?.id;
               return (
@@ -127,6 +183,10 @@ export function DailyLeaderboard() {
               );
             })}
           </ol>
+        ) : (
+          !presenceLoading && (
+            <p className="text-sm text-muted-foreground">Nobody logged time that day.</p>
+          )
         )}
       </CardContent>
     </Card>
