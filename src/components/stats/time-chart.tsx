@@ -881,11 +881,27 @@ interface WeekCalendarViewProps {
   eventsByDate: Map<string, DayEvent[]>;
 }
 
-const WEEKLY_SQUARE_SIZE = 12; // Fixed square size for weekly view
-const WEEKLY_GAP = 2; // Gap between squares
-const WEEKLY_CONTAINER_HEIGHT = 240;
+const WEEKLY_SQUARE_SIZE = 11;
+const WEEKLY_MIN_SQUARE = 8;
+const WEEKLY_MAX_SQUARES_PER_HOUR = 4;
+const WEEKLY_GAP = 2;
+const WEEKLY_CONTAINER_HEIGHT = 200;
 const WEEKLY_BUFFER_ROWS = 5;
 const WEEKLY_LABEL_WIDTH = 56; // 3.5rem in pixels
+
+function weeklyGridMetrics(availableWidth: number) {
+  if (availableWidth <= 0) {
+    return { squaresPerHour: 1, cellSize: WEEKLY_SQUARE_SIZE };
+  }
+  for (let sph = WEEKLY_MAX_SQUARES_PER_HOUR; sph >= 1; sph--) {
+    const n = 24 * sph;
+    const size = Math.floor((availableWidth - (n - 1) * WEEKLY_GAP) / n);
+    if (size >= WEEKLY_MIN_SQUARE) {
+      return { squaresPerHour: sph, cellSize: Math.min(WEEKLY_SQUARE_SIZE, size) };
+    }
+  }
+  return { squaresPerHour: 1, cellSize: WEEKLY_MIN_SQUARE };
+}
 
 function WeekCalendarView({
   data,
@@ -961,12 +977,10 @@ function WeekCalendarView({
     return () => window.removeEventListener("resize", updateWidth);
   }, []);
 
-  // Calculate grid dimensions
-  const availableWidth = Math.max(0, containerWidth - WEEKLY_LABEL_WIDTH - 16); // subtract label and padding
-  const squaresPerHour = Math.max(1, Math.floor(availableWidth / (24 * (WEEKLY_SQUARE_SIZE + WEEKLY_GAP))));
+  const availableWidth = Math.max(0, containerWidth - WEEKLY_LABEL_WIDTH - 16);
+  const { squaresPerHour, cellSize } = weeklyGridMetrics(availableWidth);
   const totalSquaresPerRow = 24 * squaresPerHour;
-  const actualSquareSize = Math.floor((availableWidth - (totalSquaresPerRow - 1) * WEEKLY_GAP) / totalSquaresPerRow);
-  const rowHeight = actualSquareSize + WEEKLY_GAP + 4; // square + gap + padding
+  const rowHeight = cellSize + WEEKLY_GAP + 2;
   
   const totalRows = displayDays.length;
   const totalHeight = totalRows * rowHeight;
@@ -1019,9 +1033,6 @@ function WeekCalendarView({
 
   const visibleDays = displayDays.slice(startIdx, endIdx);
   const visibleGrid = displayGrid.slice(startIdx, endIdx);
-
-  // Use the larger of calculated or minimum size
-  const cellSize = Math.max(WEEKLY_SQUARE_SIZE, actualSquareSize);
 
   const tooltipPortal =
     weeklyTooltip &&
