@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     if (Number.isNaN(startTime) || startTime > now + 5000) {
       startTime = now;
     }
-    if (startTime < now - 24 * 60 * 60 * 1000) {
+    if (startTime < now - 40 * 60 * 60 * 1000) {
       return NextResponse.json({ error: "Start time is too old" }, { status: 400 });
     }
 
@@ -93,6 +93,9 @@ export async function PATCH(request: NextRequest) {
         { error: "Start time cannot be in the future" },
         { status: 400 }
       );
+    }
+    if (newStartTime < now - 40 * 60 * 60 * 1000) {
+      return NextResponse.json({ error: "Start time is too old" }, { status: 400 });
     }
 
     await validateNoOverlap({
