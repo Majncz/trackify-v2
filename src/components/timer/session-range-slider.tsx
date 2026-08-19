@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { relocateToTime, viewAround } from "@/lib/suggest-past-range";
 
 export type DragKind = "start" | "end" | "pan" | "arm" | null;
@@ -218,7 +219,7 @@ export function SessionRangeSlider({
     if (!rect || !kind || kind === "arm") return;
     const latest = latestRef.current;
     const from = viewFromRef.current;
-    const localSpan = Math.max(1, latest.viewTo - from);
+    const localSpan = Math.max(1, viewToRef.current - from);
 
     if (kind === "pan") {
       const shift = -((clientX - panRef.current.x) / latest.usable) * (panRef.current.to - panRef.current.from);
