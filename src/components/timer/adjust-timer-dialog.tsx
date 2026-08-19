@@ -32,7 +32,6 @@ interface BusySpan {
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 const MIN_DURATION = MINUTE;
-const THUMB = 28;
 const HIT = 44;
 const INSET = 18;
 const MAX_LOOKBACK = 40 * HOUR;
@@ -406,9 +405,8 @@ function Thumb({
         {timeLabel}
       </p>
       <div
-        role="slider"
         aria-label={ariaLabel}
-        className="absolute top-[22px] rounded-full bg-white"
+        className="absolute top-[22px] rounded-full bg-transparent"
         style={{
           left: Math.round(x - HIT / 2),
           width: HIT,
