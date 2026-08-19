@@ -36,7 +36,6 @@ export function SessionStampField({
   value,
   min,
   max,
-  busy,
   align = "left",
   now,
   onChange,
@@ -45,7 +44,6 @@ export function SessionStampField({
   value: number;
   min: number;
   max: number;
-  busy: BusySpan[];
   align?: "left" | "right";
   now: number;
   onChange: (next: number) => void;

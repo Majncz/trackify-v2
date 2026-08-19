@@ -165,7 +165,6 @@ export function LogPastDialog({
               value={startTime}
               min={openedAt - MAX_LOOKBACK}
               max={endTime - 60 * 1000}
-              busy={busy}
               now={clockNow}
               onChange={(next) => {
                 const clamped = clampTypedStart(next, endTime, busy, openedAt - MAX_LOOKBACK);
@@ -178,7 +177,6 @@ export function LogPastDialog({
               value={endTime}
               min={startTime + 60 * 1000}
               max={openedAt}
-              busy={busy}
               align="right"
               now={clockNow}
               onChange={(next) => {

@@ -151,7 +151,6 @@ export function AdjustTimerDialog({
               value={startTime}
               min={openedAt - MAX_LOOKBACK}
               max={sliderEnd - 60 * 1000}
-              busy={busy}
               now={clockNow}
               onChange={(next) => {
                 const clamped = clampTypedStart(next, sliderEnd, busy, openedAt - MAX_LOOKBACK);
@@ -164,7 +163,6 @@ export function AdjustTimerDialog({
               value={sliderEnd}
               min={startTime + 60 * 1000}
               max={openedAt}
-              busy={busy}
               align="right"
               now={clockNow}
               onChange={(next) => {
