@@ -1,5 +1,4 @@
 import { TaskList } from "@/components/tasks/task-list";
-import { StatsSummary } from "@/components/stats/stats-summary";
 import { TimeChart } from "@/components/stats/time-chart";
 import { CreateTaskModal } from "@/components/tasks/create-task-modal";
 import { DailyLeaderboard } from "@/components/team/daily-leaderboard";
@@ -22,7 +21,6 @@ export default function DashboardPage() {
       <DailyLeaderboard />
       <TaskList />
       <TimeChart />
-      <StatsSummary />
     </div>
   );
 }
