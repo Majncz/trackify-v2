@@ -12,6 +12,7 @@ import { formatDurationWords } from "@/lib/utils";
 import { useTasks } from "@/hooks/use-tasks";
 import {
   SessionRangeSlider,
+  agoLabel,
   clock,
   initialViewFrom,
   MAX_LOOKBACK,
