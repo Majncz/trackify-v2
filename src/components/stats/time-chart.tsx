@@ -881,26 +881,30 @@ interface WeekCalendarViewProps {
   eventsByDate: Map<string, DayEvent[]>;
 }
 
-const WEEKLY_SQUARE_SIZE = 11;
-const WEEKLY_MIN_SQUARE = 8;
-const WEEKLY_MAX_SQUARES_PER_HOUR = 4;
+const WEEKLY_CELL_HEIGHT = 14;
 const WEEKLY_GAP = 2;
-const WEEKLY_CONTAINER_HEIGHT = 200;
+const WEEKLY_CONTAINER_HEIGHT = 240;
 const WEEKLY_BUFFER_ROWS = 5;
-const WEEKLY_LABEL_WIDTH = 56; // 3.5rem in pixels
+const WEEKLY_LABEL_WIDTH = 52;
+const WEEKLY_MAX_SQUARES_PER_HOUR = 4;
+const WEEKLY_MIN_CELL_WIDTH = 9;
+const WEEKLY_TARGET_CELL_WIDTH = 14;
 
-function weeklyGridMetrics(availableWidth: number) {
-  if (availableWidth <= 0) {
-    return { squaresPerHour: 1, cellSize: WEEKLY_SQUARE_SIZE };
-  }
-  for (let sph = WEEKLY_MAX_SQUARES_PER_HOUR; sph >= 1; sph--) {
+function weeklySquaresPerHour(availableWidth: number) {
+  if (availableWidth <= 0) return 1;
+  let best = 1;
+  let bestDist = Infinity;
+  for (let sph = 1; sph <= WEEKLY_MAX_SQUARES_PER_HOUR; sph++) {
     const n = 24 * sph;
-    const size = Math.floor((availableWidth - (n - 1) * WEEKLY_GAP) / n);
-    if (size >= WEEKLY_MIN_SQUARE) {
-      return { squaresPerHour: sph, cellSize: Math.min(WEEKLY_SQUARE_SIZE, size) };
+    const width = (availableWidth - (n - 1) * WEEKLY_GAP) / n;
+    if (width < WEEKLY_MIN_CELL_WIDTH) continue;
+    const dist = Math.abs(width - WEEKLY_TARGET_CELL_WIDTH);
+    if (dist < bestDist) {
+      best = sph;
+      bestDist = dist;
     }
   }
-  return { squaresPerHour: 1, cellSize: WEEKLY_MIN_SQUARE };
+  return best;
 }
 
 function WeekCalendarView({
@@ -967,20 +971,22 @@ function WeekCalendarView({
   const [containerWidth, setContainerWidth] = useState(0);
 
   useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
     const updateWidth = () => {
-      if (containerRef.current) {
-        setContainerWidth(containerRef.current.offsetWidth);
-      }
+      const next = el.offsetWidth;
+      setContainerWidth((prev) => (prev === next ? prev : next));
     };
     updateWidth();
-    window.addEventListener("resize", updateWidth);
-    return () => window.removeEventListener("resize", updateWidth);
+    const ro = new ResizeObserver(updateWidth);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
-  const availableWidth = Math.max(0, containerWidth - WEEKLY_LABEL_WIDTH - 16);
-  const { squaresPerHour, cellSize } = weeklyGridMetrics(availableWidth);
+  const availableWidth = Math.max(0, containerWidth - WEEKLY_LABEL_WIDTH - WEEKLY_GAP);
+  const squaresPerHour = weeklySquaresPerHour(availableWidth);
   const totalSquaresPerRow = 24 * squaresPerHour;
-  const rowHeight = cellSize + WEEKLY_GAP + 2;
+  const rowHeight = WEEKLY_CELL_HEIGHT + WEEKLY_GAP;
   
   const totalRows = displayDays.length;
   const totalHeight = totalRows * rowHeight;
@@ -1082,7 +1088,7 @@ function WeekCalendarView({
         <div
           className="grid min-w-0"
           style={{
-            gridTemplateColumns: `repeat(24, ${cellSize * squaresPerHour + (squaresPerHour - 1) * WEEKLY_GAP}px)`,
+            gridTemplateColumns: "repeat(24, minmax(0, 1fr))",
             gap: `${WEEKLY_GAP}px`,
           }}
         >
@@ -1124,13 +1130,13 @@ function WeekCalendarView({
                     gap: `${WEEKLY_GAP}px`,
                   }}
                 >
-                  <span className="text-xs text-muted-foreground text-right whitespace-nowrap pr-2">
+                  <span className="pr-1.5 text-right text-[11px] tabular-nums text-muted-foreground whitespace-nowrap">
                     {format(day, "MMM d")}
                   </span>
                   <div
-                    className="grid min-w-0"
+                    className="grid min-w-0 w-full"
                     style={{
-                      gridTemplateColumns: `repeat(${totalSquaresPerRow}, ${cellSize}px)`,
+                      gridTemplateColumns: `repeat(${totalSquaresPerRow}, minmax(0, 1fr))`,
                       gap: `${WEEKLY_GAP}px`,
                     }}
                   >
@@ -1156,8 +1162,8 @@ function WeekCalendarView({
                             : getOpacity(0, data.maxMinutes);
 
                         const cubeStyle = {
-                          width: cellSize,
-                          height: cellSize,
+                          width: "100%",
+                          height: WEEKLY_CELL_HEIGHT,
                           backgroundColor: baseColor,
                           opacity: baseOpacity,
                         };
