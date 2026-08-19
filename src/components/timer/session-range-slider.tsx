@@ -158,6 +158,7 @@ export function SessionRangeSlider({
     onStartTime,
     onEndTime,
   });
+  const lastPointerXRef = useRef(0);
   const [width, setWidth] = useState(0);
   const [dragging, setDragging] = useState<DragKind>(null);
 
@@ -246,12 +247,6 @@ export function SessionRangeSlider({
     if (snap) at = snapMinute(at);
 
     if (kind === "start") {
-      if (!latest.onViewTo && ratio <= 0.03 && from > latest.earliest) {
-        const nextFrom = Math.max(latest.earliest, from - 8 * MINUTE);
-        viewFromRef.current = nextFrom;
-        latest.onViewFrom(nextFrom);
-        at = nextFrom;
-      }
       const min = minStartForEnd(latest.endTime, latest.busy, latest.earliest);
       const max = latest.endTime - MIN_DURATION;
       latest.onStartTime(clamp(at, min, max));
@@ -260,11 +255,42 @@ export function SessionRangeSlider({
 
     const min = latest.startTime + MIN_DURATION;
     const max = maxEndForStart(latest.startTime, latest.busy, latest.horizon);
-    if (latest.allowLiveEnd && at >= latest.viewTo - MINUTE / 2) {
+    if (latest.allowLiveEnd && at >= viewToRef.current - MINUTE / 2) {
       latest.onEndTime(null);
       return;
     }
     latest.onEndTime(clamp(at, min, max));
+  }, []);
+
+  const applyEdgeScroll = useCallback((kind: "start" | "end", dt: number) => {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const latest = latestRef.current;
+    const ratio = clamp((lastPointerXRef.current - rect.left - INSET) / latest.usable, 0, 1);
+    const step = 48 * MINUTE * dt;
+
+    if (kind === "start" && ratio <= 0.07) {
+      const from = viewFromRef.current;
+      const min = minStartForEnd(latest.endTime, latest.busy, latest.earliest);
+      if (from <= min) return;
+      const nextFrom = Math.max(min, latest.earliest, from - step);
+      if (nextFrom >= from) return;
+      viewFromRef.current = nextFrom;
+      latest.onViewFrom(nextFrom);
+      latest.onStartTime(nextFrom);
+      return;
+    }
+
+    if (kind === "end" && ratio >= 0.93) {
+      const to = viewToRef.current;
+      const max = maxEndForStart(latest.startTime, latest.busy, latest.horizon);
+      if (to >= max) return;
+      const nextTo = Math.min(max, latest.horizon, to + step);
+      if (nextTo <= to) return;
+      viewToRef.current = nextTo;
+      latest.onViewTo?.(nextTo);
+      latest.onEndTime(nextTo);
+    }
   }, []);
 
   const placeAt = useCallback((at: number) => {
@@ -293,8 +319,19 @@ export function SessionRangeSlider({
     draggingNow = true;
     markSliderGesture();
     onDraggingChange?.(true);
+    let lastTs = performance.now();
+    let raf = 0;
+    const tick = (ts: number) => {
+      const dt = Math.min(0.05, (ts - lastTs) / 1000);
+      lastTs = ts;
+      const kind = dragRef.current;
+      if (kind === "start" || kind === "end") applyEdgeScroll(kind, dt);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
     const move = (event: PointerEvent) => {
       event.preventDefault();
+      lastPointerXRef.current = event.clientX;
       if (dragRef.current === "arm") {
         if (Math.abs(event.clientX - armRef.current.x) < 10) return;
         dragRef.current = "pan";
@@ -326,10 +363,11 @@ export function SessionRangeSlider({
     window.addEventListener("pointerup", up, { capture: true });
     return () => {
       draggingNow = false;
+      cancelAnimationFrame(raf);
       window.removeEventListener("pointermove", move, { capture: true });
       window.removeEventListener("pointerup", up, { capture: true });
     };
-  }, [applyDrag, dragging, onDraggingChange, placeAt]);
+  }, [applyDrag, applyEdgeScroll, dragging, onDraggingChange, placeAt]);
 
   const startX = xFor(startTime);
   const endX = xFor(endTime);
@@ -346,6 +384,7 @@ export function SessionRangeSlider({
         event.stopPropagation();
         event.currentTarget.setPointerCapture(event.pointerId);
         markSliderGesture();
+        lastPointerXRef.current = event.clientX;
         const rect = event.currentTarget.getBoundingClientRect();
         const x = event.clientX - rect.left;
         const distStart = Math.abs(x - xFor(startTime));
