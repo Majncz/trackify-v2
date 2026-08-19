@@ -83,13 +83,17 @@ export function markSliderGesture() {
   if (gestureListening) return;
   gestureListening = true;
   const stop = (event: Event) => {
-    if (Date.now() < gestureBlockUntil) {
-      event.preventDefault();
-      event.stopPropagation();
+    if (Date.now() >= gestureBlockUntil) {
+      window.removeEventListener("click", stop, true);
+      gestureListening = false;
       return;
     }
-    window.removeEventListener("click", stop, true);
-    gestureListening = false;
+    const target = event.target;
+    if (target instanceof Element && target.closest('[role="dialog"]')) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
   };
   window.addEventListener("click", stop, true);
 }

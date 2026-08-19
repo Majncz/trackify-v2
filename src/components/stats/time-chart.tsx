@@ -1051,17 +1051,15 @@ function WeekCalendarView({
     typeof document !== "undefined" &&
     createPortal(
       <div
-        className="pointer-events-none fixed inset-0 z-[200]"
+        className="pointer-events-none fixed z-[200]"
         aria-hidden={!weeklyTooltipPopoverVisible}
+        style={{
+          left: weeklyTooltip.clientX,
+          top: weeklyTooltip.anchorTop,
+          transform: "translate(-50%, calc(-100% - 2px))",
+        }}
       >
-        <div
-          className="pointer-events-auto absolute"
-          style={{
-            left: weeklyTooltip.clientX,
-            top: weeklyTooltip.anchorTop,
-            transform: "translate(-50%, calc(-100% - 2px))",
-          }}
-        >
+        <div className="pointer-events-auto">
           <WeeklyHeatSlideTooltipCard
             day={weeklyTooltip.day}
             rangeStart={weeklyTooltip.rangeStart}

@@ -122,12 +122,15 @@ export function LogPastDialog({
     <Dialog open={open} onOpenChange={dismissSafe}>
       <DialogContent
         className="sm:max-w-lg overflow-x-hidden"
+        onPointerDown={(event) => event.stopPropagation()}
         onPointerDownOutside={(event) => {
-          if (sliderGestureBlocksUi()) event.preventDefault();
+          event.preventDefault();
+          if (!sliderGestureBlocksUi()) onOpenChange(false);
         }}
         onInteractOutside={(event) => {
-          if (sliderGestureBlocksUi()) event.preventDefault();
+          event.preventDefault();
         }}
+        onFocusOutside={(event) => event.preventDefault()}
       >
         <DialogTitle>Add time to {taskName}</DialogTitle>
         <DialogDescription className="hidden">

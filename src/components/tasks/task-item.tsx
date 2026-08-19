@@ -77,7 +77,8 @@ export function TaskItem({
   }
 
   return (
-    <Card
+    <>
+    <Card>
       className={cn(
         "h-full flex flex-col cursor-pointer rounded-xl border border-border bg-card text-card-foreground shadow-sm",
         isActive && "ring-2 ring-primary ring-offset-2 ring-offset-background z-0",
@@ -152,13 +153,14 @@ export function TaskItem({
             <Plus className="h-4 w-4" />
           </Button>
         </div>
-        <LogPastDialog
-          open={logOpen}
-          onOpenChange={setLogOpen}
-          taskId={task.id}
-          taskName={task.name}
-        />
       </CardContent>
     </Card>
+    <LogPastDialog
+      open={logOpen}
+      onOpenChange={setLogOpen}
+      taskId={task.id}
+      taskName={task.name}
+    />
+    </>
   );
 }
