@@ -267,7 +267,7 @@ export function SessionRangeSlider({
     if (!rect) return;
     const latest = latestRef.current;
     const ratio = clamp((lastPointerXRef.current - rect.left - INSET) / latest.usable, 0, 1);
-    const step = 48 * MINUTE * dt;
+    const step = 6 * HOUR * dt;
 
     if (kind === "start" && ratio <= 0.07) {
       const from = viewFromRef.current;
