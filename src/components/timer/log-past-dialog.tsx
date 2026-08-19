@@ -11,21 +11,16 @@ import { Button } from "@/components/ui/button";
 import { formatDurationWords } from "@/lib/utils";
 import { useTasks } from "@/hooks/use-tasks";
 import { useTimer } from "@/hooks/use-timer";
-import { suggestPastRange, typicalDurationMs } from "@/lib/suggest-past-range";
+import { relocateToTime, suggestPastRange, typicalDurationMs, viewAround } from "@/lib/suggest-past-range";
 import {
   SessionRangeSlider,
   clock,
-  initialViewFrom,
   MAX_LOOKBACK,
   sliderGestureBlocksUi,
   snapMinute,
   type BusySpan,
 } from "@/components/timer/session-range-slider";
-import {
-  SessionStampField,
-  clampTypedEnd,
-  clampTypedStart,
-} from "@/components/timer/session-stamp-field";
+import { SessionStampField } from "@/components/timer/session-stamp-field";
 
 interface LogPastDialogProps {
   open: boolean;
@@ -45,6 +40,7 @@ export function LogPastDialog({
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [openedAt, setOpenedAt] = useState(() => Date.now());
   const [viewFrom, setViewFrom] = useState(() => Date.now() - 90 * 60 * 1000);
+  const [viewTo, setViewTo] = useState(() => Date.now());
   const [startTime, setStartTime] = useState(() => Date.now() - 25 * 60 * 1000);
   const [endTime, setEndTime] = useState(() => Date.now());
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +62,9 @@ export function LogPastDialog({
     setClockNow(now);
     setStartTime(guess.start);
     setEndTime(guess.end);
-    setViewFrom(initialViewFrom(guess.start, now));
+    const window = viewAround(guess.start, guess.end, now - MAX_LOOKBACK, now);
+    setViewFrom(window.viewFrom);
+    setViewTo(window.viewTo);
     setError(null);
     // Seed once per open so a refetch doesn't yank the sliders.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -98,6 +96,28 @@ export function LogPastDialog({
 
   const durationMs = Math.max(0, endTime - startTime);
   const endedJustNow = openedAt - endTime < 90 * 1000;
+  const earliest = openedAt - MAX_LOOKBACK;
+
+  const applyRange = (start: number, end: number, follow = true) => {
+    setStartTime(start);
+    setEndTime(end);
+    if (!follow) return;
+    const window = viewAround(start, end, earliest, openedAt);
+    setViewFrom(window.viewFrom);
+    setViewTo(window.viewTo);
+  };
+
+  const jumpTo = (anchor: number, asEnd = false) => {
+    const placed = relocateToTime({
+      anchor,
+      duration: Math.max(60 * 1000, endTime - startTime),
+      asEnd,
+      earliest,
+      latest: openedAt,
+      busy,
+    });
+    if (placed) applyRange(placed.start, placed.end);
+  };
 
   const handleSave = async () => {
     setError(null);
@@ -152,10 +172,13 @@ export function LogPastDialog({
             endTime={endTime}
             busy={busy}
             viewFrom={viewFrom}
-            viewTo={openedAt}
-            earliest={openedAt - MAX_LOOKBACK}
+            viewTo={viewTo}
+            earliest={earliest}
+            horizon={openedAt}
+            placeInGaps
             disabled={createEvent.isPending}
             onViewFrom={setViewFrom}
+            onViewTo={setViewTo}
             onStartTime={setStartTime}
             onEndTime={(next) => {
               if (next != null) setEndTime(next);
@@ -166,25 +189,19 @@ export function LogPastDialog({
             <SessionStampField
               label="From"
               value={startTime}
-              min={openedAt - MAX_LOOKBACK}
-              max={endTime - 60 * 1000}
+              min={earliest}
+              max={openedAt}
               now={clockNow}
-              onChange={(next) => {
-                const clamped = clampTypedStart(next, endTime, busy, openedAt - MAX_LOOKBACK);
-                setStartTime(clamped);
-                if (clamped < viewFrom) setViewFrom(clamped);
-              }}
+              onChange={(next) => jumpTo(next, false)}
             />
             <SessionStampField
               label="Until"
               value={endTime}
-              min={startTime + 60 * 1000}
+              min={earliest}
               max={openedAt}
               align="right"
               now={clockNow}
-              onChange={(next) => {
-                setEndTime(clampTypedEnd(next, startTime, busy, openedAt));
-              }}
+              onChange={(next) => jumpTo(next, true)}
             />
           </div>
 

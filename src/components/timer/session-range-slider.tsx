@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { relocateToTime, viewAround } from "@/lib/suggest-past-range";
 
-export type DragKind = "start" | "end" | null;
+export type DragKind = "start" | "end" | "pan" | "arm" | null;
 
 export interface BusySpan {
   from: number;
@@ -116,6 +116,9 @@ export function SessionRangeSlider({
   onStartTime,
   onEndTime,
   onDraggingChange,
+  onViewTo,
+  placeInGaps = false,
+  horizon,
 }: {
   startTime: number;
   endTime: number;
@@ -130,10 +133,16 @@ export function SessionRangeSlider({
   onStartTime: (next: number) => void;
   onEndTime: (next: number | null) => void;
   onDraggingChange?: (dragging: boolean) => void;
+  onViewTo?: (next: number) => void;
+  placeInGaps?: boolean;
+  horizon?: number;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragKind>(null);
   const viewFromRef = useRef(viewFrom);
+  const viewToRef = useRef(viewTo);
+  const panRef = useRef({ x: 0, from: 0, to: 0 });
+  const armRef = useRef({ x: 0, at: 0 });
   const latestRef = useRef({
     startTime,
     endTime,
@@ -142,7 +151,9 @@ export function SessionRangeSlider({
     earliest,
     allowLiveEnd,
     usable: 1,
+    horizon: horizon ?? viewTo,
     onViewFrom,
+    onViewTo,
     onStartTime,
     onEndTime,
   });
@@ -153,6 +164,10 @@ export function SessionRangeSlider({
     viewFromRef.current = viewFrom;
   }, [viewFrom]);
 
+  useEffect(() => {
+    viewToRef.current = viewTo;
+  }, [viewTo]);
+
   latestRef.current = {
     startTime,
     endTime,
@@ -161,7 +176,9 @@ export function SessionRangeSlider({
     earliest,
     allowLiveEnd,
     usable: Math.max(1, width - INSET * 2),
+    horizon: horizon ?? viewTo,
     onViewFrom,
+    onViewTo,
     onStartTime,
     onEndTime,
   };
@@ -198,16 +215,37 @@ export function SessionRangeSlider({
 
   const applyDrag = useCallback((kind: DragKind, clientX: number, snap: boolean) => {
     const rect = trackRef.current?.getBoundingClientRect();
-    if (!rect || !kind) return;
+    if (!rect || !kind || kind === "arm") return;
     const latest = latestRef.current;
     const from = viewFromRef.current;
     const localSpan = Math.max(1, latest.viewTo - from);
+
+    if (kind === "pan") {
+      const shift = -((clientX - panRef.current.x) / latest.usable) * (panRef.current.to - panRef.current.from);
+      const spanMs = panRef.current.to - panRef.current.from;
+      let nextFrom = panRef.current.from + shift;
+      let nextTo = panRef.current.to + shift;
+      if (nextFrom < latest.earliest) {
+        nextFrom = latest.earliest;
+        nextTo = nextFrom + spanMs;
+      }
+      if (nextTo > latest.horizon) {
+        nextTo = latest.horizon;
+        nextFrom = nextTo - spanMs;
+      }
+      viewFromRef.current = nextFrom;
+      viewToRef.current = nextTo;
+      latest.onViewFrom(nextFrom);
+      latest.onViewTo?.(nextTo);
+      return;
+    }
+
     const ratio = clamp((clientX - rect.left - INSET) / latest.usable, 0, 1);
     let at = from + ratio * localSpan;
     if (snap) at = snapMinute(at);
 
     if (kind === "start") {
-      if (ratio <= 0.03 && from > latest.earliest) {
+      if (!latest.onViewTo && ratio <= 0.03 && from > latest.earliest) {
         const nextFrom = Math.max(latest.earliest, from - 8 * MINUTE);
         viewFromRef.current = nextFrom;
         latest.onViewFrom(nextFrom);
@@ -220,12 +258,33 @@ export function SessionRangeSlider({
     }
 
     const min = latest.startTime + MIN_DURATION;
-    const max = maxEndForStart(latest.startTime, latest.busy, latest.viewTo);
+    const max = maxEndForStart(latest.startTime, latest.busy, latest.horizon);
     if (latest.allowLiveEnd && at >= latest.viewTo - MINUTE / 2) {
       latest.onEndTime(null);
       return;
     }
     latest.onEndTime(clamp(at, min, max));
+  }, []);
+
+  const placeAt = useCallback((at: number) => {
+    const latest = latestRef.current;
+    const placed = relocateToTime({
+      anchor: snapMinute(at),
+      duration: Math.max(MIN_DURATION, latest.endTime - latest.startTime),
+      earliest: latest.earliest,
+      latest: latest.horizon,
+      busy: latest.busy,
+    });
+    if (!placed) return;
+    latest.onStartTime(placed.start);
+    latest.onEndTime(placed.end);
+    if (latest.onViewTo) {
+      const window = viewAround(placed.start, placed.end, latest.earliest, latest.horizon);
+      viewFromRef.current = window.viewFrom;
+      viewToRef.current = window.viewTo;
+      latest.onViewFrom(window.viewFrom);
+      latest.onViewTo(window.viewTo);
+    }
   }, []);
 
   useEffect(() => {
@@ -235,12 +294,27 @@ export function SessionRangeSlider({
     onDraggingChange?.(true);
     const move = (event: PointerEvent) => {
       event.preventDefault();
+      if (dragRef.current === "arm") {
+        if (Math.abs(event.clientX - armRef.current.x) < 10) return;
+        dragRef.current = "pan";
+        panRef.current = {
+          x: armRef.current.x,
+          from: viewFromRef.current,
+          to: viewToRef.current,
+        };
+      }
       applyDrag(dragRef.current, event.clientX, false);
     };
     const up = (event: PointerEvent) => {
       event.preventDefault();
       event.stopPropagation();
-      applyDrag(dragRef.current, event.clientX, true);
+      if (dragRef.current === "arm") {
+        const at = armRef.current.at;
+        const onBusy = latestRef.current.busy.some((block) => at >= block.from && at < block.to);
+        if (!onBusy) placeAt(at);
+      } else {
+        applyDrag(dragRef.current, event.clientX, true);
+      }
       draggingNow = false;
       markSliderGesture();
       dragRef.current = null;
@@ -254,7 +328,7 @@ export function SessionRangeSlider({
       window.removeEventListener("pointermove", move, { capture: true });
       window.removeEventListener("pointerup", up, { capture: true });
     };
-  }, [applyDrag, dragging, onDraggingChange]);
+  }, [applyDrag, dragging, onDraggingChange, placeAt]);
 
   const startX = xFor(startTime);
   const endX = xFor(endTime);
@@ -264,7 +338,7 @@ export function SessionRangeSlider({
   return (
     <div
       ref={trackRef}
-      className="relative h-16 touch-none select-none"
+      className={placeInGaps ? "relative h-16 touch-none select-none cursor-grab active:cursor-grabbing" : "relative h-16 touch-none select-none"}
       onPointerDown={(event) => {
         if (disabled || width <= 0) return;
         event.preventDefault();
@@ -273,11 +347,25 @@ export function SessionRangeSlider({
         markSliderGesture();
         const rect = event.currentTarget.getBoundingClientRect();
         const x = event.clientX - rect.left;
-        const kind: DragKind =
-          Math.abs(x - xFor(startTime)) <= Math.abs(x - xFor(endTime)) ? "start" : "end";
+        const distStart = Math.abs(x - xFor(startTime));
+        const distEnd = Math.abs(x - xFor(endTime));
+        let kind: DragKind;
+        if (distStart <= HIT && distStart <= distEnd) {
+          kind = "start";
+        } else if (distEnd <= HIT) {
+          kind = "end";
+        } else if (placeInGaps) {
+          kind = "arm";
+          const ratio = clamp((x - INSET) / usable, 0, 1);
+          armRef.current = { x: event.clientX, at: viewFrom + ratio * span };
+        } else {
+          kind = distStart <= distEnd ? "start" : "end";
+        }
         dragRef.current = kind;
         setDragging(kind);
-        applyDrag(kind, event.clientX, false);
+        if (kind === "start" || kind === "end") {
+          applyDrag(kind, event.clientX, false);
+        }
       }}
     >
       <div
