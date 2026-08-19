@@ -78,7 +78,7 @@ export function TaskItem({
 
   return (
     <>
-    <Card>
+    <Card
       className={cn(
         "h-full flex flex-col cursor-pointer rounded-xl border border-border bg-card text-card-foreground shadow-sm",
         isActive && "ring-2 ring-primary ring-offset-2 ring-offset-background z-0",
