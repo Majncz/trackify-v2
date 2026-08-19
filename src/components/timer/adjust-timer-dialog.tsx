@@ -280,7 +280,7 @@ export function AdjustTimerDialog({
         </DialogDescription>
 
         <div className="space-y-5 pt-1">
-          <div>
+          <div className="text-center">
             <p className="font-mono text-4xl font-semibold tabular-nums tracking-tight">
               {formatDurationWords(durationMs)}
             </p>
@@ -390,16 +390,16 @@ function Thumb({
   z: number;
   ariaLabel: string;
 }) {
-  const labelLeft =
-    labelSide === "left" ? x - 72 : labelSide === "right" ? x + 8 : x - 28;
+  const labelShift =
+    labelSide === "left" ? "translateX(calc(-100% - 8px))" : labelSide === "right" ? "translateX(8px)" : "translateX(-50%)";
 
   return (
     <>
       <p
-        className="pointer-events-none absolute top-0 w-[56px] font-mono text-xs tabular-nums leading-none"
+        className="pointer-events-none absolute top-0 whitespace-nowrap font-mono text-xs tabular-nums leading-none"
         style={{
-          left: Math.round(labelLeft),
-          textAlign: labelSide === "right" ? "left" : labelSide === "left" ? "right" : "center",
+          left: Math.round(x),
+          transform: labelShift,
         }}
       >
         {timeLabel}
