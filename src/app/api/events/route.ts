@@ -10,6 +10,7 @@ const eventSchema = z.object({
   name: z.string().default("Time entry"),
   from: z.string().datetime(), // ISO timestamp for when the event started
   to: z.string().datetime(),   // ISO timestamp for when the event ended
+  source: z.enum(["timer", "manual"]).optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -49,7 +50,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { taskId, name, from, to } = eventSchema.parse(body);
+    const { taskId, name, from, to, source } = eventSchema.parse(body);
+    const isManual = source === "manual";
 
     // Verify task belongs to user
     const task = await prisma.task.findFirst({
@@ -88,7 +90,7 @@ export async function POST(request: NextRequest) {
       userId: user.id,
       eventFrom,
       eventTo,
-      skipRunningTimerCheck: true,
+      skipRunningTimerCheck: !isManual,
     });
 
     const event = await prisma.event.create({
@@ -108,7 +110,7 @@ export async function POST(request: NextRequest) {
     const active = await prisma.activeTimer.findFirst({
       where: { userId: user.id, taskId },
     });
-    if (active) {
+    if (active && !isManual) {
       await persistTimerStop(user.id, taskId);
       emitToUser(user.id, "timer:stopped", {
         taskId,

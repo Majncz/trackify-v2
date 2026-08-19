@@ -99,6 +99,28 @@ export function useTasks() {
     },
   });
 
+  const createEvent = useMutation({
+    mutationFn: async (data: { taskId: string; from: string; to: string; name?: string }) => {
+      const res = await fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...data,
+          name: data.name ?? "Time entry",
+          source: "manual",
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(typeof body.error === "string" ? body.error : "Failed to add time");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
+  });
+
   const deleteTask = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/tasks/${id}`, {
@@ -120,6 +142,7 @@ export function useTasks() {
     isLoading: query.isLoading,
     error: query.error,
     createTask,
+    createEvent,
     updateTask,
     deleteTask,
   };

@@ -1,12 +1,14 @@
 "use client";
 
 import type { MouseEvent } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDurationWords, cn } from "@/lib/utils";
 import { resolveGroupAccent, hexToRgba } from "@/lib/group-accent";
-import { Play, Square } from "lucide-react";
+import { LogPastDialog } from "@/components/timer/log-past-dialog";
+import { Play, Plus, Square } from "lucide-react";
 
 interface Event {
   id: string;
@@ -42,6 +44,7 @@ export function TaskItem({
   liveMs = 0,
 }: TaskItemProps) {
   const router = useRouter();
+  const [logOpen, setLogOpen] = useState(false);
   const group = task.taskGroup ?? null;
   const accentHex = group ? resolveGroupAccent({ id: group.id, color: group.color }) : null;
   const totalTime = task.events.reduce((sum, e) => {
@@ -108,25 +111,45 @@ export function TaskItem({
           Total: {formatDurationWords(totalTime + liveMs)}
         </p>
 
-        <div className="mt-auto">
+        <div className="mt-auto flex gap-2">
           {isActive ? (
             <Button
               onClick={handleStopClick}
               variant="destructive"
               size="sm"
               disabled={isLoading}
-              className="w-full"
+              className="min-w-0 flex-1"
             >
               <Square className="h-4 w-4 mr-1" />
               {isLoading ? "Saving..." : pendingConfirmation ? "Syncing..." : "Stop"}
             </Button>
           ) : (
-            <Button onClick={handleStartClick} size="sm" className="w-full">
+            <Button onClick={handleStartClick} size="sm" className="min-w-0 flex-1">
               <Play className="h-4 w-4 mr-1" />
               Start
             </Button>
           )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="px-2.5"
+            aria-label={`Add past time to ${task.name}`}
+            title="Add time that already happened"
+            onClick={(e) => {
+              e.stopPropagation();
+              setLogOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
         </div>
+        <LogPastDialog
+          open={logOpen}
+          onOpenChange={setLogOpen}
+          taskId={task.id}
+          taskName={task.name}
+        />
       </CardContent>
     </Card>
   );
