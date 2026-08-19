@@ -33,6 +33,10 @@ const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 const MIN_DURATION = MINUTE;
 const HIT = 44;
+const KNOB = 28;
+const TRACK_H = 6;
+const TRACK_CENTER = 40;
+const TRACK_TOP = TRACK_CENTER - TRACK_H / 2;
 const INSET = 18;
 const MAX_LOOKBACK = 40 * HOUR;
 const FIRST_VIEW = 90 * MINUTE;
@@ -297,8 +301,8 @@ export function AdjustTimerDialog({
             onPointerDown={onPointerDown}
           >
             <div
-              className="absolute top-[34px] h-1.5 rounded-full bg-muted"
-              style={{ left: INSET, right: INSET }}
+              className="absolute rounded-full bg-muted"
+              style={{ left: INSET, right: INSET, top: TRACK_TOP, height: TRACK_H }}
             />
             {ready &&
               busy.map((block) => {
@@ -309,15 +313,15 @@ export function AdjustTimerDialog({
                   <div
                     key={`${block.from}-${block.to}-${block.name}`}
                     title={block.name}
-                    className="absolute top-[34px] h-1.5 rounded-full bg-neutral-400/70"
-                    style={{ left, width: Math.max(3, right - left) }}
+                    className="absolute rounded-full bg-neutral-400/70"
+                    style={{ left, width: Math.max(3, right - left), top: TRACK_TOP, height: TRACK_H }}
                   />
                 );
               })}
             {ready && (
               <div
-                className="absolute top-[34px] h-1.5 rounded-full bg-foreground"
-                style={{ left: startX, width: Math.max(2, endX - startX) }}
+                className="absolute rounded-full bg-foreground"
+                style={{ left: startX, width: Math.max(2, endX - startX), top: TRACK_TOP, height: TRACK_H }}
               />
             )}
             {ready && (
@@ -406,17 +410,22 @@ function Thumb({
       </p>
       <div
         aria-label={ariaLabel}
-        className="absolute top-[22px] rounded-full bg-transparent"
+        className="absolute rounded-full bg-transparent"
         style={{
           left: Math.round(x - HIT / 2),
+          top: TRACK_CENTER - HIT / 2,
           width: HIT,
           height: HIT,
           zIndex: z,
         }}
       >
         <div
-          className="absolute left-1/2 top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white"
+          className="absolute rounded-full bg-white"
           style={{
+            left: (HIT - KNOB) / 2,
+            top: (HIT - KNOB) / 2,
+            width: KNOB,
+            height: KNOB,
             boxShadow: active
               ? "0 2px 8px rgba(0,0,0,0.22), 0 0 0 5px rgba(0,0,0,0.08)"
               : "0 1px 3px rgba(0,0,0,0.22), 0 0 0 1px rgba(0,0,0,0.08)",
