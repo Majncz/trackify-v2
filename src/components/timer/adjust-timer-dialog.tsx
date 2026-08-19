@@ -12,13 +12,18 @@ import { formatDurationWords } from "@/lib/utils";
 import { useTasks } from "@/hooks/use-tasks";
 import {
   SessionRangeSlider,
-  agoLabel,
   clock,
   initialViewFrom,
   MAX_LOOKBACK,
+  sliderGestureBlocksUi,
   snapMinute,
   type BusySpan,
 } from "@/components/timer/session-range-slider";
+import {
+  SessionStampField,
+  clampTypedEnd,
+  clampTypedStart,
+} from "@/components/timer/session-stamp-field";
 
 interface AdjustTimerDialogProps {
   open: boolean;
@@ -91,9 +96,22 @@ export function AdjustTimerDialog({
     }
   };
 
+  const dismissSafe = (next: boolean) => {
+    if (!next && sliderGestureBlocksUi()) return;
+    onOpenChange(next);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+    <Dialog open={open} onOpenChange={dismissSafe}>
+      <DialogContent
+        className="sm:max-w-lg"
+        onPointerDownOutside={(event) => {
+          if (sliderGestureBlocksUi()) event.preventDefault();
+        }}
+        onInteractOutside={(event) => {
+          if (sliderGestureBlocksUi()) event.preventDefault();
+        }}
+      >
         <DialogTitle>Fix this session</DialogTitle>
         <DialogDescription className="hidden">
           Drag the start or the end of this session.
@@ -111,38 +129,48 @@ export function AdjustTimerDialog({
             </p>
           </div>
 
-          <div onPointerDown={() => setDragging(true)} onPointerUp={() => setDragging(false)}>
-            <SessionRangeSlider
-              startTime={startTime}
-              endTime={sliderEnd}
-              endIsLive={stillRunning}
-              allowLiveEnd
-              busy={busy}
-              viewFrom={viewFrom}
-              viewTo={viewTo}
-              earliest={openedAt - MAX_LOOKBACK}
-              disabled={isSaving}
-              onViewFrom={setViewFrom}
-              onStartTime={setStartTime}
-              onEndTime={setEndTime}
-            />
-          </div>
+          <SessionRangeSlider
+            startTime={startTime}
+            endTime={sliderEnd}
+            endIsLive={stillRunning}
+            allowLiveEnd
+            busy={busy}
+            viewFrom={viewFrom}
+            viewTo={viewTo}
+            earliest={openedAt - MAX_LOOKBACK}
+            disabled={isSaving}
+            onViewFrom={setViewFrom}
+            onStartTime={setStartTime}
+            onEndTime={setEndTime}
+            onDraggingChange={setDragging}
+          />
 
           <div className="flex items-start justify-between gap-4 text-sm">
-            <div>
-              <p className="text-muted-foreground">Started</p>
-              <p className="font-mono text-base tabular-nums">{clock(startTime)}</p>
-              <p className="text-muted-foreground">{agoLabel(startTime, clockNow)}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-muted-foreground">{stillRunning ? "Still running" : "Stopped"}</p>
-              <p className="font-mono text-base tabular-nums">
-                {stillRunning ? "Now" : clock(sliderEnd)}
-              </p>
-              {!stillRunning && (
-                <p className="text-muted-foreground">{agoLabel(sliderEnd, clockNow)}</p>
-              )}
-            </div>
+            <SessionStampField
+              label="Started"
+              value={startTime}
+              min={openedAt - MAX_LOOKBACK}
+              max={sliderEnd - 60 * 1000}
+              busy={busy}
+              now={clockNow}
+              onChange={(next) => {
+                const clamped = clampTypedStart(next, sliderEnd, busy, openedAt - MAX_LOOKBACK);
+                setStartTime(clamped);
+                if (clamped < viewFrom) setViewFrom(clamped);
+              }}
+            />
+            <SessionStampField
+              label={stillRunning ? "Until · now" : "Until"}
+              value={sliderEnd}
+              min={startTime + 60 * 1000}
+              max={openedAt}
+              busy={busy}
+              align="right"
+              now={clockNow}
+              onChange={(next) => {
+                setEndTime(clampTypedEnd(next, startTime, busy, openedAt));
+              }}
+            />
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}

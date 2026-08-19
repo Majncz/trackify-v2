@@ -74,6 +74,30 @@ export function maxEndForStart(start: number, busy: BusySpan[], latest: number) 
   return max;
 }
 
+let gestureBlockUntil = 0;
+let gestureListening = false;
+let draggingNow = false;
+
+export function markSliderGesture() {
+  gestureBlockUntil = Date.now() + 500;
+  if (gestureListening) return;
+  gestureListening = true;
+  const stop = (event: Event) => {
+    if (Date.now() < gestureBlockUntil) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    window.removeEventListener("click", stop, true);
+    gestureListening = false;
+  };
+  window.addEventListener("click", stop, true);
+}
+
+export function sliderGestureBlocksUi() {
+  return draggingNow || Date.now() < gestureBlockUntil;
+}
+
 export function SessionRangeSlider({
   startTime,
   endTime,
@@ -87,6 +111,7 @@ export function SessionRangeSlider({
   onViewFrom,
   onStartTime,
   onEndTime,
+  onDraggingChange,
 }: {
   startTime: number;
   endTime: number;
@@ -100,6 +125,7 @@ export function SessionRangeSlider({
   onViewFrom: (next: number) => void;
   onStartTime: (next: number) => void;
   onEndTime: (next: number | null) => void;
+  onDraggingChange?: (dragging: boolean) => void;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragKind>(null);
@@ -174,19 +200,31 @@ export function SessionRangeSlider({
 
   useEffect(() => {
     if (!dragging) return;
-    const move = (event: PointerEvent) => applyDrag(dragRef.current, event.clientX, false);
+    draggingNow = true;
+    markSliderGesture();
+    onDraggingChange?.(true);
+    const move = (event: PointerEvent) => {
+      event.preventDefault();
+      applyDrag(dragRef.current, event.clientX, false);
+    };
     const up = (event: PointerEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
       applyDrag(dragRef.current, event.clientX, true);
+      draggingNow = false;
+      markSliderGesture();
       dragRef.current = null;
       setDragging(null);
+      onDraggingChange?.(false);
     };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+    window.addEventListener("pointermove", move, { capture: true });
+    window.addEventListener("pointerup", up, { capture: true });
     return () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
+      draggingNow = false;
+      window.removeEventListener("pointermove", move, { capture: true });
+      window.removeEventListener("pointerup", up, { capture: true });
     };
-  }, [applyDrag, dragging]);
+  }, [applyDrag, dragging, onDraggingChange]);
 
   const startX = xFor(startTime);
   const endX = xFor(endTime);
@@ -200,6 +238,9 @@ export function SessionRangeSlider({
       onPointerDown={(event) => {
         if (disabled || width <= 0) return;
         event.preventDefault();
+        event.stopPropagation();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        markSliderGesture();
         const rect = event.currentTarget.getBoundingClientRect();
         const x = event.clientX - rect.left;
         const kind: DragKind =

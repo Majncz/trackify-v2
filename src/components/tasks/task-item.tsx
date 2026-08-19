@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatDurationWords, cn } from "@/lib/utils";
 import { resolveGroupAccent, hexToRgba } from "@/lib/group-accent";
 import { LogPastDialog } from "@/components/timer/log-past-dialog";
+import { sliderGestureBlocksUi } from "@/components/timer/session-range-slider";
 import { Play, Plus, Square } from "lucide-react";
 
 interface Event {
@@ -83,7 +84,14 @@ export function TaskItem({
         pendingConfirmation &&
           "animate-pending-pulse ring-2 ring-yellow-500 ring-offset-2 ring-offset-background"
       )}
-      onClick={handleCardClick}
+      onClick={(e) => {
+        if (sliderGestureBlocksUi()) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        handleCardClick(e);
+      }}
     >
       <CardContent className="p-4 flex flex-col flex-1">
         <div className="mb-3 flex items-start justify-between gap-2">

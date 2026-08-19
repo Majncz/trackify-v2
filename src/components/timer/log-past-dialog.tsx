@@ -14,13 +14,18 @@ import { useTimer } from "@/hooks/use-timer";
 import { suggestPastRange, typicalDurationMs } from "@/lib/suggest-past-range";
 import {
   SessionRangeSlider,
-  agoLabel,
   clock,
   initialViewFrom,
   MAX_LOOKBACK,
+  sliderGestureBlocksUi,
   snapMinute,
   type BusySpan,
 } from "@/components/timer/session-range-slider";
+import {
+  SessionStampField,
+  clampTypedEnd,
+  clampTypedStart,
+} from "@/components/timer/session-stamp-field";
 
 interface LogPastDialogProps {
   open: boolean;
@@ -108,9 +113,22 @@ export function LogPastDialog({
     }
   };
 
+  const dismissSafe = (next: boolean) => {
+    if (!next && sliderGestureBlocksUi()) return;
+    onOpenChange(next);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+    <Dialog open={open} onOpenChange={dismissSafe}>
+      <DialogContent
+        className="sm:max-w-lg"
+        onPointerDownOutside={(event) => {
+          if (sliderGestureBlocksUi()) event.preventDefault();
+        }}
+        onInteractOutside={(event) => {
+          if (sliderGestureBlocksUi()) event.preventDefault();
+        }}
+      >
         <DialogTitle>Add time to {taskName}</DialogTitle>
         <DialogDescription className="hidden">
           Place a finished stretch of this task on the timeline.
@@ -142,20 +160,31 @@ export function LogPastDialog({
           />
 
           <div className="flex items-start justify-between gap-4 text-sm">
-            <div>
-              <p className="text-muted-foreground">From</p>
-              <p className="font-mono text-base tabular-nums">{clock(startTime)}</p>
-              <p className="text-muted-foreground">{agoLabel(startTime, clockNow)}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-muted-foreground">Until</p>
-              <p className="font-mono text-base tabular-nums">
-                {endedJustNow ? "Now" : clock(endTime)}
-              </p>
-              {!endedJustNow && (
-                <p className="text-muted-foreground">{agoLabel(endTime, clockNow)}</p>
-              )}
-            </div>
+            <SessionStampField
+              label="From"
+              value={startTime}
+              min={openedAt - MAX_LOOKBACK}
+              max={endTime - 60 * 1000}
+              busy={busy}
+              now={clockNow}
+              onChange={(next) => {
+                const clamped = clampTypedStart(next, endTime, busy, openedAt - MAX_LOOKBACK);
+                setStartTime(clamped);
+                if (clamped < viewFrom) setViewFrom(clamped);
+              }}
+            />
+            <SessionStampField
+              label="Until"
+              value={endTime}
+              min={startTime + 60 * 1000}
+              max={openedAt}
+              busy={busy}
+              align="right"
+              now={clockNow}
+              onChange={(next) => {
+                setEndTime(clampTypedEnd(next, startTime, busy, openedAt));
+              }}
+            />
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
