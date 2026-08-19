@@ -15,11 +15,14 @@ import { liveTodayMs } from "@/lib/live-timer";
 import { cn } from "@/lib/utils";
 
 const MEDALS = ["1", "2", "3"] as const;
-const MAX_LOOKBACK_DAYS = 400;
 
 function parseDayKey(key: string) {
   const [year, month, day] = key.split("-").map(Number);
   return new Date(year, month - 1, day);
+}
+
+function localDayKey(date = new Date()) {
+  return format(date, "yyyy-MM-dd");
 }
 
 export function DailyLeaderboard() {
@@ -55,7 +58,10 @@ export function DailyLeaderboard() {
     return format(parseDayKey(day), "EEE d MMM");
   }, [day, isToday]);
 
-  const earliest = localDayKey(addDays(parseDayKey(today), -MAX_LOOKBACK_DAYS));
+  const pickDay = (next: string) => {
+    if (!next) return;
+    setDay(next > today ? today : next);
+  };
 
   if (presenceLoading && statsLoading && isToday) {
     return (
@@ -83,48 +89,41 @@ export function DailyLeaderboard() {
                   : "Who’s grinding the most today"
                 : "How the grind looked that day"}
             </p>
-            <div className="mt-2 inline-flex items-center gap-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0"
-                aria-label="Previous day"
-                disabled={day <= earliest}
-                onClick={() => setDay(localDayKey(addDays(parseDayKey(day), -1)))}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <div className="inline-flex min-w-[8.5rem] items-center justify-center gap-1.5 rounded-md border border-input bg-background px-2.5 py-1 text-sm font-medium tabular-nums">
-                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                {label}
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0"
-                aria-label="Next day"
-                disabled={isToday}
-                onClick={() => setDay(localDayKey(addDays(parseDayKey(day), 1)))}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
           </div>
-          <div className="flex shrink-0 gap-6 sm:text-right">
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">{isToday ? "Today" : "That day"}</p>
-              <p className="text-lg font-bold tabular-nums leading-tight">
-                {formatDurationWords(dayTotal)}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-muted-foreground">All time</p>
-              <p className="text-lg font-bold tabular-nums leading-tight">
-                {statsLoading ? "—" : formatDurationWords(allTimeTotal)}
-              </p>
-            </div>
+          <div className="inline-flex shrink-0 items-center gap-1 self-start">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              aria-label="Previous day"
+              onClick={() => pickDay(localDayKey(addDays(parseDayKey(day), -1)))}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <label className="relative inline-flex min-w-[8.5rem] cursor-pointer items-center justify-center gap-1.5 rounded-md border border-input bg-background px-2.5 py-1 text-sm font-medium tabular-nums">
+              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+              {label}
+              <input
+                type="date"
+                value={day}
+                max={today}
+                aria-label="Pick a day"
+                className="absolute inset-0 cursor-pointer opacity-0"
+                onChange={(event) => pickDay(event.target.value)}
+              />
+            </label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              aria-label="Next day"
+              disabled={isToday}
+              onClick={() => pickDay(localDayKey(addDays(parseDayKey(day), 1)))}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
           </div>
         </div>
         {rows.length > 0 ? (
@@ -188,6 +187,20 @@ export function DailyLeaderboard() {
             <p className="text-sm text-muted-foreground">Nobody logged time that day.</p>
           )
         )}
+        <div className="flex items-end justify-between gap-4 border-t pt-3">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">{isToday ? "Your today" : "You that day"}</p>
+            <p className="text-lg font-bold tabular-nums leading-tight">
+              {formatDurationWords(dayTotal)}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs font-medium text-muted-foreground">All time</p>
+            <p className="text-lg font-bold tabular-nums leading-tight">
+              {statsLoading ? "—" : formatDurationWords(allTimeTotal)}
+            </p>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
