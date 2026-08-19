@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { addDays, format } from "date-fns";
-import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePresence } from "@/hooks/use-presence";
 import { useStats } from "@/hooks/use-stats";
@@ -28,6 +30,7 @@ function localDayKey(date = new Date()) {
 export function DailyLeaderboard() {
   const { data: session } = useSession();
   const [day, setDay] = useState(() => localDayKey());
+  const [pickerOpen, setPickerOpen] = useState(false);
   const today = localDayKey();
   const isToday = day === today;
   const { leaderboard, isLoading: presenceLoading } = usePresence(day);
@@ -101,18 +104,34 @@ export function DailyLeaderboard() {
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <label className="relative inline-flex min-w-[8.5rem] cursor-pointer items-center justify-center gap-1.5 rounded-md border border-input bg-background px-2.5 py-1 text-sm font-medium tabular-nums">
-              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-              {label}
-              <input
-                type="date"
-                value={day}
-                max={today}
-                aria-label="Pick a day"
-                className="absolute inset-0 cursor-pointer opacity-0"
-                onChange={(event) => pickDay(event.target.value)}
-              />
-            </label>
+            <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-w-[8.5rem] gap-1.5 font-medium tabular-nums"
+                >
+                  <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                  {label}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar
+                  mode="single"
+                  selected={parseDayKey(day)}
+                  onSelect={(date) => {
+                    if (!date) return;
+                    pickDay(localDayKey(date));
+                    setPickerOpen(false);
+                  }}
+                  disabled={{ after: new Date() }}
+                  captionLayout="dropdown"
+                  startMonth={new Date(2018, 0)}
+                  endMonth={new Date()}
+                />
+              </PopoverContent>
+            </Popover>
             <Button
               type="button"
               variant="ghost"
