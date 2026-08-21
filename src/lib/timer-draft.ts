@@ -1,3 +1,5 @@
+import { MIN_EVENT_MS } from "./event-limits";
+
 export type StopItem = {
   id: string;
   kind: "stopping";
@@ -22,6 +24,7 @@ export type TimerQueue = {
   stopping: StopItem[];
   running: RunItem | null;
 };
+
 
 const LOCAL_KEY = "trackify.timer-draft.v2";
 const SESSION_KEY = "trackify.timer-draft.v2";
@@ -179,6 +182,15 @@ export function enqueueStop(
   },
   queue = readTimerQueue(input.userId)
 ): TimerQueue {
+  if (input.endTime - input.startTime < MIN_EVENT_MS) {
+    const next: TimerQueue = {
+      ...queue,
+      userId: input.userId ?? queue.userId,
+      running: queue.running && queue.running.taskId === input.taskId ? null : queue.running,
+    };
+    writeTimerQueue(next);
+    return next;
+  }
   const next: TimerQueue = {
     ...queue,
     userId: input.userId ?? queue.userId,

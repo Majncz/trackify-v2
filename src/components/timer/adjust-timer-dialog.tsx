@@ -89,8 +89,9 @@ export function AdjustTimerDialog({
 
   const handleSave = async () => {
     try {
+      const startMoved = Math.abs(startTime - currentStartTime) >= 500;
       await onSave({
-        startTime: snapMinute(startTime),
+        startTime: startMoved ? snapMinute(startTime) : startTime,
         endTime: endTime == null ? null : snapMinute(endTime),
       });
       onOpenChange(false);

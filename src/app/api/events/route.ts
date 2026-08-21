@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
-import { validateNoOverlap, OverlapError } from "@/lib/event-overlap";
+import { validateNoOverlap, OverlapError, MIN_EVENT_MS } from "@/lib/event-overlap";
 import { emitToUser, persistTimerStop } from "@/lib/timer-runtime";
 import { z } from "zod";
 
@@ -81,6 +81,17 @@ export async function POST(request: NextRequest) {
     const now = new Date();
     if (eventTo > now) {
       eventTo = now;
+    }
+
+    if (eventTo.getTime() - eventFrom.getTime() < MIN_EVENT_MS) {
+      const active = await prisma.activeTimer.findFirst({
+        where: { userId: user.id, taskId },
+      });
+      if (active && !isManual) {
+        await persistTimerStop(user.id, taskId);
+        emitToUser(user.id, "timer:stopped", { taskId, duration: 0 });
+      }
+      return NextResponse.json({ skipped: true, reason: "too short" }, { status: 201 });
     }
 
     // Check for overlapping events

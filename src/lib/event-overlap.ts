@@ -1,11 +1,14 @@
 import { prisma } from "./prisma";
+import { MIN_EVENT_MS } from "./event-limits";
+
+export { MIN_EVENT_MS };
 
 interface OverlapCheckParams {
   userId: string;
   eventFrom: Date;
   eventTo: Date;
-  excludeEventId?: string; // For updates, exclude the event being updated
-  skipRunningTimerCheck?: boolean; // Skip check for running timer (when timer itself is creating event)
+  excludeEventId?: string;
+  skipRunningTimerCheck?: boolean;
 }
 
 interface OverlappingEvent {
@@ -14,17 +17,10 @@ interface OverlappingEvent {
   from: Date;
   to: Date;
   taskName: string;
+  kind: "event" | "timer";
+  paid: boolean;
 }
 
-/**
- * Check if a new event would overlap with existing events for a user.
- * Two events overlap if one starts before the other ends.
- * 
- * Event A: fromA -> toA
- * Event B: fromB -> toB
- * 
- * Overlap occurs when: fromA < toB AND fromB < toA
- */
 export async function findOverlappingEvents({
   userId,
   eventFrom,
@@ -32,17 +28,11 @@ export async function findOverlappingEvents({
   excludeEventId,
   skipRunningTimerCheck,
 }: OverlapCheckParams): Promise<OverlappingEvent[]> {
-  // Get events that overlap
-  // An event overlaps if:
-  // - Its start time is before our end time AND
-  // - Its end time is after our start time
   const events = await prisma.event.findMany({
     where: {
       task: { userId },
       ...(excludeEventId && { id: { not: excludeEventId } }),
-      // Event starts before our event ends
       from: { lt: eventTo },
-      // Event ends after our event starts
       to: { gt: eventFrom },
     },
     include: {
@@ -56,10 +46,10 @@ export async function findOverlappingEvents({
     from: e.from,
     to: e.to,
     taskName: e.task.name,
+    kind: "event",
+    paid: Boolean(e.paymentRecordId),
   }));
 
-  // Also check for running timer (if not skipped)
-  // A running timer occupies time from its startTime until now
   if (!skipRunningTimerCheck) {
     const activeTimer = await prisma.activeTimer.findUnique({
       where: { userId },
@@ -68,10 +58,8 @@ export async function findOverlappingEvents({
 
     if (activeTimer) {
       const timerStart = activeTimer.startTime;
-      const timerEnd = new Date(); // Running timers extend to "now"
-      
-      // Check if new event overlaps with running timer
-      // Overlap if: timerStart < eventTo AND timerEnd > eventFrom
+      const timerEnd = new Date();
+
       if (timerStart < eventTo && timerEnd > eventFrom) {
         result.push({
           id: activeTimer.id,
@@ -79,6 +67,8 @@ export async function findOverlappingEvents({
           from: timerStart,
           to: timerEnd,
           taskName: activeTimer.task.name,
+          kind: "timer",
+          paid: false,
         });
       }
     }
@@ -87,10 +77,23 @@ export async function findOverlappingEvents({
   return result;
 }
 
-/**
- * Check if an event would overlap and throw an error if it does.
- */
+async function absorbTinyUnpaidEvents(params: OverlapCheckParams): Promise<void> {
+  const overlapping = await findOverlappingEvents({
+    ...params,
+    skipRunningTimerCheck: true,
+  });
+  const crumbs = overlapping.filter((event) => {
+    if (event.kind !== "event" || event.paid) return false;
+    return event.to.getTime() - event.from.getTime() < MIN_EVENT_MS;
+  });
+  if (crumbs.length === 0) return;
+  await prisma.event.deleteMany({
+    where: { id: { in: crumbs.map((event) => event.id) } },
+  });
+}
+
 export async function validateNoOverlap(params: OverlapCheckParams): Promise<void> {
+  await absorbTinyUnpaidEvents(params);
   const overlapping = await findOverlappingEvents(params);
 
   if (overlapping.length > 0) {
@@ -98,7 +101,7 @@ export async function validateNoOverlap(params: OverlapCheckParams): Promise<voi
     const overlapStart = first.from.toLocaleString();
     const overlapEnd = first.to.toLocaleString();
     const durationMins = Math.round((first.to.getTime() - first.from.getTime()) / 60000);
-    
+
     throw new OverlapError(
       `This time entry overlaps with "${first.taskName}: ${first.name}" ` +
       `(${overlapStart} - ${overlapEnd}, ${durationMins}min)`,

@@ -12,8 +12,9 @@ export function getSocket(): Socket {
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 400,
-      reconnectionDelayMax: 4000,
-      timeout: 10000,
+      reconnectionDelayMax: 5000,
+      randomizationFactor: 0.5,
+      timeout: 20000,
       transports: ["websocket", "polling"],
     });
   }

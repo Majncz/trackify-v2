@@ -11,6 +11,7 @@ import {
 } from "react";
 import { Socket } from "socket.io-client";
 import { useSession } from "next-auth/react";
+import { useQueryClient } from "@tanstack/react-query";
 import { getSocket, disconnectSocket } from "@/lib/socket";
 import { startTimerDurability } from "@/lib/timer-durability";
 
@@ -33,10 +34,16 @@ interface SocketContextValue {
 const SocketContext = createContext<SocketContextValue | null>(null);
 
 const RED_GRACE_MS = 8000;
-const HIDDEN_RECONNECT_MS = 12000;
+const HIDDEN_RECONNECT_MS = 45_000;
+const WATCHDOG_MS = 4000;
+
+function enableReconnect(socket: Socket) {
+  socket.io.reconnection(true);
+}
 
 export function SocketProvider({ children }: { children: ReactNode }) {
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
+  const queryClient = useQueryClient();
   const socketRef = useRef<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] =
@@ -46,6 +53,15 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const redTimerRef = useRef<number | null>(null);
   const hiddenAtRef = useRef<number | null>(null);
   const userIdRef = useRef<string | null>(null);
+
+  if (session?.user?.id) {
+    userIdRef.current = session.user.id;
+  }
+  if (sessionStatus === "unauthenticated") {
+    userIdRef.current = null;
+  }
+  const userId = userIdRef.current;
+  const signedOut = sessionStatus === "unauthenticated";
 
   const clearRedTimer = useCallback(() => {
     if (redTimerRef.current != null) {
@@ -105,8 +121,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const ensureConnected = useCallback(() => {
+    if (!userIdRef.current) return;
     const socket = socketRef.current ?? getSocket();
     socketRef.current = socket;
+    enableReconnect(socket);
     if (!socket.connected) {
       socket.connect();
     }
@@ -117,10 +135,8 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const userId = session?.user?.id;
-    userIdRef.current = userId ?? null;
-
     if (!userId) {
+      if (!signedOut) return;
       clearRedTimer();
       setIsConnected(false);
       setConnectionStatus("disconnected");
@@ -131,16 +147,25 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
     const socket = getSocket();
     socketRef.current = socket;
+    enableReconnect(socket);
 
     function handleConnect() {
       markConnected();
       socket.emit("authenticate", { userId });
       attachBufferedListeners(socket);
       flushQueue(socket);
+      void queryClient.invalidateQueries({ queryKey: ["presence"] });
     }
 
     function handleDisconnect() {
+      enableReconnect(socket);
       markDisconnected();
+      window.setTimeout(() => {
+        if (userIdRef.current && socketRef.current && !socketRef.current.connected) {
+          enableReconnect(socketRef.current);
+          socketRef.current.connect();
+        }
+      }, 250);
     }
 
     function handleReconnectAttempt() {
@@ -148,9 +173,15 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       setConnectionStatus("reconnecting");
     }
 
+    function handleConnectError() {
+      setIsConnected(false);
+      setConnectionStatus("reconnecting");
+      enableReconnect(socket);
+    }
+
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
-    socket.on("connect_error", handleDisconnect);
+    socket.on("connect_error", handleConnectError);
     socket.io.on("reconnect_attempt", handleReconnectAttempt);
 
     if (socket.connected) {
@@ -160,18 +191,23 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       socket.connect();
     }
 
-    function recover(force = false) {
-      const current = socketRef.current;
-      if (!current || !userIdRef.current) return;
+    function recover(forceZombie = false) {
+      const current = socketRef.current ?? getSocket();
+      socketRef.current = current;
+      if (!userIdRef.current) return;
+      enableReconnect(current);
 
-      if (force || !current.connected) {
-        if (current.connected) {
-          current.disconnect();
-        }
+      if (!current.connected) {
         current.connect();
         return;
       }
 
+      if (forceZombie) {
+        current.io.engine?.close();
+        return;
+      }
+
+      current.emit("authenticate", { userId: userIdRef.current });
       current.emit("timer:request-state");
     }
 
@@ -188,11 +224,11 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     }
 
     function onOnline() {
-      recover(true);
+      recover(false);
     }
 
     function onPageShow(event: PageTransitionEvent) {
-      recover(event.persisted || !socket.connected);
+      recover(event.persisted);
     }
 
     function onFocus() {
@@ -204,25 +240,38 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     window.addEventListener("pageshow", onPageShow);
     window.addEventListener("focus", onFocus);
 
+    const watchdog = window.setInterval(() => {
+      if (!userIdRef.current) return;
+      const current = socketRef.current ?? getSocket();
+      socketRef.current = current;
+      if (current.connected) return;
+      setConnectionStatus((status) =>
+        status === "connected" ? "reconnecting" : status
+      );
+      enableReconnect(current);
+      current.connect();
+    }, WATCHDOG_MS);
+
     return () => {
       socket.off("connect", handleConnect);
       socket.off("disconnect", handleDisconnect);
-      socket.off("connect_error", handleDisconnect);
+      socket.off("connect_error", handleConnectError);
       socket.io.off("reconnect_attempt", handleReconnectAttempt);
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("online", onOnline);
       window.removeEventListener("pageshow", onPageShow);
       window.removeEventListener("focus", onFocus);
-      // Keep the singleton socket alive across layout remounts / session refetches.
-      // Calling disconnect() here disables Socket.IO auto-reconnect.
+      window.clearInterval(watchdog);
     };
   }, [
-    session?.user?.id,
+    userId,
+    signedOut,
     attachBufferedListeners,
     flushQueue,
     markConnected,
     markDisconnected,
     clearRedTimer,
+    queryClient,
   ]);
 
   const emit = useCallback(
@@ -243,10 +292,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       listenersRef.current.set(event, new Set());
     }
     listenersRef.current.get(event)!.add(callback);
-
-    if (socketRef.current?.connected) {
-      socketRef.current.on(event, callback);
-    }
+    socketRef.current?.on(event, callback);
 
     return () => {
       listenersRef.current.get(event)?.delete(callback);

@@ -47,6 +47,10 @@ export function usePresence(day: string) {
       return res.json();
     },
     refetchInterval: day === localDayKey() ? 15_000 : false,
+    refetchIntervalInBackground: true,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     placeholderData: keepPreviousData,
   });
 

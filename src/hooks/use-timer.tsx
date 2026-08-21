@@ -112,6 +112,7 @@ function useTimerController() {
       if (!detail) return;
       refreshPendingStops();
       if (detail.result === "ok" && detail.kind === "running") {
+        queryClient.invalidateQueries({ queryKey: ["presence"] });
         if (stateRef.current.taskId === detail.taskId) {
           setPendingConfirmation(false);
           setStartError(null);
@@ -123,6 +124,7 @@ function useTimerController() {
         queryClient.invalidateQueries({ queryKey: ["events"] });
         queryClient.invalidateQueries({ queryKey: ["stats"] });
         queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        queryClient.invalidateQueries({ queryKey: ["presence"] });
         return;
       }
       if (detail.result === "rejected" && detail.kind === "running") {
