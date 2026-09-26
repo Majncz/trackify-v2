@@ -176,10 +176,11 @@ private fun SmallContent(context: Context, snap: WidgetSnapshotData) {
             Pill("Stop", Destructive, White, R.drawable.ic_stop, GlanceModifier.fillMaxWidth().clickable(actionRunCallback<StopAction>()))
         } else {
             val last = snap.tasks.firstOrNull { it.id == snap.lastTaskId } ?: snap.tasks.firstOrNull()
+            val today = snap.todayTotalLive(now)
             Text("Not tracking", style = TextStyle(color = Muted, fontSize = 12.sp))
             Text(
-                "Today ${Format.durationWords(snap.todayTotalLive(now))}",
-                style = TextStyle(color = Fg, fontSize = 18.sp, fontWeight = FontWeight.Bold),
+                if (today > 0) "Today ${Format.durationWords(today)}" else "Nothing yet today",
+                style = TextStyle(color = Fg, fontSize = if (today > 0) 18.sp else 15.sp, fontWeight = FontWeight.Bold),
                 maxLines = 1,
             )
             Spacer(GlanceModifier.height(8.dp))
@@ -220,7 +221,8 @@ private fun LargeContent(context: Context, snap: WidgetSnapshotData) {
         Row(GlanceModifier.fillMaxWidth().clickable(openApp(context)), verticalAlignment = Alignment.CenterVertically) {
             Wordmark(15)
             Spacer(GlanceModifier.defaultWeight())
-            if (snap.signedIn) {
+            // Today's total is a static value (widgets can't tick), so show it only while idle.
+            if (snap.signedIn && r == null && snap.todayTotalMs > 0) {
                 Text("Today ", style = TextStyle(color = Muted, fontSize = 12.sp))
                 Text(
                     Format.durationWords(snap.todayTotalLive(now)),
