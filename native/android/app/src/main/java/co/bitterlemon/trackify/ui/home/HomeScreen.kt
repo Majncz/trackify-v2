@@ -123,14 +123,18 @@ fun HomeScreen(onOpenTask: (String) -> Unit) {
         modifier = Modifier.fillMaxSize(),
     ) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
+            // Expanded width: two panes (work on the left, team on the right).
+            val twoPane = maxWidth >= 840.dp
+            val listWidth = if (twoPane) maxWidth * 0.6f else maxWidth
             val columns = when {
-                maxWidth < 360.dp -> 1
-                maxWidth < 840.dp -> 2
-                maxWidth < 1100.dp -> 3
+                listWidth < 360.dp -> 1
+                listWidth < 840.dp -> 2
+                listWidth < 1100.dp -> 3
                 else -> 4
             }
+            Row(Modifier.fillMaxSize()) {
             LazyColumn(
-                Modifier.fillMaxSize(),
+                Modifier.weight(if (twoPane) 0.6f else 1f).fillMaxHeight(),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -148,7 +152,7 @@ fun HomeScreen(onOpenTask: (String) -> Unit) {
                         RunningBanner(timer, tasks.firstOrNull { it.id == running.taskId }, onClock = { fixOpen = true }, onStop = { graph.engine.stop() })
                     }
                 }
-                item(key = "leaderboard") { LeaderboardCard(Modifier.widthIn(max = 896.dp)) }
+                if (!twoPane) item(key = "leaderboard") { LeaderboardCard(Modifier.widthIn(max = 896.dp)) }
                 item(key = "tasks-title") {
                     Text(
                         "Tasks (${tasks.size})", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground,
@@ -212,6 +216,17 @@ fun HomeScreen(onOpenTask: (String) -> Unit) {
                     }
                 }
             }
+            if (twoPane) {
+                androidx.compose.material3.VerticalDivider(color = T.c.border)
+                LazyColumn(
+                    Modifier.weight(0.4f).fillMaxHeight(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    item(key = "leaderboard") { LeaderboardCard(Modifier.fillMaxWidth()) }
+                }
+            }
+            }
         }
     }
 
@@ -239,7 +254,12 @@ private fun RunningBanner(timer: TimerUi, task: Task?, onClock: () -> Unit, onSt
                 }
             }
             Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.foundation.layout.FlowRow(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
                     Format.duration(maxOf(0L, now - r.startTime)),
                     style = MonoDigits, fontSize = 36.sp, fontWeight = FontWeight.Bold, color = T.c.foreground,
@@ -249,7 +269,6 @@ private fun RunningBanner(timer: TimerUi, task: Task?, onClock: () -> Unit, onSt
                         .semantics { contentDescription = "Elapsed ${Format.durationWords(now - r.startTime, true)}. Tap to fix this session" }
                         .padding(horizontal = 4.dp),
                 )
-                Spacer(Modifier.weight(1f))
                 TButton("Stop", onStop, variant = BtnVariant.Destructive, icon = Icons.Outlined.Stop)
             }
         }

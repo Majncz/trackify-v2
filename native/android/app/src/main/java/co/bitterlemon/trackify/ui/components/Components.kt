@@ -284,13 +284,36 @@ fun TInput(
 
 @Composable
 fun PageHeader(title: String, subtitle: String?, modifier: Modifier = Modifier, actions: @Composable RowScope.() -> Unit = {}) {
-    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = androidx.compose.material3.MaterialTheme.typography.headlineSmall, color = T.c.foreground)
-            if (subtitle != null) Text(subtitle, fontSize = 14.sp, color = T.c.mutedForeground)
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxWidth()) {
+        val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
+        // Large text or narrow widths: stack the action under the title instead of squeezing it.
+        val stacked = fontScale > 1.25f || maxWidth < 340.dp
+        if (stacked) {
+            Column(Modifier.fillMaxWidth()) {
+                Text(title, style = androidx.compose.material3.MaterialTheme.typography.headlineSmall, color = T.c.foreground)
+                if (subtitle != null) Text(subtitle, fontSize = 14.sp, color = T.c.mutedForeground)
+                Row(Modifier.padding(top = 10.dp), content = actions)
+            }
+        } else {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(title, style = androidx.compose.material3.MaterialTheme.typography.headlineSmall, color = T.c.foreground)
+                    if (subtitle != null) Text(subtitle, fontSize = 14.sp, color = T.c.mutedForeground)
+                }
+                actions()
+            }
         }
-        actions()
     }
+}
+
+/** Caps text scaling for fixed chrome (bars, rails) so labels never wrap at 200 % font size. */
+@Composable
+fun CappedFontScale(max: Float = 1.3f, content: @Composable () -> Unit) {
+    val d = androidx.compose.ui.platform.LocalDensity.current
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(d.density, minOf(d.fontScale, max)),
+        content = content,
+    )
 }
 
 @Composable

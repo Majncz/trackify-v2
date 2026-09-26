@@ -182,7 +182,7 @@ fun LeaderboardCard(modifier: Modifier = Modifier) {
         Text(title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground)
         Text(subtitle, fontSize = 12.sp, color = T.c.mutedForeground)
         Spacer(Modifier.height(10.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        co.bitterlemon.trackify.ui.components.CappedFontScale(1.15f) { Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { pick(Period.step(range, day, -1)) }, modifier = Modifier.size(36.dp)) {
                 Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, "Previous ${range.noun}", tint = T.c.foreground)
             }
@@ -215,7 +215,7 @@ fun LeaderboardCard(modifier: Modifier = Modifier) {
                     tint = if (current) T.c.mutedForeground.copy(alpha = 0.4f) else T.c.foreground,
                 )
             }
-        }
+        } }
         if (!current) {
             Text(Period.label(range, day, false), fontSize = 12.sp, color = T.c.mutedForeground, modifier = Modifier.padding(top = 6.dp, start = 4.dp))
         }

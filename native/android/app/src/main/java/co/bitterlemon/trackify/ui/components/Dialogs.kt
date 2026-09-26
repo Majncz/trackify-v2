@@ -81,12 +81,13 @@ fun TDialog(
                 content = content,
             )
             if (footer != null) {
-                Row(
+                // FlowRow so the buttons wrap instead of truncating at large font sizes.
+                androidx.compose.foundation.layout.FlowRow(
                     Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 20.dp, top = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                    verticalAlignment = Alignment.CenterVertically,
-                    content = footer,
-                )
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically,
+                ) { footer(this) }
             } else Spacer(Modifier.height(8.dp))
         }
     }

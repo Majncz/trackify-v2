@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -41,7 +42,7 @@ import java.time.LocalTime
 fun FieldButton(text: String, icon: ImageVector, onClick: () -> Unit, modifier: Modifier = Modifier, description: String? = null) {
     Row(
         modifier
-            .height(40.dp)
+            .heightIn(min = 40.dp)
             .clip(ControlShape)
             .border(1.dp, T.c.border, ControlShape)
             .background(T.c.background)

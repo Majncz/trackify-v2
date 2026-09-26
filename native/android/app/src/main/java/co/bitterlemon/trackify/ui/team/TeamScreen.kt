@@ -84,6 +84,25 @@ private fun presetRange(p: RacePreset, cf: LocalDate, ct: LocalDate, today: Loca
 
 @Composable
 fun TeamScreen() {
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+        if (maxWidth >= 840.dp) {
+            Row(Modifier.fillMaxSize()) {
+                LazyColumn(Modifier.weight(0.42f).fillMaxHeight(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    item(key = "h") { PageHeader("Team", "Who's tracking, and how the hours stack up") }
+                    item(key = "lb") { LeaderboardCard() }
+                }
+                androidx.compose.material3.VerticalDivider(color = T.c.border)
+                LazyColumn(Modifier.weight(0.58f).fillMaxHeight(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    item(key = "vh") { PageHeader("Visualizations", "Play the hours back and watch the team race") }
+                    item(key = "race") { Visualizations() }
+                }
+            }
+        } else TeamSingle()
+    }
+}
+
+@Composable
+private fun TeamSingle() {
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -215,7 +234,8 @@ private fun BarRace(data: RaceData, playhead: Float) {
         Column {
             Text("HOURS WORKED", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 2.2.sp, color = zinc400)
             Spacer(Modifier.height(16.dp))
-            Box(Modifier.fillMaxWidth().height(rowH * maxOf(rows.size, 1))) {
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth().height(rowH * maxOf(rows.size, 1))) {
+                val nameW = if (maxWidth >= 520.dp) 160.dp else 76.dp
                 val order = rows.withIndex().associate { it.value.id to it.index }
                 data.users.forEach { u ->
                     val index = order[u.id] ?: 0
@@ -231,7 +251,7 @@ private fun BarRace(data: RaceData, playhead: Float) {
                             color = Accents.rankColor(index + 1)?.let { hexColor(it) } ?: zinc400, textAlign = androidx.compose.ui.text.style.TextAlign.End,
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text(row.name, Modifier.width(76.dp), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = nameColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(row.name, Modifier.width(nameW), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = nameColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Spacer(Modifier.width(8.dp))
                         BoxWithConstraints(Modifier.weight(1f).height(40.dp)) {
                             val w = maxWidth

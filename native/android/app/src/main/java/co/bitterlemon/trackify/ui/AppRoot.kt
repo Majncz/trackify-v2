@@ -24,6 +24,13 @@ import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
@@ -57,6 +64,7 @@ import co.bitterlemon.trackify.AppGraph
 import co.bitterlemon.trackify.ui.auth.AuthFlow
 import co.bitterlemon.trackify.ui.billing.BillingScreen
 import co.bitterlemon.trackify.ui.chat.ChatScreen
+import co.bitterlemon.trackify.ui.components.CappedFontScale
 import co.bitterlemon.trackify.ui.components.ConnectionDot
 import co.bitterlemon.trackify.ui.components.Wordmark
 import co.bitterlemon.trackify.ui.home.HomeScreen
@@ -102,10 +110,18 @@ private fun MainShell(pendingRoute: MutableState<String?>) {
     }
 
     val isTab = tabs.any { it.route == route }
+    fun go(r: String) = nav.navigate(r) {
+        popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
+    }
+    fun isSelected(tab: Tab) = route == tab.route || (tab.route == "home" && route?.startsWith("task/") == true)
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    val wide = maxWidth >= 600.dp
     Scaffold(
         containerColor = T.c.background,
         snackbarHost = { SnackbarHost(snackbar) },
-        topBar = {
+        topBar = { CappedFontScale {
             Column(Modifier.background(T.c.background).windowInsetsPadding(WindowInsets.statusBars)) {
                 Row(
                     Modifier.fillMaxWidth().height(56.dp).padding(start = 16.dp, end = 4.dp),
@@ -126,24 +142,18 @@ private fun MainShell(pendingRoute: MutableState<String?>) {
                 }
                 HorizontalDivider(color = T.c.border)
             }
-        },
-        bottomBar = {
-            Column {
+        } },
+        bottomBar = { CappedFontScale {
+            if (!wide) Column {
                 HorizontalDivider(color = T.c.border)
                 NavigationBar(containerColor = T.c.card, tonalElevation = 0.dp) {
                     tabs.forEach { tab ->
-                        val selected = route == tab.route || (tab.route == "home" && route?.startsWith("task/") == true)
+                        val selected = isSelected(tab)
                         NavigationBarItem(
                             selected = selected,
-                            onClick = {
-                                nav.navigate(tab.route) {
-                                    popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
+                            onClick = { go(tab.route) },
                             icon = { Icon(tab.icon, null, modifier = Modifier.size(22.dp)) },
-                            label = { Text(tab.label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium) },
+                            label = { Text(tab.label, fontSize = 12.sp, maxLines = 1, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = T.c.foreground,
                                 selectedTextColor = T.c.foreground,
@@ -155,9 +165,30 @@ private fun MainShell(pendingRoute: MutableState<String?>) {
                     }
                 }
             }
-        },
+        } },
     ) { pad ->
-        Box(Modifier.fillMaxSize().padding(pad).consumeWindowInsets(pad)) {
+        Row(Modifier.fillMaxSize().padding(pad).consumeWindowInsets(pad)) {
+        if (wide) CappedFontScale {
+            NavigationRail(containerColor = T.c.card, windowInsets = WindowInsets.navigationBars) {
+                Spacer(Modifier.height(8.dp))
+                tabs.forEach { tab ->
+                    val selected = isSelected(tab)
+                    NavigationRailItem(
+                        selected = selected,
+                        onClick = { go(tab.route) },
+                        icon = { Icon(tab.icon, null, modifier = Modifier.size(22.dp)) },
+                        label = { Text(tab.label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium) },
+                        colors = NavigationRailItemDefaults.colors(
+                            selectedIconColor = T.c.foreground, selectedTextColor = T.c.foreground,
+                            unselectedIconColor = T.c.mutedForeground, unselectedTextColor = T.c.mutedForeground,
+                            indicatorColor = T.c.muted,
+                        ),
+                    )
+                }
+            }
+        }
+        if (wide) VerticalDivider(color = T.c.border)
+        Box(Modifier.weight(1f).fillMaxHeight()) {
             NavHost(nav, startDestination = "home") {
                 composable("home") { HomeScreen(onOpenTask = { nav.navigate("task/$it") }) }
                 composable("stats") { StatsScreen() }
@@ -170,6 +201,8 @@ private fun MainShell(pendingRoute: MutableState<String?>) {
                 }
             }
         }
+        }
+    }
     }
     @Suppress("UNUSED_VARIABLE") val unused = isTab
 }
