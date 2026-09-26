@@ -15,7 +15,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Trackify",
+  title: "Trackify.",
   description: "Time tracking made simple",
 };
 

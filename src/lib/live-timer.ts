@@ -11,10 +11,18 @@ export function liveOverlapMs(
   return Math.max(0, Math.min(now, rangeEnd) - Math.max(startTime, rangeStart));
 }
 
+export function liveRangeMs(
+  startTime: number,
+  now: number,
+  rangeStart: Date,
+  rangeEnd: Date
+): number {
+  return liveOverlapMs(startTime, now, rangeStart.getTime(), rangeEnd.getTime() + 1);
+}
+
 export function liveTodayMs(startTime: number, now = Date.now()): number {
-  const todayStart = startOfDay(new Date(now)).getTime();
-  const todayEnd = endOfDay(new Date(now)).getTime() + 1;
-  return liveOverlapMs(startTime, now, todayStart, todayEnd);
+  const today = new Date(now);
+  return liveRangeMs(startTime, now, startOfDay(today), endOfDay(today));
 }
 
 export function tasksWithLiveTimer(

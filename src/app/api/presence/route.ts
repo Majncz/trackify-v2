@@ -3,24 +3,7 @@ import { getAuthUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { liveOverlapMs } from "@/lib/live-timer";
 import { personName } from "@/lib/display-name";
-import { endOfDay, format, startOfDay } from "date-fns";
-import { fromZonedTime, toZonedTime } from "date-fns-tz";
-
-function dayWindowUtc(timezone: string, dayKey: string | null) {
-  const nowInTz = toZonedTime(new Date(), timezone);
-  const todayKey = format(startOfDay(nowInTz), "yyyy-MM-dd");
-  const key = dayKey && /^\d{4}-\d{2}-\d{2}$/.test(dayKey) && dayKey <= todayKey ? dayKey : todayKey;
-  const [year, month, day] = key.split("-").map(Number);
-  const wall = startOfDay(nowInTz);
-  wall.setFullYear(year, month - 1, day);
-  wall.setHours(0, 0, 0, 0);
-  return {
-    start: fromZonedTime(startOfDay(wall), timezone),
-    end: fromZonedTime(endOfDay(wall), timezone),
-    day: key,
-    isToday: key === todayKey,
-  };
-}
+import { parseLeaderboardRange, periodWindowUtc } from "@/lib/period-window";
 
 export async function GET(request: NextRequest) {
   const user = await getAuthUser(request);
@@ -30,14 +13,21 @@ export async function GET(request: NextRequest) {
 
   const timezone = request.nextUrl.searchParams.get("timezone") || "UTC";
   const requestedDay = request.nextUrl.searchParams.get("day");
-  const { start: dayStart, end: dayEnd, day, isToday } = dayWindowUtc(timezone, requestedDay);
+  const range = parseLeaderboardRange(request.nextUrl.searchParams.get("range"));
+  const {
+    start: periodStart,
+    end: periodEnd,
+    day,
+    isCurrent,
+    isToday,
+  } = periodWindowUtc(timezone, range, requestedDay);
 
   const [users, timers, events] = await Promise.all([
     prisma.user.findMany({
       select: { id: true, email: true, displayName: true },
       orderBy: { email: "asc" },
     }),
-    isToday
+    isCurrent
       ? prisma.activeTimer.findMany({
           include: {
             user: { select: { id: true, email: true, displayName: true } },
@@ -48,8 +38,8 @@ export async function GET(request: NextRequest) {
       : Promise.resolve([]),
     prisma.event.findMany({
       where: {
-        from: { lt: dayEnd },
-        to: { gt: dayStart },
+        from: { lt: periodEnd },
+        to: { gt: periodStart },
       },
       select: {
         from: true,
@@ -59,16 +49,16 @@ export async function GET(request: NextRequest) {
     }),
   ]);
 
-  const dayByUser = new Map<string, number>();
+  const periodByUser = new Map<string, number>();
   for (const event of events) {
     const extra = liveOverlapMs(
       event.from.getTime(),
       event.to.getTime(),
-      dayStart.getTime(),
-      dayEnd.getTime()
+      periodStart.getTime(),
+      periodEnd.getTime()
     );
     const id = event.task.userId;
-    dayByUser.set(id, (dayByUser.get(id) ?? 0) + extra);
+    periodByUser.set(id, (periodByUser.get(id) ?? 0) + extra);
   }
 
   const visibleTimers = timers.filter((timer) => !timer.task.hidden);
@@ -82,31 +72,50 @@ export async function GET(request: NextRequest) {
     ])
   );
 
+  const now = Date.now();
+  const liveWindowEnd = periodEnd.getTime() + 1;
   const tracking = visibleTimers.map((timer) => ({
     userId: timer.user.id,
     name: personName(timer.user),
     taskName: timer.task.name,
     startTime: timer.startTime.getTime(),
-    todayMs: dayByUser.get(timer.user.id) ?? 0,
+    todayMs: periodByUser.get(timer.user.id) ?? 0,
   }));
 
   const leaderboard = users
     .map((row) => {
-      const live = isToday ? liveByUser.get(row.id) : undefined;
+      const live = isCurrent ? liveByUser.get(row.id) : undefined;
       return {
         userId: row.id,
         name: personName(row),
-        todayMs: dayByUser.get(row.id) ?? 0,
+        todayMs: periodByUser.get(row.id) ?? 0,
         startTime: live?.startTime ?? null,
         taskName: live?.taskName ?? null,
       };
     })
     .filter((row) => row.todayMs > 0 || row.startTime)
     .sort((a, b) => {
-      const aLive = a.startTime ? Date.now() - a.startTime : 0;
-      const bLive = b.startTime ? Date.now() - b.startTime : 0;
+      // Daily keeps the original live ranking (full open session).
+      // Week/month add only the overlap with that window.
+      const aLive = a.startTime
+        ? range === "day"
+          ? now - a.startTime
+          : liveOverlapMs(a.startTime, now, periodStart.getTime(), liveWindowEnd)
+        : 0;
+      const bLive = b.startTime
+        ? range === "day"
+          ? now - b.startTime
+          : liveOverlapMs(b.startTime, now, periodStart.getTime(), liveWindowEnd)
+        : 0;
       return b.todayMs + bLive - (a.todayMs + aLive) || a.name.localeCompare(b.name);
     });
 
-  return NextResponse.json({ tracking, leaderboard, day, isToday });
+  return NextResponse.json({
+    tracking,
+    leaderboard,
+    day,
+    range,
+    isToday,
+    isCurrent,
+  });
 }
