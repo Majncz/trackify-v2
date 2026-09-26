@@ -240,13 +240,16 @@ fun HomeScreen(onOpenTask: (String) -> Unit) {
 private fun RunningBanner(timer: TimerUi, task: Task?, onClock: () -> Unit, onStop: () -> Unit) {
     val r = timer.running ?: return
     val now = rememberTicker(true, 250)
-    Pulsing(timer.pending) { a ->
+    run {
         TCard(
-            Modifier.widthIn(max = 896.dp).fillMaxWidth().alpha(a),
+            Modifier.widthIn(max = 896.dp).fillMaxWidth(),
             border = T.c.primary,
             background = T.c.primary.copy(alpha = 0.05f),
         ) {
-            Text(if (timer.pending) "Syncing..." else "Currently tracking", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = T.c.primary)
+            // Pending sync is a calm caption; the card and Stop stay usable (offline works).
+            Pulsing(timer.pending) { a ->
+                Text(if (timer.pending) "Syncing..." else "Currently tracking", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = T.c.primary, modifier = Modifier.alpha(a))
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(task?.name ?: "…", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 task?.taskGroup?.let {
@@ -271,6 +274,10 @@ private fun RunningBanner(timer: TimerUi, task: Task?, onClock: () -> Unit, onSt
                 )
                 TButton("Stop", onStop, variant = BtnVariant.Destructive, icon = Icons.Outlined.Stop)
             }
+            Text(
+                "since ${co.bitterlemon.trackify.util.Time.clock(r.startTime)} · tap the clock to fix",
+                fontSize = 13.sp, color = T.c.mutedForeground,
+            )
         }
     }
 }
@@ -287,8 +294,7 @@ private fun TaskCard(task: Task, timer: TimerUi, modifier: Modifier, onStart: ()
         val ringColor = if (pending) T.c.yellowRing else T.c.primary
         Box(
             modifier
-                .alpha(a)
-                .then(if (isActive || savingThis) Modifier.border(2.dp, ringColor, RoundedCornerShape(15.dp)).padding(3.dp) else Modifier.padding(3.dp))
+                .then(if (isActive || savingThis) Modifier.border(2.dp, ringColor.copy(alpha = ringColor.alpha * a), RoundedCornerShape(15.dp)).padding(3.dp) else Modifier.padding(3.dp))
         ) {
             TCard(Modifier.fillMaxWidth().fillMaxHeight(), padding = PaddingValues(14.dp), onClick = onOpen) {
                 Row(verticalAlignment = Alignment.Top) {
@@ -304,7 +310,7 @@ private fun TaskCard(task: Task, timer: TimerUi, modifier: Modifier, onStart: ()
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (isActive) {
                         TButton(
-                            if (pending) "Syncing..." else "Stop", onStop,
+                            "Stop", onStop,
                             Modifier.weight(1f), variant = BtnVariant.Destructive, size = BtnSize.Sm, icon = Icons.Outlined.Stop,
                         )
                     } else {
