@@ -92,6 +92,8 @@ struct MainTabView: View {
                 Wordmark(size: 18)
                 ConnectionDot(look: model.connectionLook)
             }
+            .fixedSize()
+            .padding(.horizontal, 6)
             .accessibilityElement(children: .combine)
         }
         if showSettingsButton {

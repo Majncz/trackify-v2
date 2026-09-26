@@ -86,6 +86,7 @@ struct RaceSection: View {
                     Label(playing ? "Pause" : (playhead >= 1 ? "Play again" : "Play"), systemImage: playing ? "pause.fill" : "play.fill")
                 }
                 .buttonStyle(.t(.primary))
+                .fixedSize()
                 .disabled(data?.users.isEmpty ?? true)
                 .accessibilityIdentifier("racePlay")
                 Button { restart() } label: { Image(systemName: "arrow.counterclockwise") }
@@ -234,8 +235,10 @@ struct BarRaceStage: View {
 
     private func raceRow(_ row: Race.Row, index: Int, maxMs: Int64, nameW: CGFloat, trackW: CGFloat) -> some View {
         let color = Color(hex: row.color)
-        let pct = row.ms <= 0 ? 0 : max(0.03, Double(row.ms) / Double(maxMs) * 0.78)
-        let barW = CGFloat(pct) * trackW
+        // Leave room after the bar for the badge overhang + duration label.
+        let barMax = max(20, trackW - 104)
+        let pct = row.ms <= 0 ? 0 : max(0.03, Double(row.ms) / Double(maxMs))
+        let barW = CGFloat(pct) * barMax
         return HStack(spacing: 8) {
             Text("\(index + 1)").font(.scaled(14, weight: .bold)).tabular()
                 .foregroundStyle(Theme.rank(index) ?? Theme.stageMuted)
@@ -243,7 +246,7 @@ struct BarRaceStage: View {
             Text(row.name).font(.scaled(13, weight: .semibold)).foregroundStyle(Theme.stageInk).lineLimit(1)
                 .frame(width: nameW, alignment: .leading)
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 3).fill(Theme.stageTrack).frame(width: max(0, trackW - 72), height: 20)
+                RoundedRectangle(cornerRadius: 3).fill(Theme.stageTrack).frame(width: barMax, height: 20)
                 RoundedRectangle(cornerRadius: 3).fill(color)
                     .frame(width: barW, height: 20)
                     .shadow(color: color.opacity(0.5), radius: 9, y: 8)
@@ -254,11 +257,11 @@ struct BarRaceStage: View {
                         .background(color, in: RoundedRectangle(cornerRadius: 6))
                         .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.white, lineWidth: 3))
                         .shadow(color: .black.opacity(0.15), radius: 3, y: 2)
-                        .offset(x: barW - 18)
+                        .offset(x: max(0, barW - 18))
                 }
                 Text(Fmt.raceDuration(row.ms)).font(.scaled(16, weight: .semibold)).tabular().foregroundStyle(Theme.stageInk)
                     .fixedSize()
-                    .offset(x: barW + (row.ms > 0 ? 26 : 4))
+                    .offset(x: max(barW, 18) + (row.ms > 0 ? 26 : 4))
             }
             .frame(width: trackW, alignment: .leading)
         }

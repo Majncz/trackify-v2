@@ -76,10 +76,11 @@ struct StatsView: View {
                 HStack(spacing: 12) { Skeleton(height: 84); Skeleton(height: 84) }
                 Skeleton(height: 240)
             } else if let c = computed {
-                HStack(spacing: 12) {
-                    headline("Total Tracked", Fmt.fmtMs(c.summary.totalMs), nil)
+                HStack(alignment: .top, spacing: 12) {
+                    headline("Total Tracked", Fmt.fmtMs(c.summary.totalMs), " ")
                     headline("Daily Average", Fmt.fmtMs(c.summary.dailyAverageMs), "per active day")
                 }
+                .fixedSize(horizontal: false, vertical: true)
                 if c.summary.totalMs > 0 {
                     BreakdownChartCard(rows: c.rows, top: c.summary.topTasks)
                     TopTasksCard(top: c.summary.topTasks, total: c.summary.totalMs)
@@ -112,6 +113,7 @@ struct StatsView: View {
             Text(value).font(.scaled(26, weight: .bold)).tabular().lineLimit(1).minimumScaleFactor(0.7)
             if let caption { Text(caption).font(.scaled(12)).foregroundStyle(Theme.mutedForeground) }
         }
+        .frame(maxHeight: .infinity, alignment: .topLeading)
         .card()
     }
 }

@@ -413,32 +413,44 @@ struct LegendItem: View {
     }
 }
 
-/// Wraps content into lines (legends, badge rows).
+/// Wraps content into lines (legends, badge rows). Measuring and placing share one line-breaking pass.
 struct FlowLayout: Layout {
     var spacing: CGFloat = 8
     var lineSpacing: CGFloat = 6
 
+    private func lines(_ subviews: Subviews, maxWidth: CGFloat) -> [[(Int, CGSize)]] {
+        var out: [[(Int, CGSize)]] = [[]]
+        var x: CGFloat = 0
+        for (i, s) in subviews.enumerated() {
+            let sz = s.sizeThatFits(.unspecified)
+            if !out[out.count - 1].isEmpty && x + sz.width > maxWidth {
+                out.append([])
+                x = 0
+            }
+            out[out.count - 1].append((i, sz))
+            x += sz.width + spacing
+        }
+        return out
+    }
+
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let maxW = proposal.width ?? .infinity
-        var x: CGFloat = 0, y: CGFloat = 0, lineH: CGFloat = 0, widest: CGFloat = 0
-        for s in subviews {
-            let sz = s.sizeThatFits(.unspecified)
-            if x > 0 && x + sz.width > maxW { y += lineH + lineSpacing; x = 0; lineH = 0 }
-            x += sz.width + spacing
-            widest = max(widest, x - spacing)
-            lineH = max(lineH, sz.height)
-        }
-        return CGSize(width: min(widest, maxW), height: y + lineH)
+        let ls = lines(subviews, maxWidth: maxW)
+        let widest = ls.map { l in l.reduce(0) { $0 + $1.1.width } + spacing * CGFloat(max(0, l.count - 1)) }.max() ?? 0
+        let h = ls.reduce(0) { $0 + ($1.map(\.1.height).max() ?? 0) } + lineSpacing * CGFloat(max(0, ls.count - 1))
+        return CGSize(width: maxW.isFinite ? maxW : widest, height: h)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX, y = bounds.minY, lineH: CGFloat = 0
-        for s in subviews {
-            let sz = s.sizeThatFits(.unspecified)
-            if x > bounds.minX && x + sz.width > bounds.maxX { y += lineH + lineSpacing; x = bounds.minX; lineH = 0 }
-            s.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(sz))
-            x += sz.width + spacing
-            lineH = max(lineH, sz.height)
+        var y = bounds.minY
+        for l in lines(subviews, maxWidth: bounds.width) {
+            var x = bounds.minX
+            let lh = l.map(\.1.height).max() ?? 0
+            for (i, sz) in l {
+                subviews[i].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(sz))
+                x += sz.width + spacing
+            }
+            y += lh + lineSpacing
         }
     }
 }

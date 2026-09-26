@@ -110,18 +110,18 @@ struct SessionRangeSlider: View {
     enum Side { case left, center, right }
 
     private func label(_ text: String, x: Double, side: Side) -> some View {
-        Text(text)
+        let w: CGFloat = 120
+        let (align, dx): (Alignment, CGFloat) = switch side {
+        case .left: (.trailing, x - 8 - w)
+        case .center: (.center, x - w / 2)
+        case .right: (.leading, x + 8)
+        }
+        return Text(text)
             .font(.mono(12))
             .foregroundStyle(Theme.foreground)
-            .fixedSize()
-            .alignmentGuide(.leading) { d in
-                switch side {
-                case .left: return d.width + 8
-                case .center: return d.width / 2
-                case .right: return -8
-                }
-            }
-            .offset(x: x, y: 0)
+            .lineLimit(1)
+            .frame(width: w, alignment: align)
+            .offset(x: dx, y: 0)
             .allowsHitTesting(false)
     }
 
