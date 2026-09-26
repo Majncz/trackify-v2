@@ -38,6 +38,13 @@ final class LiveServerTests: XCTestCase {
         _ = try await c.aiPeriods()
         _ = try await c.aiAnalytics(viewCurrency: "CZK")
         _ = try await c.conversations()
+        // Weak ETag round trip (lane server): second call is a 304.
+        let first = try await c.tasksConditional(etag: nil)
+        XCTAssertNotNil(first.tasks)
+        if let tag = first.etag {
+            let second = try await c.tasksConditional(etag: tag)
+            XCTAssertNil(second.tasks, "expected 304 for unchanged tasks")
+        }
         try await c.logout()
     }
 

@@ -11,47 +11,78 @@ struct StatsView: View {
     @State private var groupSheet: GroupSheetMode?
     @State private var width: CGFloat = 390
 
+    @State private var computed: StatsComputed?
+    @State private var liveTick = 0
+
+    /// Heavy aggregates, computed off the main actor and cached per data version / range / live tick.
+    struct StatsComputed {
+        var range: Analytics.Range
+        var tasks: [TrackifyTask]
+        var summary: Analytics.StatsSummary
+        var rows: [Analytics.BreakdownRow]
+    }
+
+    private var computeKey: String {
+        "\(model.dataTick)|\(model.tasks.count)|\(rangeType.rawValue)|\(customFrom.timeIntervalSince1970)|\(customTo.timeIntervalSince1970)|\(model.running?.id ?? "-")|\(liveTick)"
+    }
+
     var body: some View {
         ScrollView {
-            TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                content(now: ctx.date)
-            }
-            .padding(.horizontal, width < 640 ? 12 : 24)
-            .padding(.vertical, 16)
-            .frame(maxWidth: 896)
-            .frame(maxWidth: .infinity)
-            .background(GeometryReader { g in Color.clear.preference(key: WidthKey.self, value: g.size.width) })
-            .onPreferenceChange(WidthKey.self) { width = $0 }
+            content
+                .padding(.horizontal, width < 640 ? 12 : 24)
+                .padding(.vertical, 16)
+                .frame(maxWidth: 896)
+                .frame(maxWidth: .infinity)
+                .background(GeometryReader { g in Color.clear.preference(key: WidthKey.self, value: g.size.width) })
+                .onPreferenceChange(WidthKey.self) { width = $0 }
         }
         .background(Theme.background)
         .refreshable { await model.refreshAll() }
         .sheet(item: $groupSheet) { mode in GroupEditorSheet(mode: mode, range: range(now: Date())).trackifySheet() }
         .task { if !model.groupsLoaded { await model.refreshGroups() } }
+        .task(id: computeKey) { await recompute() }
+        .task(id: model.running?.id) {
+            // Keep live totals fresh while a timer runs (cheap: computed off-main).
+            guard model.running != nil else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                liveTick += 1
+            }
+        }
     }
 
     private func range(now: Date) -> Analytics.Range {
         Analytics.range(rangeType, customFrom: customFrom, customTo: customTo, now: now)
     }
 
-    @ViewBuilder
-    private func content(now: Date) -> some View {
+    private func recompute() async {
+        let now = Date()
         let r = range(now: now)
         let tasks = model.liveTasks(now: now).filter { !$0.hidden }
-        let summary = Analytics.statsSummary(tasks: tasks, range: r)
+        let result = await Task.detached(priority: .userInitiated) { () -> StatsComputed in
+            let summary = Analytics.statsSummary(tasks: tasks, range: r)
+            let rows = summary.totalMs > 0 ? Analytics.breakdown(tasks: tasks, range: r, topIds: summary.topTasks.map(\.task.id), now: now) : []
+            return StatsComputed(range: r, tasks: tasks, summary: summary, rows: rows)
+        }.value
+        computed = result
+    }
+
+    @ViewBuilder
+    private var content: some View {
         VStack(alignment: .leading, spacing: 16) {
             PageHeader("Stats", subtitle: "Analyse your tracked time")
-            rangeControls(label: r.label)
-            if !model.tasksLoaded {
+            rangeControls(label: computed?.range.label ?? range(now: Date()).label)
+            if !model.tasksLoaded || computed == nil {
                 HStack(spacing: 12) { Skeleton(height: 84); Skeleton(height: 84) }
                 Skeleton(height: 240)
-            } else {
+            } else if let c = computed {
                 HStack(spacing: 12) {
-                    headline("Total Tracked", Fmt.fmtMs(summary.totalMs), nil)
-                    headline("Daily Average", Fmt.fmtMs(summary.dailyAverageMs), "per active day")
+                    headline("Total Tracked", Fmt.fmtMs(c.summary.totalMs), nil)
+                    headline("Daily Average", Fmt.fmtMs(c.summary.dailyAverageMs), "per active day")
                 }
-                if summary.totalMs > 0 {
-                    BreakdownChartCard(tasks: tasks, range: r, top: summary.topTasks, now: now)
-                    TopTasksCard(top: summary.topTasks, total: summary.totalMs)
+                if c.summary.totalMs > 0 {
+                    BreakdownChartCard(rows: c.rows, top: c.summary.topTasks)
+                    TopTasksCard(top: c.summary.topTasks, total: c.summary.totalMs)
                 } else {
                     EmptyState(icon: "chart.bar", text: "No data for this period").card()
                 }
@@ -88,16 +119,13 @@ struct StatsView: View {
 // MARK: - Daily breakdown
 
 struct BreakdownChartCard: View {
-    let tasks: [TrackifyTask]
-    let range: Analytics.Range
+    let rows: [Analytics.BreakdownRow]
     let top: [Analytics.TaskTotal]
-    let now: Date
     @State private var selected: String?
 
     struct Series: Identifiable { let id: String; let name: String; let hex: String; let alpha: Double }
 
     var body: some View {
-        let rows = Analytics.breakdown(tasks: tasks, range: range, topIds: top.map(\.task.id), now: now)
         let series = top.enumerated().map { Series(id: $0.element.task.id, name: $0.element.task.name, hex: Accent.taskChartPalette[$0.offset % 6], alpha: 0.84) }
             + [Series(id: Analytics.otherKey, name: "Other", hex: Accent.otherHex, alpha: 0.72)]
         let hasOther = rows.contains { ($0.slices[Analytics.otherKey] ?? 0) > 0 }

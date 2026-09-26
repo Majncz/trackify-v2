@@ -63,6 +63,10 @@ final class AppModel {
     @ObservationIgnored private var presenceTask: Task<Void, Never>?
     @ObservationIgnored private var widgetReloadTask: Task<Void, Never>?
     @ObservationIgnored var timerObservers: [(RunningTimer?) -> Void] = []
+    @ObservationIgnored private var socketDisconnectedForBackground = false
+    @ObservationIgnored private var lastSnapshot: WidgetSnapshot?
+    @ObservationIgnored private var isFirstSnapshotWrite = true
+    @ObservationIgnored private var tasksETag: String?
 
     var calc: DayCalc { DayCalc.current }
 
@@ -125,6 +129,16 @@ final class AppModel {
         await engine.bind(userId: s.userId)
         let st = await engine.state
         applyEngineState(st)
+        if let cached = DataCache.load(userId: s.userId), !tasksLoaded {
+            // Instant launch: show the last known data, refresh in the background.
+            tasks = cached.tasks
+            tasksLoaded = true
+            profile = cached.profile
+            groups = cached.groups
+            groupsLoaded = !cached.groups.isEmpty
+            stats = cached.stats
+            tasksETag = cached.tasksETag
+        }
         phase = .signedIn
         socket.connect(baseURL: api.baseURL, token: s.token)
         writeSnapshot()
@@ -133,10 +147,22 @@ final class AppModel {
         await engine.refreshTruth()
     }
 
+    /// App went to the background (iOS): drop the socket; the timer engine keeps its queue on disk.
+    func background() {
+        guard phase == .signedIn else { return }
+        socket.disconnect()
+        socketDisconnectedForBackground = true
+    }
+
     /// App came to foreground / network came back.
     func foreground() {
         guard phase == .signedIn else { return }
-        socket.nudge()
+        if socketDisconnectedForBackground, let s = session {
+            socketDisconnectedForBackground = false
+            socket.connect(baseURL: api.baseURL, token: s.token)
+        } else {
+            socket.nudge()
+        }
         Task {
             await engine.reloadFromStore()
             await engine.kick()
@@ -183,6 +209,7 @@ final class AppModel {
         socket.disconnect()
         await engine.reset()
         CredentialStore.shared.clear()
+        DataCache.clear()
         session = nil
         api.token = nil
         running = nil
@@ -190,6 +217,7 @@ final class AppModel {
         stopQueued = false
         tasks = []; hiddenTasks = []; groups = []; stats = nil; profile = nil; presenceToday = nil
         tasksLoaded = false; hiddenLoaded = false; groupsLoaded = false
+        tasksETag = nil
         signedOutReason = reason
         phase = .signedOut
         notifyTimerObservers()
@@ -267,6 +295,9 @@ final class AppModel {
         async let pr: Void = refreshPresenceToday()
         _ = await (t, s, p, g, pr)
         dataTick += 1
+        if let uid = session?.userId, tasksLoaded {
+            DataCache.save(CachedData(tasks: tasks, profile: profile, groups: groups, stats: stats, savedAt: Date(), tasksETag: tasksETag), userId: uid)
+        }
     }
 
     /// Debounced (≥ 400 ms) refresh of tasks + stats + presence after timer ops / socket events.
@@ -281,11 +312,18 @@ final class AppModel {
 
     func refreshTasks() async {
         do {
-            let t = try await api.tasks()
+            let r = try await api.tasksConditional(etag: tasksLoaded ? tasksETag : nil)
+            tasksETag = r.etag
+            guard let t = r.tasks else {   // 304 Not Modified — cached list is current
+                tasksLoaded = true
+                tasksError = nil
+                return
+            }
             tasks = t
             tasksLoaded = true
             tasksError = nil
             writeSnapshot()
+            if running != nil { notifyTimerObservers() }   // names may have changed (menu bar, Live Activity)
         } catch let e as APIError {
             if e.kind == .unauthorized { handleUnauthorized() }
             if !tasksLoaded { tasksError = e.message }
@@ -491,6 +529,11 @@ final class AppModel {
         } else {
             snap = .signedOut
         }
+        var comparable = snap
+        comparable.updatedAt = 0
+        if let last = lastSnapshot, last == comparable, !isFirstSnapshotWrite { return }
+        isFirstSnapshotWrite = false
+        lastSnapshot = comparable
         SnapshotStore.shared.save(snap)
         widgetReloadTask?.cancel()
         widgetReloadTask = Task {

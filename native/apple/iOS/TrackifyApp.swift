@@ -13,11 +13,12 @@ struct TrackifyApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView { MainTabView() }
+            RootView { AdaptiveRootView() }
                 .environment(model)
                 .task { await model.bootstrap() }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { model.foreground() }
+                    if phase == .background { model.background() }
                 }
                 .onOpenURL { url in DeepLink.handle(url, model: model) }
         }

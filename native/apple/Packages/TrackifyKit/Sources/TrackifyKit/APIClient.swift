@@ -140,6 +140,11 @@ public final class APIClient: @unchecked Sendable {
     /// Performs the request; throws `APIError` for non-2xx and transport failures.
     @discardableResult
     public func send(_ req: URLRequest) async throws -> Data {
+        try await sendWithResponse(req).0
+    }
+
+    /// Like `send` but also returns the HTTP response; 304 is passed through (not an error).
+    public func sendWithResponse(_ req: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let (data, resp): (Data, URLResponse)
         do {
             (data, resp) = try await perform(req)
@@ -149,8 +154,10 @@ public final class APIClient: @unchecked Sendable {
             throw APIError.network((error as NSError).localizedDescription)
         }
         guard let http = resp as? HTTPURLResponse else { throw APIError.network("No response") }
-        guard (200..<300).contains(http.statusCode) else { throw APIError.classify(status: http.statusCode, data: data) }
-        return data
+        guard (200..<300).contains(http.statusCode) || http.statusCode == 304 else {
+            throw APIError.classify(status: http.statusCode, data: data)
+        }
+        return (data, http)
     }
 
     private func perform(_ req: URLRequest) async throws -> (Data, URLResponse) {

@@ -1,6 +1,18 @@
 import SwiftUI
 import TrackifyKit
 
+/// iPhone (compact width): tabs. iPad (regular width): sidebar split view like the Mac dashboard.
+struct AdaptiveRootView: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    var body: some View {
+        if sizeClass == .regular {
+            DashboardView()
+        } else {
+            MainTabView()
+        }
+    }
+}
+
 /// iOS tabs: Home · Stats · Team · Billing · Chat. Settings from the Home toolbar.
 struct MainTabView: View {
     @Environment(AppModel.self) private var model

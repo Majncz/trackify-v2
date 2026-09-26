@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		012D1F574BA882C33D09FB5F /* TimerFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DB85CAF576CD2E665EE79C9 /* TimerFlowTests.swift */; };
 		05C414A6E67371CC16AD626E /* StatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86211328BA48374524567260 /* StatsView.swift */; };
 		06342CBA77E60A0B503C6F3D /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4484A09B32DF794F9E4F1295 /* Theme.swift */; };
 		08854BE8D2998A3E0EBAF9D6 /* LiveActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0B2CF537F4F3182417EBB8A /* LiveActivityController.swift */; };
@@ -22,6 +23,7 @@
 		2F38C6E7E8316C4A896AEDF1 /* StatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86211328BA48374524567260 /* StatsView.swift */; };
 		2F64852782B03380DCD3E8A4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 596312E9862EA1E8163AD965 /* Assets.xcassets */; };
 		30A0F89E4CF30514AE17BC43 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF517C3CFD78FE3E53EEFA2C /* Components.swift */; };
+		34F30FAB2223FEE94A6D0346 /* DataCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F1606A7944942FDA3744ACD /* DataCache.swift */; };
 		3505B06DBF0C7A4F6EE84BD8 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B57F32A85D9A205D5A82FEB1 /* HomeView.swift */; };
 		37A39430D994642B4D763C82 /* TrackifyWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 86D2ADE540A57DCE7EAE1730 /* TrackifyWidgets.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		386142FAA19F7C373298D97D /* LiveActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9967DD74CAED935A7779561D /* LiveActivityAttributes.swift */; };
@@ -42,16 +44,19 @@
 		5D7CF15BB5DB70158DFCFDDF /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 054D3E3F72B09FD7C46C7279 /* MainTabView.swift */; };
 		5FD56E4B3C79B74A049076CC /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B55E024593F54F7CB556FB16 /* SwiftUI.framework */; };
 		686A26DA70FB3997E8D9D259 /* Shortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 285C8D93AE48FAF0F727773E /* Shortcuts.swift */; };
+		6F14A7E06B760EAAE3FDD294 /* TeamViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D76056CC87B385B4D649928 /* TeamViews.swift */; };
 		70128411B6031C8C2C9B6AE7 /* TrackifyMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B77EF644DD87BE7E975A5BD3 /* TrackifyMacApp.swift */; };
 		70DA2C582139178C3C056FCB /* DeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8E850D11BC9F43D62DA2D69 /* DeepLink.swift */; };
 		7530005CE8BF66672A005059 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 22797FA861B872512FE3FB2B /* WidgetKit.framework */; };
 		7B234AE73D477308EF93391B /* LeaderboardCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC101F609590F416D75ED17E /* LeaderboardCard.swift */; };
+		7FCAFEA4CE8B37BDEEBEC493 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4231F4146CDE1C736A848DC0 /* DashboardView.swift */; };
 		806107D544A37520F22D3CDD /* LiveActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9967DD74CAED935A7779561D /* LiveActivityAttributes.swift */; };
 		8ECB08E79857D15553370FC5 /* TimerIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DEBF7B4816D82B9A35A8CD7 /* TimerIntents.swift */; };
 		9038CCBC63FE766797F7A16D /* Stubs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91CCDBA97DEB712CA8F381D0 /* Stubs.swift */; };
 		9427E20920E30D078ADC0F64 /* TrackifyWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 055F04C0B7277CE71AA94E76 /* TrackifyWidgets.swift */; };
 		97872503F34ACA59A7C4B709 /* TimerIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DEBF7B4816D82B9A35A8CD7 /* TimerIntents.swift */; };
 		9E665E971B788E9F5803F316 /* TrackifyUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1539D88D9BA5B06A9BF60438 /* TrackifyUITests.swift */; };
+		9F3845BD2683B9788ACDF93A /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4231F4146CDE1C736A848DC0 /* DashboardView.swift */; };
 		9F95D7F967ED580BDFCB4FFA /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF517C3CFD78FE3E53EEFA2C /* Components.swift */; };
 		A1BE1A989F290ABA472415C3 /* MenuPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81A4D3236B61057AE10A6537 /* MenuPanelView.swift */; };
 		A2EAC9236618893A0F882059 /* GroupEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0D725297D3FE5FA2D9DBDA /* GroupEditorSheet.swift */; };
@@ -63,10 +68,12 @@
 		BD140C597F145EB3A041EF6B /* TrackifyMacWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 08DF490AC1EA19B7960DDCA2 /* TrackifyMacWidgets.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		BDC3C06718B5A7B80BCCF04A /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4484A09B32DF794F9E4F1295 /* Theme.swift */; };
 		C0D7541E7122F0B2BB04B5C9 /* TrackifyWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 055F04C0B7277CE71AA94E76 /* TrackifyWidgets.swift */; };
+		C44B075F6B3FFBD729727784 /* DataCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F1606A7944942FDA3744ACD /* DataCache.swift */; };
 		C64FF16454070FDCD8FDB3C8 /* GlobalHotKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EC23DE92AC9F163A75E77B9 /* GlobalHotKey.swift */; };
 		C684D07E611CC74C790149CB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 548D12DA8E60955DCEE78712 /* Assets.xcassets */; };
 		C8AB97B9285E7F6B994E1BD9 /* AuthViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A187C2681230764CB4CB34ED /* AuthViews.swift */; };
 		CE398C07D69378460F214647 /* LiveActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9967DD74CAED935A7779561D /* LiveActivityAttributes.swift */; };
+		D29BC941DF15893BC6D9CA0A /* TeamViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D76056CC87B385B4D649928 /* TeamViews.swift */; };
 		D39F9ED317926254547206BC /* DeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8E850D11BC9F43D62DA2D69 /* DeepLink.swift */; };
 		D4A0AAB4363156D1E603F0FF /* Shortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 285C8D93AE48FAF0F727773E /* Shortcuts.swift */; };
 		D7BBAB724C213485D3589515 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF517C3CFD78FE3E53EEFA2C /* Components.swift */; };
@@ -141,9 +148,12 @@
 		2DEBF7B4816D82B9A35A8CD7 /* TimerIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerIntents.swift; sourceTree = "<group>"; };
 		2EC23DE92AC9F163A75E77B9 /* GlobalHotKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalHotKey.swift; sourceTree = "<group>"; };
 		346DB28AAEA7CBAF7E6DDBBA /* DashboardWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardWindow.swift; sourceTree = "<group>"; };
+		3DB85CAF576CD2E665EE79C9 /* TimerFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerFlowTests.swift; sourceTree = "<group>"; };
 		3ED93246DD3CCA6D37F6C3F0 /* Reminder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Reminder.swift; sourceTree = "<group>"; };
+		4231F4146CDE1C736A848DC0 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		4484A09B32DF794F9E4F1295 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		47597AC1B81C73F379412EA2 /* TimerSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerSheets.swift; sourceTree = "<group>"; };
+		4D76056CC87B385B4D649928 /* TeamViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamViews.swift; sourceTree = "<group>"; };
 		4ED729CBB863CB4661EFD25D /* Trackify.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Trackify.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		516216E5BC416F6F7E0C725D /* SessionSlider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionSlider.swift; sourceTree = "<group>"; };
 		548D12DA8E60955DCEE78712 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -160,6 +170,7 @@
 		91CCDBA97DEB712CA8F381D0 /* Stubs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Stubs.swift; sourceTree = "<group>"; };
 		9967DD74CAED935A7779561D /* LiveActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityAttributes.swift; sourceTree = "<group>"; };
 		9E867DB2EC95A24AD2ABC2CD /* HeatViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeatViews.swift; sourceTree = "<group>"; };
+		9F1606A7944942FDA3744ACD /* DataCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataCache.swift; sourceTree = "<group>"; };
 		A187C2681230764CB4CB34ED /* AuthViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViews.swift; sourceTree = "<group>"; };
 		A56284ED8953B84E2CCD4003 /* TaskDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskDetailView.swift; sourceTree = "<group>"; };
 		A5B6BF9AECFD881C074D051C /* StatusItemController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusItemController.swift; sourceTree = "<group>"; };
@@ -228,6 +239,7 @@
 			isa = PBXGroup;
 			children = (
 				CC101F609590F416D75ED17E /* LeaderboardCard.swift */,
+				4D76056CC87B385B4D649928 /* TeamViews.swift */,
 			);
 			path = Team;
 			sourceTree = "<group>";
@@ -308,6 +320,7 @@
 		6AA4D028ED3BC8E2E0F5818E /* App */ = {
 			isa = PBXGroup;
 			children = (
+				4231F4146CDE1C736A848DC0 /* DashboardView.swift */,
 				A8E850D11BC9F43D62DA2D69 /* DeepLink.swift */,
 				3ED93246DD3CCA6D37F6C3F0 /* Reminder.swift */,
 				69F628C6E944BA1344E7D6DD /* RootView.swift */,
@@ -320,6 +333,7 @@
 		77E7F34BB500F66D4926860E /* UITests */ = {
 			isa = PBXGroup;
 			children = (
+				3DB85CAF576CD2E665EE79C9 /* TimerFlowTests.swift */,
 				1539D88D9BA5B06A9BF60438 /* TrackifyUITests.swift */,
 			);
 			path = UITests;
@@ -385,6 +399,7 @@
 			isa = PBXGroup;
 			children = (
 				6B32683C346A8E237873FEB4 /* AppModel.swift */,
+				9F1606A7944942FDA3744ACD /* DataCache.swift */,
 			);
 			path = Model;
 			sourceTree = "<group>";
@@ -638,6 +653,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				012D1F574BA882C33D09FB5F /* TimerFlowTests.swift in Sources */,
 				9E665E971B788E9F5803F316 /* TrackifyUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -649,6 +665,8 @@
 				4D4939651A0D9FDAE5438C53 /* AppModel.swift in Sources */,
 				C8AB97B9285E7F6B994E1BD9 /* AuthViews.swift in Sources */,
 				B4DFD64F2BA6DFAE753EE3E5 /* Components.swift in Sources */,
+				9F3845BD2683B9788ACDF93A /* DashboardView.swift in Sources */,
+				C44B075F6B3FFBD729727784 /* DataCache.swift in Sources */,
 				D39F9ED317926254547206BC /* DeepLink.swift in Sources */,
 				0A3B5F34115D2476FCC64010 /* GroupEditorSheet.swift in Sources */,
 				FDF287F9EC008EE126C3E3D8 /* HeatViews.swift in Sources */,
@@ -665,6 +683,7 @@
 				2F38C6E7E8316C4A896AEDF1 /* StatsView.swift in Sources */,
 				9038CCBC63FE766797F7A16D /* Stubs.swift in Sources */,
 				B66B350F0552280198AA36F9 /* TaskDetailView.swift in Sources */,
+				D29BC941DF15893BC6D9CA0A /* TeamViews.swift in Sources */,
 				06342CBA77E60A0B503C6F3D /* Theme.swift in Sources */,
 				8ECB08E79857D15553370FC5 /* TimerIntents.swift in Sources */,
 				E81FA1F3064406F6C61DC8FB /* TimerSheets.swift in Sources */,
@@ -692,7 +711,9 @@
 				0B31318F95AE26A4D0C359E5 /* AppModel.swift in Sources */,
 				57020A50A6EBEB39D571E208 /* AuthViews.swift in Sources */,
 				9F95D7F967ED580BDFCB4FFA /* Components.swift in Sources */,
+				7FCAFEA4CE8B37BDEEBEC493 /* DashboardView.swift in Sources */,
 				F149D16B257968D7017043CB /* DashboardWindow.swift in Sources */,
+				34F30FAB2223FEE94A6D0346 /* DataCache.swift in Sources */,
 				70DA2C582139178C3C056FCB /* DeepLink.swift in Sources */,
 				C64FF16454070FDCD8FDB3C8 /* GlobalHotKey.swift in Sources */,
 				A2EAC9236618893A0F882059 /* GroupEditorSheet.swift in Sources */,
@@ -710,6 +731,7 @@
 				4BBB582B2B746A9DE4151819 /* StatusItemController.swift in Sources */,
 				24719A6551EEEAE64A3E4BFA /* Stubs.swift in Sources */,
 				A8FF335C2EDAAE247E15D846 /* TaskDetailView.swift in Sources */,
+				6F14A7E06B760EAAE3FDD294 /* TeamViews.swift in Sources */,
 				4D782362542E963092271B06 /* Theme.swift in Sources */,
 				97872503F34ACA59A7C4B709 /* TimerIntents.swift in Sources */,
 				2EBC11F3AB2BC7FC6C127619 /* TimerSheets.swift in Sources */,

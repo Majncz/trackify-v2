@@ -158,5 +158,5 @@ public enum Race {
         }
     }
 
-    public static let speeds: [(label: String, ms: Int64)] = [("30 s", 30_000), ("1 min", 60_000), ("2 min", 120_000)]
+    public static let speeds: [(label: String, ms: Int64)] = [("30s", 30_000), ("1 min", 60_000), ("2 min", 120_000)]
 }

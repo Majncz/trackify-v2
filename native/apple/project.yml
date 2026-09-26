@@ -27,6 +27,7 @@ targets:
     platform: iOS
     sources:
       - path: Shared
+        excludes: ["Features/Billing/**", "Features/Chat/**"]   # TEMP: in progress
       - path: Intents
       - path: iOS
         excludes: ["*.plist", "*.entitlements"]
@@ -107,6 +108,7 @@ targets:
     platform: macOS
     sources:
       - path: Shared
+        excludes: ["Features/Billing/**", "Features/Chat/**"]   # TEMP: in progress
       - path: Intents
       - path: macOS
         excludes: ["*.plist", "*.entitlements"]

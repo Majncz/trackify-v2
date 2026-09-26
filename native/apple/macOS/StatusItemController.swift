@@ -26,15 +26,33 @@ final class StatusItemController: NSObject, NSWindowDelegate {
             b.setAccessibilityLabel("Trackify")
         }
         updateLabel()
-        ticker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        model.timerObservers.append { [weak self] _ in Task { @MainActor in self?.updateLabel() } }
+        NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.updateLabel() }
         }
-        model.timerObservers.append { [weak self] _ in Task { @MainActor in self?.updateLabel() } }
+    }
+
+    /// Re-arm a one-shot timer for the next visible change: next second with seconds on,
+    /// otherwise the next whole elapsed minute (keeps idle CPU near zero).
+    private func scheduleNextTick() {
+        ticker?.invalidate()
+        guard let r = model.running else { return }
+        let showSeconds = AppGroup.defaults.bool(forKey: SharedKeys.menuBarShowSeconds)
+        let elapsed = max(0, Date().ms - r.startTime)
+        let unit: Int64 = showSeconds ? 1000 : 60_000
+        let wait = Double(unit - elapsed % unit) / 1000 + 0.02
+        let t = Timer(timeInterval: wait, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.updateLabel() }
+        }
+        t.tolerance = showSeconds ? 0.05 : 0.5
+        RunLoop.main.add(t, forMode: .common)
+        ticker = t
     }
 
     // MARK: Label
 
     func updateLabel() {
+        defer { scheduleNextTick() }
         guard let b = item.button else { return }
         let d = AppGroup.defaults
         if let r = model.running {
@@ -145,6 +163,7 @@ final class StatusItemController: NSObject, NSWindowDelegate {
 
     func closePanel() {
         guard let p = panel else { return }
+        NotificationCenter.default.post(name: .trackifyPanelClosed, object: nil)
         if let m = outsideMonitor { NSEvent.removeMonitor(m); outsideMonitor = nil }
         item.button?.highlight(false)
         NSAnimationContext.runAnimationGroup({ ctx in
@@ -178,7 +197,7 @@ final class StatusItemController: NSObject, NSWindowDelegate {
 
     /// DEBUG/screenshot: the panel content in a normal titled window.
     func showPanelAsWindow() {
-        let root = MenuPanelView(close: {}, openDashboard: { [weak self] s in self?.openDashboard(s) }).environment(model)
+        let root = MenuPanelView(close: {}, openDashboard: { [weak self] s in self?.openDashboard(s) }, alwaysVisible: true).environment(model)
         let host = NSHostingController(rootView: root)
         let w = NSWindow(contentViewController: host)
         w.title = "Trackify Panel"
@@ -193,6 +212,7 @@ final class StatusItemController: NSObject, NSWindowDelegate {
 
 extension Notification.Name {
     static let trackifyPanelOpened = Notification.Name("trackify.panelOpened")
+    static let trackifyPanelClosed = Notification.Name("trackify.panelClosed")
 }
 
 /// Borderless floating panel that can take keyboard focus (search field).

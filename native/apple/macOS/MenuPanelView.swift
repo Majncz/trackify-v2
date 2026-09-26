@@ -7,6 +7,9 @@ struct MenuPanelView: View {
     @Environment(AppModel.self) private var model
     var close: () -> Void
     var openDashboard: (AppScreen?) -> Void
+    /// Screenshot window keeps the content alive; the real panel drops it while hidden (idle CPU).
+    var alwaysVisible = false
+    @State private var visible = false
 
     @State private var query = ""
     @State private var fixing: RunningTimer?
@@ -18,6 +21,23 @@ struct MenuPanelView: View {
     @FocusState private var searchFocused: Bool
 
     var body: some View {
+        Group {
+            if visible || alwaysVisible { panel } else { Theme.background }
+        }
+        .frame(width: 360, height: 560)
+        .onReceive(NotificationCenter.default.publisher(for: .trackifyPanelOpened)) { _ in
+            visible = true
+            query = ""
+            launchAtLogin = LaunchAtLogin.isEnabled
+            searchFocused = true
+            model.foreground()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .trackifyPanelClosed)) { _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { visible = false }
+        }
+    }
+
+    private var panel: some View {
         VStack(spacing: 0) {
             header
             Hairline()
@@ -44,12 +64,6 @@ struct MenuPanelView: View {
         .sheet(item: $fixing) { r in FixSessionSheet(running: r).environment(model) }
         .sheet(item: $loggingPast) { t in LogPastSheet(task: t).environment(model) }
         .sheet(isPresented: $showNewTask) { NewTaskSheet(startAfterCreate: true).environment(model) }
-        .onReceive(NotificationCenter.default.publisher(for: .trackifyPanelOpened)) { _ in
-            query = ""
-            launchAtLogin = LaunchAtLogin.isEnabled
-            searchFocused = true
-            model.foreground()
-        }
     }
 
     // MARK: Header

@@ -27,6 +27,18 @@ public extension APIClient {
         try await get("/api/tasks", query: hidden ? ["hidden": "true"] : [:])
     }
 
+    /// Conditional `GET /api/tasks` with the lane server's weak ETag. `tasks == nil` means 304 (reuse cache).
+    /// Servers without ETag support always answer 200.
+    func tasksConditional(etag: String?) async throws -> (tasks: [TrackifyTask]?, etag: String?) {
+        var req = makeRequest("GET", "/api/tasks")
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        if let etag, !etag.isEmpty { req.setValue(etag, forHTTPHeaderField: "If-None-Match") }
+        let (data, http) = try await sendWithResponse(req)
+        let newTag = http.value(forHTTPHeaderField: "ETag") ?? http.value(forHTTPHeaderField: "Etag")
+        if http.statusCode == 304 { return (nil, newTag ?? etag) }
+        return (try decode([TrackifyTask].self, data), newTag)
+    }
+
     func createTask(name: String) async throws -> TrackifyTask {
         try await json("POST", "/api/tasks", ["name": name], as: TrackifyTask.self)
     }
