@@ -15,3 +15,9 @@
 -dontwarn org.conscrypt.**
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
+
+# Glance instantiates ActionCallbacks and receivers by class name
+-keep class * implements androidx.glance.appwidget.action.ActionCallback { <init>(); }
+-keep class co.bitterlemon.trackify.widget.** { *; }
+# WorkManager workers are created reflectively
+-keep class co.bitterlemon.trackify.timer.*Worker { <init>(android.content.Context, androidx.work.WorkerParameters); }
