@@ -1,5 +1,23 @@
 import SwiftUI
 import TrackifyKit
+#if canImport(AppKit) && !targetEnvironment(macCatalyst)
+import AppKit
+#endif
+
+// MARK: - Motion
+
+/// Repeating (ambient) animations are skipped during UI tests so XCUITest can reach "idle",
+/// and when the user asked to reduce motion.
+enum Motion {
+    static let uiTesting = ProcessInfo.processInfo.environment["TRACKIFY_UI_TEST"] == "1"
+    static var ambient: Bool {
+        #if os(iOS)
+        return !uiTesting && !UIAccessibility.isReduceMotionEnabled
+        #else
+        return !uiTesting && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        #endif
+    }
+}
 
 // MARK: - Card
 
@@ -33,8 +51,8 @@ struct PendingPulse: ViewModifier {
         content
             .opacity(active && dim ? 0.4 : 1)
             .animation(active ? .easeInOut(duration: 0.75).repeatForever(autoreverses: true) : .default, value: dim)
-            .onAppear { if active { dim = true } }
-            .onChange(of: active) { _, on in dim = on }
+            .onAppear { if active && Motion.ambient { dim = true } }
+            .onChange(of: active) { _, on in dim = on && Motion.ambient }
     }
 }
 
@@ -52,7 +70,7 @@ struct TButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         let h: CGFloat = switch size { case .sm: 32; case .md: 36; case .lg: 44; case .icon: 36 }
         configuration.label
-            .font(.system(size: size == .sm ? 12 : 14, weight: .medium))
+            .font(.scaled(size == .sm ? 12 : 14, weight: .medium))
             .lineLimit(1)
             .padding(.horizontal, size == .icon ? 0 : (size == .sm ? 10 : 14))
             .frame(minWidth: size == .icon ? h : nil, maxWidth: fullWidth ? .infinity : nil, minHeight: h)
@@ -120,7 +138,7 @@ struct AccentBadge: View {
     var hex: String
     var body: some View {
         Text(text)
-            .font(.system(size: 12, weight: .semibold))
+            .font(.scaled(12, weight: .semibold))
             .lineLimit(1)
             .foregroundStyle(Color(hex: hex))
             .padding(.horizontal, 8)
@@ -137,7 +155,7 @@ struct Badge: View {
     var mono = false
     var body: some View {
         Text(text)
-            .font(mono ? .mono(12, weight: .semibold) : .system(size: 12, weight: .semibold))
+            .font(mono ? .mono(12, weight: .semibold) : .scaled(12, weight: .semibold))
             .lineLimit(1)
             .foregroundStyle(kind == .primary ? Theme.onPrimary : kind == .destructive ? Theme.onDestructive : Theme.foreground)
             .padding(.horizontal, 8)
@@ -169,7 +187,7 @@ struct Wordmark: View {
     var size: CGFloat = 18
     var body: some View {
         (Text("Trackify").foregroundStyle(Theme.foreground) + Text(".").foregroundStyle(Theme.green))
-            .font(.system(size: size, weight: .bold))
+            .font(.scaled(size, weight: .bold))
             .accessibilityLabel("Trackify")
     }
 }
@@ -193,7 +211,7 @@ struct ConnectionDot: View {
             .scaleEffect(pulse && look != .reconnecting ? 1.1 : 1)
             .opacity(pulse && look != .reconnecting ? 0.7 : 1)
             .animation(.easeInOut(duration: look == .disconnected ? 1.6 : 1).repeatForever(autoreverses: true), value: pulse)
-            .onAppear { pulse = true }
+            .onAppear { pulse = Motion.ambient }
             .help(look.label)
             .accessibilityLabel(look.label)
     }
@@ -212,7 +230,7 @@ struct Skeleton: View {
             .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
             .opacity(on ? 0.5 : 1)
             .animation(.easeInOut(duration: 1).repeatForever(autoreverses: true), value: on)
-            .onAppear { on = true }
+            .onAppear { on = Motion.ambient }
             .accessibilityHidden(true)
     }
 }
@@ -222,7 +240,7 @@ struct EmptyState: View {
     var text: String
     var body: some View {
         VStack(spacing: 8) {
-            if let icon { Image(systemName: icon).font(.system(size: 28)).foregroundStyle(Theme.mutedForeground) }
+            if let icon { Image(systemName: icon).font(.scaled(28)).foregroundStyle(Theme.mutedForeground) }
             Text(text).font(.body14).foregroundStyle(Theme.mutedForeground).multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -239,12 +257,12 @@ struct ErrorAlert: View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "exclamationmark.circle").foregroundStyle(Theme.destructive)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.destructive)
-                Text(message).font(.system(size: 13)).foregroundStyle(Theme.destructive.opacity(0.9)).fixedSize(horizontal: false, vertical: true)
+                Text(title).font(.scaled(14, weight: .semibold)).foregroundStyle(Theme.destructive)
+                Text(message).font(.scaled(13)).foregroundStyle(Theme.destructive.opacity(0.9)).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
             if let onDismiss {
-                Button(action: onDismiss) { Image(systemName: "xmark").font(.system(size: 12, weight: .semibold)) }
+                Button(action: onDismiss) { Image(systemName: "xmark").font(.scaled(12, weight: .semibold)) }
                     .buttonStyle(.plain)
                     .foregroundStyle(Theme.destructive)
                     .frame(width: 28, height: 28)
@@ -263,7 +281,7 @@ struct InlineError: View {
     var text: String?
     var body: some View {
         if let text, !text.isEmpty {
-            Text(text).font(.system(size: 13)).foregroundStyle(Theme.destructive).fixedSize(horizontal: false, vertical: true)
+            Text(text).font(.scaled(13)).foregroundStyle(Theme.destructive).fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -283,7 +301,7 @@ struct PageHeader<Trailing: View>: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.pageTitle).tracking(-0.3).foregroundStyle(Theme.foreground)
-                if let subtitle { Text(subtitle).font(.system(size: 14)).foregroundStyle(Theme.mutedForeground) }
+                if let subtitle { Text(subtitle).font(.scaled(14)).foregroundStyle(Theme.mutedForeground) }
             }
             Spacer(minLength: 0)
             trailing()
@@ -306,7 +324,7 @@ struct Segmented<T: Hashable>: View {
                     withAnimation(.easeOut(duration: 0.15)) { selection = item.0 }
                 } label: {
                     Text(item.1)
-                        .font(.system(size: compact ? 12 : 13, weight: .medium))
+                        .font(.scaled(compact ? 12 : 13, weight: .medium))
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                         .foregroundStyle(on ? Theme.foreground : Theme.mutedForeground)
@@ -336,7 +354,7 @@ struct ChipRow<T: Hashable>: View {
                     let on = item.0 == selection
                     Button { selection = item.0 } label: {
                         Text(item.1)
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.scaled(13, weight: .medium))
                             .padding(.horizontal, 12)
                             .frame(minHeight: 30)
                             .foregroundStyle(on ? Theme.onPrimary : Theme.foreground)
@@ -364,7 +382,7 @@ struct TField: View {
             if secure { SecureField(placeholder, text: $text) } else { TextField(placeholder, text: $text) }
         }
         .textFieldStyle(.plain)
-        .font(mono ? .mono(15) : .system(size: 15))
+        .font(mono ? .mono(15) : .scaled(15))
         .padding(.horizontal, 12)
         .frame(minHeight: 40)
         .background(Theme.background, in: RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous))
@@ -374,7 +392,7 @@ struct TField: View {
 
 struct FieldLabel: View {
     var text: String
-    var body: some View { Text(text).font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.foreground) }
+    var body: some View { Text(text).font(.scaled(14, weight: .medium)).foregroundStyle(Theme.foreground) }
 }
 
 // MARK: - Misc
@@ -390,7 +408,7 @@ struct LegendItem: View {
     var body: some View {
         HStack(spacing: 6) {
             RoundedRectangle(cornerRadius: 2).fill(Color(hex: hex)).frame(width: 12, height: 12)
-            Text(name).font(.system(size: 13)).foregroundStyle(Theme.mutedForeground).lineLimit(1)
+            Text(name).font(.scaled(13)).foregroundStyle(Theme.mutedForeground).lineLimit(1)
         }
     }
 }
@@ -453,7 +471,7 @@ struct CopyButton: View {
                     .foregroundStyle(copied ? Theme.emerald : Theme.mutedForeground)
                 if showLabel { Text(copied ? "Copied" : label) }
             }
-            .font(.system(size: 13, weight: .medium))
+            .font(.scaled(13, weight: .medium))
             .frame(minWidth: 32, minHeight: 32)
             .contentShape(Rectangle())
         }

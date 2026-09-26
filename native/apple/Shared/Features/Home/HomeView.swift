@@ -88,11 +88,11 @@ struct RunningBanner: View {
                         Circle().fill(Theme.emerald).frame(width: 6, height: 6)
                     }
                     Text(running.pending ? "Syncing..." : "Currently tracking")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.scaled(13, weight: .medium))
                         .foregroundStyle(Theme.mutedForeground)
                 }
                 HStack(spacing: 8) {
-                    Text(task?.name ?? "…").font(.system(size: 18, weight: .semibold)).lineLimit(1)
+                    Text(task?.name ?? "…").font(.scaled(18, weight: .semibold)).lineLimit(1)
                     if let g = task?.taskGroup { GroupPill(name: g.name, hex: g.accentHex) }
                 }
                 Button(action: onFix) {
@@ -106,7 +106,7 @@ struct RunningBanner: View {
                 .accessibilityLabel("Elapsed time. Fix this session")
                 .accessibilityIdentifier("runningClock")
                 Text("since \(clock(running.startTime)) · tap the clock to fix")
-                    .font(.system(size: 12)).foregroundStyle(Theme.mutedForeground)
+                    .font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
             }
             Spacer(minLength: 0)
             Button { model.stop() } label: {
@@ -194,7 +194,7 @@ struct TaskCard: View {
         NavigationLink(value: Route.task(task.id)) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(task.name).font(.system(size: 16, weight: .semibold)).lineLimit(1).foregroundStyle(Theme.foreground)
+                    Text(task.name).font(.scaled(16, weight: .semibold)).lineLimit(1).foregroundStyle(Theme.foreground)
                     Spacer(minLength: 4)
                     if let g = task.taskGroup { GroupPill(name: g.name, hex: g.accentHex) }
                 }
@@ -207,7 +207,7 @@ struct TaskCard: View {
                         Text("Total: \(Fmt.durationWords(task.totalMs))")
                     }
                 }
-                .font(.system(size: 14)).foregroundStyle(Theme.mutedForeground).tabular()
+                .font(.scaled(14)).foregroundStyle(Theme.mutedForeground).tabular()
                 HStack(spacing: 8) {
                     if isRunning {
                         Button { model.stop() } label: {

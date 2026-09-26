@@ -65,6 +65,17 @@
                ReferencedContainer = "container:Trackify.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "0242F71A3AB025AF3D7C059B"
+               BuildableName = "TrackifyRenderTests.xctest"
+               BlueprintName = "TrackifyRenderTests"
+               ReferencedContainer = "container:Trackify.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>

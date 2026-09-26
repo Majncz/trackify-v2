@@ -100,17 +100,17 @@ struct StatsView: View {
                     DatePicker("From", selection: $customFrom, displayedComponents: .date)
                     DatePicker("To", selection: $customTo, in: customFrom..., displayedComponents: .date)
                 }
-                .font(.system(size: 14))
+                .font(.scaled(14))
             }
-            Text(label).font(.system(size: 13)).foregroundStyle(Theme.mutedForeground)
+            Text(label).font(.scaled(13)).foregroundStyle(Theme.mutedForeground)
         }
     }
 
     private func headline(_ title: String, _ value: String, _ caption: String?) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.mutedForeground)
-            Text(value).font(.system(size: 26, weight: .bold)).tabular().lineLimit(1).minimumScaleFactor(0.7)
-            if let caption { Text(caption).font(.system(size: 12)).foregroundStyle(Theme.mutedForeground) }
+            Text(title).font(.scaled(14, weight: .medium)).foregroundStyle(Theme.mutedForeground)
+            Text(value).font(.scaled(26, weight: .bold)).tabular().lineLimit(1).minimumScaleFactor(0.7)
+            if let caption { Text(caption).font(.scaled(12)).foregroundStyle(Theme.mutedForeground) }
         }
         .card()
     }
@@ -130,7 +130,7 @@ struct BreakdownChartCard: View {
             + [Series(id: Analytics.otherKey, name: "Other", hex: Accent.otherHex, alpha: 0.72)]
         let hasOther = rows.contains { ($0.slices[Analytics.otherKey] ?? 0) > 0 }
         VStack(alignment: .leading, spacing: 12) {
-            Text("Daily breakdown").font(.system(size: 14, weight: .medium))
+            Text("Daily breakdown").font(.scaled(14, weight: .medium))
             Chart {
                 ForEach(rows) { row in
                     ForEach(series) { s in
@@ -147,12 +147,12 @@ struct BreakdownChartCard: View {
             .chartYAxis {
                 AxisMarks(position: .leading) { v in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 3])).foregroundStyle(Theme.border)
-                    AxisValueLabel { if let h = v.as(Double.self) { Text("\(Int(h))h").font(.system(size: 11)) } }
+                    AxisValueLabel { if let h = v.as(Double.self) { Text("\(Int(h))h").font(.scaled(11)) } }
                 }
             }
             .chartXAxis {
                 AxisMarks(values: .automatic(desiredCount: 7)) { _ in
-                    AxisValueLabel().font(.system(size: 11))
+                    AxisValueLabel().font(.scaled(11))
                 }
             }
             .frame(height: 208)
@@ -178,13 +178,13 @@ struct BreakdownDetail: View {
         }.sorted { $0.1 > $1.1 }
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(row.detail).font(.system(size: 14, weight: .semibold))
-                Text(row.numeric).font(.system(size: 12)).foregroundStyle(Theme.mutedForeground)
-                Text("Day total · \(Fmt.fmtMs(row.totalMs))").font(.system(size: 12, weight: .medium)).tabular()
+                Text(row.detail).font(.scaled(14, weight: .semibold))
+                Text(row.numeric).font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
+                Text("Day total · \(Fmt.fmtMs(row.totalMs))").font(.scaled(12, weight: .medium)).tabular()
                 ForEach(items, id: \.0.id) { s, v in
                     HStack(spacing: 6) {
                         RoundedRectangle(cornerRadius: 2).fill(Color(hex: s.hex)).frame(width: 8, height: 8)
-                        Text("\(s.name) — \(pct(v))% · \(Fmt.fmtMs(v))").font(.system(size: 12)).tabular()
+                        Text("\(s.name) — \(pct(v))% · \(Fmt.fmtMs(v))").font(.scaled(12)).tabular()
                     }
                 }
             }
@@ -210,14 +210,14 @@ struct TopTasksCard: View {
     let total: Int64
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Top tasks").font(.system(size: 14, weight: .medium))
+            Text("Top tasks").font(.scaled(14, weight: .medium))
             ForEach(Array(top.enumerated()), id: \.element.id) { i, t in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text("\(i + 1)").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.mutedForeground).frame(width: 16, alignment: .leading)
-                        Text(t.task.name).font(.system(size: 14, weight: .medium)).lineLimit(1)
+                        Text("\(i + 1)").font(.scaled(13, weight: .semibold)).foregroundStyle(Theme.mutedForeground).frame(width: 16, alignment: .leading)
+                        Text(t.task.name).font(.scaled(14, weight: .medium)).lineLimit(1)
                         Spacer()
-                        Text(Fmt.fmtMs(t.ms)).font(.system(size: 14)).tabular()
+                        Text(Fmt.fmtMs(t.ms)).font(.scaled(14)).tabular()
                     }
                     GeometryReader { g in
                         ZStack(alignment: .leading) {
@@ -265,13 +265,13 @@ struct SavedGroupsCard: View {
                     VStack(spacing: 8) {
                         ForEach(withTime.sorted { $0.ms > $1.ms }) { g in
                             HStack(spacing: 10) {
-                                Text(g.group.name).font(.system(size: 13, weight: .medium)).lineLimit(1).frame(width: 110, alignment: .leading)
+                                Text(g.group.name).font(.scaled(13, weight: .medium)).lineLimit(1).frame(width: 110, alignment: .leading)
                                 GeometryReader { geo in
                                     RoundedRectangle(cornerRadius: 3).fill(Color(hex: g.group.accentHex, opacity: 0.85))
                                         .frame(width: max(4, geo.size.width * CGFloat(Double(g.ms) / Double(maxMs))))
                                 }
                                 .frame(height: 10)
-                                Text(Fmt.fmtMs(g.ms)).font(.system(size: 13, weight: .medium)).tabular().frame(width: 72, alignment: .trailing)
+                                Text(Fmt.fmtMs(g.ms)).font(.scaled(13, weight: .medium)).tabular().frame(width: 72, alignment: .trailing)
                             }
                         }
                     }
@@ -280,7 +280,7 @@ struct SavedGroupsCard: View {
                 if !model.groupsLoaded {
                     Skeleton(height: 60)
                 } else if data.isEmpty {
-                    Text("No saved groups yet.").font(.system(size: 14)).foregroundStyle(Theme.mutedForeground)
+                    Text("No saved groups yet.").font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
                 } else {
                     VStack(spacing: 0) {
                         HStack {
@@ -288,7 +288,7 @@ struct SavedGroupsCard: View {
                             Text("Total").frame(width: 72, alignment: .trailing)
                             Color.clear.frame(width: 100)
                         }
-                        .font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.mutedForeground)
+                        .font(.scaled(12, weight: .medium)).foregroundStyle(Theme.mutedForeground)
                         .padding(.vertical, 8)
                         Hairline()
                         ForEach(data) { g in
@@ -312,11 +312,11 @@ struct SavedGroupsCard: View {
             HStack(alignment: .top) {
                 HStack(spacing: 8) {
                     Circle().fill(Color(hex: g.group.accentHex)).frame(width: 9, height: 9)
-                    Text(g.group.name).font(.system(size: 14, weight: .semibold)).lineLimit(2)
-                    Text("\(g.group.taskIds.count)").font(.system(size: 12)).foregroundStyle(Theme.mutedForeground)
+                    Text(g.group.name).font(.scaled(14, weight: .semibold)).lineLimit(2)
+                    Text("\(g.group.taskIds.count)").font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Text(Fmt.fmtMs(g.ms)).font(.system(size: 14, weight: .semibold)).tabular().frame(width: 72, alignment: .trailing)
+                Text(Fmt.fmtMs(g.ms)).font(.scaled(14, weight: .semibold)).tabular().frame(width: 72, alignment: .trailing)
                 HStack(spacing: 0) {
                     CopyButton(text: { Analytics.groupCopyText(g) })
                     Button { onEdit(g.group) } label: { Image(systemName: "pencil").frame(width: 32, height: 32).contentShape(Rectangle()) }
@@ -334,7 +334,7 @@ struct SavedGroupsCard: View {
             ForEach(Array(g.members.enumerated()), id: \.element.id) { i, m in
                 HStack(spacing: 8) {
                     (Text(m.task.name) + Text(m.task.hidden ? " (hidden)" : "").foregroundColor(Theme.mutedForeground))
-                        .font(.system(size: 13, weight: .medium)).lineLimit(1)
+                        .font(.scaled(13, weight: .medium)).lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
@@ -344,15 +344,15 @@ struct SavedGroupsCard: View {
                         }
                     }
                     .frame(width: 70, height: 5)
-                    Text(Fmt.fmtMs(m.ms)).font(.system(size: 12)).tabular().foregroundStyle(Theme.mutedForeground).frame(width: 68, alignment: .trailing)
+                    Text(Fmt.fmtMs(m.ms)).font(.scaled(12)).tabular().foregroundStyle(Theme.mutedForeground).frame(width: 68, alignment: .trailing)
                 }
                 .padding(.leading, 17)
             }
             ForEach(g.orphanIds, id: \.self) { id in
-                Text("Removed · \(id.prefix(8))…").font(.system(size: 12)).foregroundStyle(Color(light: 0xB45309, dark: 0xFBBF24)).padding(.leading, 17)
+                Text("Removed · \(id.prefix(8))…").font(.scaled(12)).foregroundStyle(Color(light: 0xB45309, dark: 0xFBBF24)).padding(.leading, 17)
             }
             if g.ms == 0 {
-                Text("No tracked time").font(.system(size: 11)).foregroundStyle(Theme.mutedForeground).padding(.leading, 17)
+                Text("No tracked time").font(.scaled(11)).foregroundStyle(Theme.mutedForeground).padding(.leading, 17)
             }
         }
         .padding(.vertical, 10)

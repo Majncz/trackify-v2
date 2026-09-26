@@ -29,7 +29,7 @@ struct TaskDetailView: View {
                 .frame(maxWidth: .infinity)
             } else {
                 VStack(spacing: 12) {
-                    Text("Task not found").font(.system(size: 18, weight: .semibold))
+                    Text("Task not found").font(.scaled(18, weight: .semibold))
                     Button("Back") { dismiss() }.buttonStyle(.t(.outline))
                 }
                 .padding(.top, 80)
@@ -62,7 +62,7 @@ struct TaskDetailView: View {
                 if editingName {
                     TextField("Task name", text: $nameDraft)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 22, weight: .bold))
+                        .font(.scaled(22, weight: .bold))
                         .focused($nameFocused)
                         .onSubmit { commitRename(task) }
                         .onChange(of: nameFocused) { _, f in if !f && editingName { commitRename(task) } }
@@ -76,7 +76,7 @@ struct TaskDetailView: View {
                         editingName = true
                         nameFocused = true
                     } label: {
-                        Text(task.name).font(.system(size: 22, weight: .bold)).multilineTextAlignment(.leading)
+                        Text(task.name).font(.scaled(22, weight: .bold)).multilineTextAlignment(.leading)
                             .foregroundStyle(Theme.foreground)
                     }
                     .buttonStyle(.plain)
@@ -123,29 +123,29 @@ struct TaskDetailView: View {
         return VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 32) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Total Time").font(.system(size: 14)).foregroundStyle(Theme.mutedForeground)
+                    Text("Total Time").font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
                     TimelineView(.periodic(from: .now, by: 1)) { ctx in
                         let live = model.running?.taskId == task.id ? max(0, ctx.date.ms - (model.running?.startTime ?? 0)) : 0
-                        Text(Fmt.durationWords(task.totalMs + live)).font(.system(size: 24, weight: .bold)).tabular()
+                        Text(Fmt.durationWords(task.totalMs + live)).font(.scaled(24, weight: .bold)).tabular()
                     }
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Tracking Sessions").font(.system(size: 14)).foregroundStyle(Theme.mutedForeground)
-                    Text("\(task.events.count)").font(.system(size: 24, weight: .bold)).tabular()
+                    Text("Tracking Sessions").font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
+                    Text("\(task.events.count)").font(.scaled(24, weight: .bold)).tabular()
                 }
             }
             Hairline()
             Text("Time Entries").font(.cardTitle)
             if days.isEmpty {
-                Text("No time entries yet.").font(.system(size: 14)).foregroundStyle(Theme.mutedForeground)
+                Text("No time entries yet.").font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
             }
             ForEach(shown, id: \.key) { day in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text(dayLabel(day.key)).font(.system(size: 14, weight: .semibold))
+                        Text(dayLabel(day.key)).font(.scaled(14, weight: .semibold))
                         Spacer()
                         Text("\(Fmt.durationWords(day.events.reduce(0) { $0 + $1.durationMs })) total")
-                            .font(.system(size: 13)).foregroundStyle(Theme.mutedForeground).tabular()
+                            .font(.scaled(13)).foregroundStyle(Theme.mutedForeground).tabular()
                     }
                     ForEach(day.events) { e in
                         entryRow(e)
@@ -165,9 +165,9 @@ struct TaskDetailView: View {
     private func entryRow(_ e: TimeEvent) -> some View {
         let calc = DayCalc.current
         return HStack {
-            Text("\(calc.format(e.from, "h:mm a")) → \(calc.format(e.to, "h:mm a"))").font(.system(size: 14)).tabular()
+            Text("\(calc.format(e.from, "h:mm a")) → \(calc.format(e.to, "h:mm a"))").font(.scaled(14)).tabular()
             if e.paymentRecordId != nil {
-                Text("Paid").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.mutedForeground)
+                Text("Paid").font(.scaled(11, weight: .semibold)).foregroundStyle(Theme.mutedForeground)
             }
             Spacer()
             Badge(text: Fmt.durationWords(e.durationMs), kind: .secondary, mono: true)
@@ -175,7 +175,7 @@ struct TaskDetailView: View {
                 Button { editing = e } label: { Label("Edit", systemImage: "pencil") }
                 Button(role: .destructive) { Task { try? await model.deleteEvent(e.id) } } label: { Label("Delete", systemImage: "trash") }
             } label: {
-                Image(systemName: "ellipsis").font(.system(size: 14)).foregroundStyle(Theme.mutedForeground)
+                Image(systemName: "ellipsis").font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
                     .frame(width: 32, height: 32).contentShape(Rectangle())
             }
             .menuStyle(.button)
@@ -221,7 +221,7 @@ struct EditEntrySheet: View {
                 DatePicker("Until", selection: $to, in: from...Date())
                 if event.paymentRecordId != nil {
                     Text("This session is already paid. Changing it won't change the recorded payment.")
-                        .font(.system(size: 12)).foregroundStyle(Theme.mutedForeground)
+                        .font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
                 }
                 InlineError(text: error)
                 HStack(spacing: 8) {
@@ -287,7 +287,7 @@ struct TaskBillingPanel: View {
             if rows == nil && loaded == nil && !loadFailed {
                 VStack(alignment: .leading, spacing: 10) { Skeleton(height: 20, width: 160); Skeleton(height: 40); Skeleton(height: 80) }.card()
             } else if loadFailed && rows == nil {
-                Text("Could not load billing settings for this task.").font(.system(size: 14)).foregroundStyle(Theme.destructive).card()
+                Text("Could not load billing settings for this task.").font(.scaled(14)).foregroundStyle(Theme.destructive).card()
             } else {
                 panel
             }
@@ -307,12 +307,12 @@ struct TaskBillingPanel: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Label("Billing & rates", systemImage: "dollarsign.circle").font(.cardTitle)
                         Text("Same settings as Billing → Rates. Changes apply to unpaid sessions on the Sessions tab.")
-                            .font(.system(size: 13)).foregroundStyle(Theme.mutedForeground)
+                            .font(.scaled(13)).foregroundStyle(Theme.mutedForeground)
                     }
                     Spacer()
                 }
             } else {
-                Text(task.name).font(.system(size: 15, weight: .semibold))
+                Text(task.name).font(.scaled(15, weight: .semibold))
             }
             HStack(spacing: 6) {
                 if let g = task.taskGroup { AccentBadge(text: g.name, hex: g.accentHex) } else { Badge(text: "Ungrouped") }
@@ -320,7 +320,7 @@ struct TaskBillingPanel: View {
             }
             if compact {
                 Text("Tracked \(Fmt.durationMinutes(Double(minutes))) · Est. \(billing != nil && estimate != nil ? Money.format(estimate!, billing!.currency) : "—") at current rate")
-                    .font(.system(size: 13)).foregroundStyle(Theme.mutedForeground).tabular()
+                    .font(.scaled(13)).foregroundStyle(Theme.mutedForeground).tabular()
             } else {
                 HStack(spacing: 24) {
                     stat("Tracked time", Fmt.durationMinutes(Double(minutes)))
@@ -357,7 +357,7 @@ struct TaskBillingPanel: View {
                     .onChange(of: b.hourlyRate) { _, r in rateText = Self.rateString(r) }
                 } else {
                     Text("Add an hourly rate to include this task in Billing sessions and payment history.")
-                        .font(.system(size: 13)).foregroundStyle(Theme.mutedForeground)
+                        .font(.scaled(13)).foregroundStyle(Theme.mutedForeground)
                     HStack(alignment: .bottom, spacing: 10) {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("HOURLY RATE").font(.label11).tracking(0.6).foregroundStyle(Theme.mutedForeground)
@@ -394,8 +394,8 @@ struct TaskBillingPanel: View {
 
     private func stat(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.system(size: 14)).foregroundStyle(Theme.mutedForeground)
-            Text(value).font(.system(size: 18, weight: .semibold)).tabular()
+            Text(label).font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
+            Text(value).font(.scaled(18, weight: .semibold)).tabular()
         }
     }
 
@@ -461,9 +461,9 @@ struct CurrencyPicker: View {
             HStack {
                 Text(Money.options(including: code).first { $0.code == code }?.label ?? code).lineLimit(1)
                 Spacer(minLength: 6)
-                Image(systemName: "chevron.up.chevron.down").font(.system(size: 11)).foregroundStyle(Theme.mutedForeground)
+                Image(systemName: "chevron.up.chevron.down").font(.scaled(11)).foregroundStyle(Theme.mutedForeground)
             }
-            .font(.system(size: 14))
+            .font(.scaled(14))
             .foregroundStyle(Theme.foreground)
             .padding(.horizontal, 12)
             .frame(minWidth: 150, minHeight: 40)

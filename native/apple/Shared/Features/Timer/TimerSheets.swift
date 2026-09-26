@@ -10,10 +10,10 @@ struct SheetScaffold<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
-                Text(title).font(.system(size: 18, weight: .semibold)).lineLimit(2)
+                Text(title).font(.scaled(18, weight: .semibold)).lineLimit(2)
                 Spacer()
                 Button(action: onClose) {
-                    Image(systemName: "xmark").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.mutedForeground)
+                    Image(systemName: "xmark").font(.scaled(13, weight: .semibold)).foregroundStyle(Theme.mutedForeground)
                         .frame(width: 32, height: 32).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -66,7 +66,7 @@ struct FixSessionSheet: View {
                     Text(Fmt.durationWords(duration)).font(.dialogDuration).tabular().tracking(-0.5)
                         .contentTransition(.numericText())
                     Text(stillRunning ? "Started \(clock(slider.start)) · still running" : "Started \(clock(slider.start)) · stopped \(clock(slider.end))")
-                        .font(.system(size: 14)).foregroundStyle(Theme.mutedForeground)
+                        .font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
                 }
                 .frame(maxWidth: .infinity)
 
@@ -158,7 +158,7 @@ struct LogPastSheet: View {
                 VStack(spacing: 4) {
                     Text(Fmt.durationWords(duration)).font(.dialogDuration).tabular().tracking(-0.5)
                     Text("\(clock(slider.start)) → \(openedAt - slider.end < 90_000 ? "just now" : clock(slider.end))")
-                        .font(.system(size: 14)).foregroundStyle(Theme.mutedForeground)
+                        .font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
                 }
                 .frame(maxWidth: .infinity)
 

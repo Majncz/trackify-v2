@@ -26,7 +26,7 @@ struct YearlyCalendarView: View {
                 VStack(alignment: .trailing, spacing: gap) {
                     Color.clear.frame(height: 14)
                     ForEach(0..<7, id: \.self) { r in
-                        Text(r % 2 == 0 ? dayLabels[r] : "").font(.system(size: 9)).foregroundStyle(Theme.mutedForeground)
+                        Text(r % 2 == 0 ? dayLabels[r] : "").font(.scaled(9)).foregroundStyle(Theme.mutedForeground)
                             .frame(height: cell)
                     }
                 }
@@ -36,7 +36,7 @@ struct YearlyCalendarView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             ZStack(alignment: .topLeading) {
                                 ForEach(months, id: \.index) { m in
-                                    Text(m.label).font(.system(size: 9)).foregroundStyle(Theme.mutedForeground)
+                                    Text(m.label).font(.scaled(9)).foregroundStyle(Theme.mutedForeground)
                                         .fixedSize()
                                         .offset(x: CGFloat(m.index) * colW)
                                 }
@@ -90,9 +90,9 @@ struct YearlyCalendarView: View {
             }
             HStack(spacing: 5) {
                 Spacer()
-                Text("Less").font(.system(size: 10)).foregroundStyle(Theme.mutedForeground)
+                Text("Less").font(.scaled(10)).foregroundStyle(Theme.mutedForeground)
                 ForEach(0..<5, id: \.self) { i in RoundedRectangle(cornerRadius: 2).fill(Theme.heat(i)).frame(width: 10, height: 10) }
-                Text("More").font(.system(size: 10)).foregroundStyle(Theme.mutedForeground)
+                Text("More").font(.scaled(10)).foregroundStyle(Theme.mutedForeground)
             }
         }
     }
@@ -100,16 +100,16 @@ struct YearlyCalendarView: View {
     private func defaultDetail(day: Date, minutes: Double, taskMinutes: [String: Double]) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(DayCalc.current.format(day, "EEEE, MMMM d, yyyy")).font(.system(size: 14, weight: .semibold))
-                Text("Total for this calendar day").font(.system(size: 12)).foregroundStyle(Theme.mutedForeground)
+                Text(DayCalc.current.format(day, "EEEE, MMMM d, yyyy")).font(.scaled(14, weight: .semibold))
+                Text("Total for this calendar day").font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
             }
             Hairline()
-            Text("\(Fmt.heatMinutes(minutes)) total").font(.system(size: 12, weight: .medium))
+            Text("\(Fmt.heatMinutes(minutes)) total").font(.scaled(12, weight: .medium))
             ForEach(taskMinutes.sorted { $0.value > $1.value }, id: \.key) { name, mins in
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     RoundedRectangle(cornerRadius: 2).fill(Color(hex: taskColors[name] ?? Accent.otherHex)).frame(width: 8, height: 8)
                     (Text(name).fontWeight(.medium) + Text(" · \(Fmt.heatMinutes(mins))").foregroundColor(Theme.mutedForeground))
-                        .font(.system(size: 12))
+                        .font(.scaled(12))
                 }
             }
         }
@@ -142,7 +142,7 @@ struct WeeklyHeatGridView: View {
             HStack(spacing: 0) {
                 Color.clear.frame(width: labelW + gap, height: 10)
                 ForEach(0..<24, id: \.self) { h in
-                    Text(h % 6 == 0 ? "\(h)" : "").font(.system(size: 9)).foregroundStyle(Theme.mutedForeground)
+                    Text(h % 6 == 0 ? "\(h)" : "").font(.scaled(9)).foregroundStyle(Theme.mutedForeground)
                         .frame(width: hourW + (h < 23 ? gap : 0), alignment: .leading)
                 }
             }
@@ -175,7 +175,7 @@ struct WeeklyHeatGridView: View {
         let segments = WeeklyHeatGrid.segments(hourCells: cells, squaresPerHour: sph)
         let total = 24 * sph
         return HStack(spacing: gap) {
-            Text(DayCalc.current.format(day, "MMM d")).font(.system(size: 11)).tabular().foregroundStyle(Theme.mutedForeground)
+            Text(DayCalc.current.format(day, "MMM d")).font(.scaled(11)).tabular().foregroundStyle(Theme.mutedForeground)
                 .lineLimit(1).frame(width: labelW - 6, alignment: .trailing).padding(.trailing, 6)
             Canvas { ctx, _ in
                 for flat in 0..<total {
@@ -222,21 +222,21 @@ struct WeeklyHeatGridView: View {
         let gapMin = Double(sel.segment.bridgedEmptySlots) * (60.0 / Double(sph))
         return HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(calc.format(day, "EEEE, MMMM d, yyyy")).font(.system(size: 14, weight: .semibold))
-                Text(calc.format(day, "d.M.yyyy")).font(.system(size: 12)).foregroundStyle(Theme.mutedForeground)
-                Text(timeLine).font(.system(size: 12, weight: .medium)).tabular()
+                Text(calc.format(day, "EEEE, MMMM d, yyyy")).font(.scaled(14, weight: .semibold))
+                Text(calc.format(day, "d.M.yyyy")).font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
+                Text(timeLine).font(.scaled(12, weight: .medium)).tabular()
                 Hairline().padding(.vertical, 2)
                 HStack(alignment: .top, spacing: 8) {
                     RoundedRectangle(cornerRadius: 2).fill(Color(hex: taskColors[sel.segment.taskName] ?? Accent.otherHex))
                         .frame(width: 10, height: 10).padding(.top, 4)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(sel.segment.taskName).font(.system(size: 14, weight: .medium)).lineLimit(2)
-                        Text(Fmt.heatMinutes(mins)).font(.system(size: 16, weight: .semibold)).tabular()
+                        Text(sel.segment.taskName).font(.scaled(14, weight: .medium)).lineLimit(2)
+                        Text(Fmt.heatMinutes(mins)).font(.scaled(16, weight: .semibold)).tabular()
                     }
                 }
                 if sel.segment.bridgedEmptySlots > 0 {
                     Text("Short gap in this streak: \(Fmt.heatMinutes(gapMin)) with no logged time")
-                        .font(.system(size: 12)).foregroundStyle(Theme.mutedForeground).padding(.leading, 18)
+                        .font(.scaled(12)).foregroundStyle(Theme.mutedForeground).padding(.leading, 18)
                 }
             }
             Spacer()
@@ -266,7 +266,7 @@ struct TimeSpentCard: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Time Spent").font(.cardTitle)
-                    Text(subtitle).font(.system(size: 12)).foregroundStyle(Theme.mutedForeground)
+                    Text(subtitle).font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
                 }
                 Spacer()
                 Segmented(items: [(Mode.weekly, "Weekly"), (Mode.yearly, "Yearly")], selection: $mode, compact: true)

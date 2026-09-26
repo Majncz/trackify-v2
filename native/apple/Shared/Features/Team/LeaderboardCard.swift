@@ -43,7 +43,7 @@ struct LeaderboardCard: View {
                 VStack(spacing: 8) { Skeleton(height: 20); Skeleton(height: 20); Skeleton(height: 20) }
             } else if rows.isEmpty {
                 Text(loadError ? "Couldn't load the leaderboard." : "Nobody logged time that \(Leaderboard.noun(range)).")
-                    .font(.system(size: 14)).foregroundStyle(Theme.mutedForeground)
+                    .font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
             } else {
                 VStack(spacing: 6) {
                     ForEach(Array(rows.enumerated()), id: \.element.id) { i, row in
@@ -73,7 +73,7 @@ struct LeaderboardCard: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(Leaderboard.title(range, isCurrent: isCurrent)).font(.cardTitle)
             Text(Leaderboard.subtitle(range, isCurrent: isCurrent, anyoneLive: anyoneLive))
-                .font(.system(size: 12)).foregroundStyle(Theme.mutedForeground)
+                .font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
         }
     }
 
@@ -87,7 +87,7 @@ struct LeaderboardCard: View {
                     pickedDate = calc.date(fromKey: day) ?? Date()
                     pickerOpen = true
                 } label: {
-                    Image(systemName: "calendar").font(.system(size: 13)).foregroundStyle(Theme.mutedForeground)
+                    Image(systemName: "calendar").font(.scaled(13)).foregroundStyle(Theme.mutedForeground)
                         .frame(width: 32, height: 30).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -98,7 +98,7 @@ struct LeaderboardCard: View {
                 HStack(spacing: 0) {
                     ForEach(LeaderboardRange.allCases, id: \.self) { r in
                         Button { range = r } label: {
-                            Text(r.label).font(.system(size: 12, weight: .medium))
+                            Text(r.label).font(.scaled(12, weight: .medium))
                                 .foregroundStyle(range == r ? Theme.foreground : Theme.mutedForeground)
                                 .padding(.horizontal, 8).frame(height: 26)
                                 .background(range == r ? Theme.muted : .clear, in: RoundedRectangle(cornerRadius: 4))
@@ -123,7 +123,7 @@ struct LeaderboardCard: View {
 
     private var datePicker: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(Leaderboard.periodLabel(range, day: day, isCurrent: isCurrent)).font(.system(size: 13, weight: .semibold))
+            Text(Leaderboard.periodLabel(range, day: day, isCurrent: isCurrent)).font(.scaled(13, weight: .semibold))
             DatePicker("Day", selection: $pickedDate, in: (calc.date(fromKey: "2018-01-01") ?? Date.distantPast)...Date(), displayedComponents: .date)
                 .datePickerStyle(.graphical)
                 .labelsHidden()
@@ -151,13 +151,13 @@ struct LeaderboardCard: View {
             Hairline().padding(.bottom, 12)
             HStack(alignment: .bottom) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(Leaderboard.yourLabel(range, isCurrent: isCurrent)).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.mutedForeground)
-                    Text(Fmt.durationWords(yourTotal)).font(.system(size: 18, weight: .bold)).tabular()
+                    Text(Leaderboard.yourLabel(range, isCurrent: isCurrent)).font(.scaled(12, weight: .medium)).foregroundStyle(Theme.mutedForeground)
+                    Text(Fmt.durationWords(yourTotal)).font(.scaled(18, weight: .bold)).tabular()
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text("All time").font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.mutedForeground)
-                    Text(model.stats == nil ? "—" : Fmt.durationWords(allTime)).font(.system(size: 18, weight: .bold)).tabular()
+                    Text("All time").font(.scaled(12, weight: .medium)).foregroundStyle(Theme.mutedForeground)
+                    Text(model.stats == nil ? "—" : Fmt.durationWords(allTime)).font(.scaled(18, weight: .bold)).tabular()
                 }
             }
         }
@@ -187,7 +187,7 @@ struct LeaderboardRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Text("\(index + 1)")
-                .font(.system(size: 14, weight: .bold)).tabular()
+                .font(.scaled(14, weight: .bold)).tabular()
                 .foregroundStyle(Theme.rank(index) ?? Theme.foreground)
                 .frame(width: 20, alignment: .leading)
             VStack(alignment: .leading, spacing: 1) {
@@ -199,17 +199,17 @@ struct LeaderboardRow: View {
                                 .animation(.easeOut(duration: 1).repeatForever(autoreverses: false), value: ping)
                             Circle().fill(Theme.emerald).frame(width: 8, height: 8)
                         }
-                        .onAppear { ping = true }
+                        .onAppear { ping = Motion.ambient }
                     }
-                    Text(row.entry.name + (row.isYou ? " · you" : "")).font(.system(size: 14, weight: .medium)).lineLimit(1)
+                    Text(row.entry.name + (row.isYou ? " · you" : "")).font(.scaled(14, weight: .medium)).lineLimit(1)
                 }
                 if row.isLive, let t = row.entry.taskName {
                     Text("Live · \(t)" + (row.sessionMs > 0 ? " · \(Fmt.durationWords(row.sessionMs)) this stretch" : ""))
-                        .font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.emeraldText).lineLimit(1)
+                        .font(.scaled(12, weight: .medium)).foregroundStyle(Theme.emeraldText).lineLimit(1)
                 }
             }
             Spacer(minLength: 8)
-            Text(Fmt.durationWords(row.totalMs)).font(.system(size: 14, weight: .semibold)).tabular()
+            Text(Fmt.durationWords(row.totalMs)).font(.scaled(14, weight: .semibold)).tabular()
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)

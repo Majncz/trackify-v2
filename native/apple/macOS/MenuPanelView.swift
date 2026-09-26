@@ -76,7 +76,7 @@ struct MenuPanelView: View {
             if model.phase == .signedIn {
                 TimelineView(.periodic(from: .now, by: 30)) { ctx in
                     Text("Today \(Fmt.durationWords(model.todayMs(now: ctx.date)))")
-                        .font(.system(size: 12, weight: .medium)).tabular().foregroundStyle(Theme.mutedForeground)
+                        .font(.scaled(12, weight: .medium)).tabular().foregroundStyle(Theme.mutedForeground)
                 }
             }
             Menu {
@@ -89,7 +89,7 @@ struct MenuPanelView: View {
                 }
                 Button("Quit Trackify") { NSApp.terminate(nil) }.keyboardShortcut("q")
             } label: {
-                Image(systemName: "ellipsis.circle").font(.system(size: 15)).foregroundStyle(Theme.mutedForeground)
+                Image(systemName: "ellipsis.circle").font(.scaled(15)).foregroundStyle(Theme.mutedForeground)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
@@ -104,7 +104,7 @@ struct MenuPanelView: View {
         VStack(spacing: 14) {
             Spacer()
             AppGlyph(size: 48)
-            Text("Sign in to start tracking").font(.system(size: 15, weight: .semibold))
+            Text("Sign in to start tracking").font(.scaled(15, weight: .semibold))
             Button("Open Trackify") { openDashboard(.home) }.buttonStyle(.t(.primary))
             Spacer()
         }
@@ -118,17 +118,17 @@ struct MenuPanelView: View {
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 AccentDot(hex: task?.accentHex ?? Accent.taskAccentHex(r.taskId))
-                Text(task?.name ?? "…").font(.system(size: 14, weight: .semibold)).lineLimit(1)
+                Text(task?.name ?? "…").font(.scaled(14, weight: .semibold)).lineLimit(1)
                 if let g = task?.taskGroup { GroupPill(name: g.name, hex: g.accentHex) }
                 Spacer(minLength: 0)
                 if r.pending {
-                    Text("Syncing…").font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.amber).pendingPulse(true)
+                    Text("Syncing…").font(.scaled(11, weight: .medium)).foregroundStyle(Theme.amber).pendingPulse(true)
                 }
             }
             HStack(alignment: .center) {
                 Button { fixing = r } label: {
                     TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                        Text(Fmt.duration(ctx.date.ms - r.startTime)).font(.system(size: 30, weight: .bold, design: .monospaced)).tabular()
+                        Text(Fmt.duration(ctx.date.ms - r.startTime)).font(.scaled(30, weight: .bold, design: .monospaced)).tabular()
                     }
                 }
                 .buttonStyle(.plain)
@@ -139,9 +139,9 @@ struct MenuPanelView: View {
                     .keyboardShortcut(".", modifiers: .command)
             }
             HStack {
-                Text("since \(clock(r.startTime))").font(.system(size: 12)).foregroundStyle(Theme.mutedForeground)
+                Text("since \(clock(r.startTime))").font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
                 Spacer()
-                Button("Fix…") { fixing = r }.buttonStyle(.plain).font(.system(size: 12, weight: .medium))
+                Button("Fix…") { fixing = r }.buttonStyle(.plain).font(.scaled(12, weight: .medium))
             }
         }
         .padding(12)
@@ -170,7 +170,7 @@ struct MenuPanelView: View {
                     .buttonStyle(.plain)
             }
         }
-        .font(.system(size: 14))
+        .font(.scaled(14))
         .padding(.horizontal, 10)
         .frame(height: 34)
         .background(Theme.muted.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
@@ -204,7 +204,7 @@ struct MenuPanelView: View {
             } else if rows.isEmpty {
                 let q = query.trimmingCharacters(in: .whitespaces)
                 if q.isEmpty {
-                    Text("No tasks yet. Type a name above to create one.").font(.system(size: 13)).foregroundStyle(Theme.mutedForeground)
+                    Text("No tasks yet. Type a name above to create one.").font(.scaled(13)).foregroundStyle(Theme.mutedForeground)
                         .padding(.vertical, 8)
                 } else {
                     Button { createAndStart(q) } label: {
@@ -214,7 +214,7 @@ struct MenuPanelView: View {
                             Spacer()
                             Text("↩").foregroundStyle(Theme.mutedForeground)
                         }
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.scaled(13, weight: .medium))
                         .padding(.horizontal, 10).frame(height: 34)
                         .background(Theme.muted.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
                         .contentShape(Rectangle())
@@ -236,11 +236,11 @@ struct MenuPanelView: View {
         return Button { model.toggle(t.id) } label: {
             HStack(spacing: 10) {
                 AccentDot(hex: t.accentHex)
-                Text(t.name).font(.system(size: 13, weight: running ? .semibold : .regular)).lineLimit(1)
+                Text(t.name).font(.scaled(13, weight: running ? .semibold : .regular)).lineLimit(1)
                 Spacer(minLength: 6)
                 if isHover || running {
                     Image(systemName: running ? "stop.fill" : "play.fill")
-                        .font(.system(size: 11))
+                        .font(.scaled(11))
                         .foregroundStyle(running ? Theme.destructive : Theme.foreground)
                         .frame(width: 22, height: 22)
                         .background(Theme.muted, in: Circle())
@@ -248,11 +248,11 @@ struct MenuPanelView: View {
                     TimelineView(.periodic(from: .now, by: 30)) { ctx in
                         let today = Analytics.todayMs(t, now: ctx.date)
                         Text("\(Fmt.durationWords(today)) / \(Fmt.durationWords(t.totalMs))")
-                            .font(.system(size: 11)).tabular().foregroundStyle(Theme.mutedForeground)
+                            .font(.scaled(11)).tabular().foregroundStyle(Theme.mutedForeground)
                     }
                 }
                 if index < 9 {
-                    Text("⌘\(index + 1)").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.mutedForeground.opacity(0.7))
+                    Text("⌘\(index + 1)").font(.scaled(10, design: .monospaced)).foregroundStyle(Theme.mutedForeground.opacity(0.7))
                         .frame(width: 22, alignment: .trailing)
                 }
             }
@@ -285,10 +285,10 @@ struct MenuPanelView: View {
                         ForEach(others, id: \.userId) { p in
                             HStack(spacing: 6) {
                                 Circle().fill(Theme.emerald).frame(width: 6, height: 6)
-                                Text(p.name).font(.system(size: 12, weight: .medium)).lineLimit(1)
-                                Text("· \(p.taskName)").font(.system(size: 12)).foregroundStyle(Theme.mutedForeground).lineLimit(1)
+                                Text(p.name).font(.scaled(12, weight: .medium)).lineLimit(1)
+                                Text("· \(p.taskName)").font(.scaled(12)).foregroundStyle(Theme.mutedForeground).lineLimit(1)
                                 Spacer()
-                                Text(Fmt.durationWords(max(0, ctx.date.ms - p.startTime))).font(.system(size: 11)).tabular().foregroundStyle(Theme.emeraldText)
+                                Text(Fmt.durationWords(max(0, ctx.date.ms - p.startTime))).font(.scaled(11)).tabular().foregroundStyle(Theme.emeraldText)
                             }
                         }
                     }

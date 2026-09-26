@@ -83,19 +83,36 @@ enum Theme {
     static let controlRadius: CGFloat = 8
 }
 
-// MARK: - Typography
+// MARK: - Typography (scales with Dynamic Type)
+
+/// Maps design sizes (web px) to Dynamic Type: body-relative factor, damped for display sizes so clocks don't explode.
+enum DynamicScale {
+    static func value(_ size: CGFloat) -> CGFloat {
+        #if os(iOS)
+        let factor = UIFontMetrics(forTextStyle: .body).scaledValue(for: 17) / 17
+        let capped = size >= 24 ? min(factor, 1.3) : min(factor, 1.9)
+        return (size * max(capped, 0.85)).rounded()
+        #else
+        return size
+        #endif
+    }
+}
 
 extension Font {
+    /// System font at a design size, scaled with the user's text size.
+    static func scaled(_ size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font {
+        .system(size: DynamicScale.value(size), weight: weight, design: design)
+    }
     /// Running clock (web: mono bold 36 px, tabular).
-    static let clock = Font.system(size: 36, weight: .bold, design: .monospaced)
-    static let dialogDuration = Font.system(size: 36, weight: .semibold, design: .monospaced)
-    static func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font { .system(size: size, weight: weight, design: .monospaced) }
-    static let pageTitle = Font.system(size: 24, weight: .bold)
-    static let cardTitle = Font.system(size: 16, weight: .semibold)
-    static let body14 = Font.system(size: 14)
-    static let caption12 = Font.system(size: 12)
-    static let label11 = Font.system(size: 11, weight: .medium)
-    static let pill10 = Font.system(size: 10, weight: .medium)
+    static var clock: Font { .scaled(36, weight: .bold, design: .monospaced) }
+    static var dialogDuration: Font { .scaled(36, weight: .semibold, design: .monospaced) }
+    static func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font { .scaled(size, weight: weight, design: .monospaced) }
+    static var pageTitle: Font { .scaled(24, weight: .bold) }
+    static var cardTitle: Font { .scaled(16, weight: .semibold) }
+    static var body14: Font { .scaled(14) }
+    static var caption12: Font { .scaled(12) }
+    static var label11: Font { .scaled(11, weight: .medium) }
+    static var pill10: Font { .scaled(10, weight: .medium) }
 }
 
 extension View {

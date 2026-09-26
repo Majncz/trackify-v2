@@ -60,7 +60,7 @@ struct RaceSection: View {
             if showTitle {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Visualizations").font(.cardTitle)
-                    Text("Play the hours back and watch the team race").font(.system(size: 12)).foregroundStyle(Theme.mutedForeground)
+                    Text("Play the hours back and watch the team race").font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
                 }
             }
             ChipRow(items: Race.Preset.allCases.map { ($0, $0.label) }, selection: $preset)
@@ -69,7 +69,7 @@ struct RaceSection: View {
                     DatePicker("From", selection: $customFrom, in: ...customTo, displayedComponents: .date)
                     DatePicker("To", selection: $customTo, in: customFrom...Date(), displayedComponents: .date)
                 }
-                .font(.system(size: 14))
+                .font(.scaled(14))
             }
             controls
             stage
@@ -105,7 +105,7 @@ struct RaceSection: View {
                         Image(systemName: "timer")
                         Text(Race.speeds.first { $0.ms == durationMs }?.label ?? "1 min")
                     }
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.scaled(13, weight: .medium))
                     .padding(.horizontal, 10).frame(height: 32)
                     .background(Theme.muted, in: RoundedRectangle(cornerRadius: 6))
                 }
@@ -123,9 +123,9 @@ struct RaceSection: View {
         if loading && data == nil {
             Skeleton(height: 320)
         } else if failed && data == nil {
-            Text("Couldn’t load the race. Try another range.").font(.system(size: 14)).foregroundStyle(Theme.mutedForeground)
+            Text("Couldn’t load the race. Try another range.").font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
         } else if let d = data, d.users.isEmpty || d.events.isEmpty {
-            Text("Nobody logged time in this range.").font(.system(size: 14)).foregroundStyle(Theme.mutedForeground)
+            Text("Nobody logged time in this range.").font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
         } else if let d = data {
             BarRaceStage(data: d, merged: merged, playhead: playhead)
         }
@@ -199,7 +199,7 @@ struct BarRaceStage: View {
         let clockDate = Date(ms: at)
         let calc = DayCalc.current
         VStack(alignment: .leading, spacing: 16) {
-            Text("HOURS WORKED").font(.system(size: 11, weight: .semibold)).tracking(2.2).foregroundStyle(Theme.stageMuted)
+            Text("HOURS WORKED").font(.scaled(11, weight: .semibold)).tracking(2.2).foregroundStyle(Theme.stageMuted)
             GeometryReader { g in
                 let nameW: CGFloat = g.size.width < 480 ? 76 : 160
                 let trackW = max(40, g.size.width - 28 - nameW - 16)
@@ -217,11 +217,11 @@ struct BarRaceStage: View {
             HStack {
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(calc.format(clockDate, "EEEE")).font(.system(size: 15, weight: .medium)).foregroundStyle(Theme.stageMuted)
-                    Text(calc.format(clockDate, "d MMM")).font(.system(size: 44, weight: .bold)).tabular().foregroundStyle(Theme.stageInk)
+                    Text(calc.format(clockDate, "EEEE")).font(.scaled(15, weight: .medium)).foregroundStyle(Theme.stageMuted)
+                    Text(calc.format(clockDate, "d MMM")).font(.scaled(44, weight: .bold)).tabular().foregroundStyle(Theme.stageInk)
                         .tracking(-1)
-                    Text(calc.format(clockDate, "HH:mm")).font(.system(size: 24, weight: .medium)).tabular().foregroundStyle(Theme.stageMuted)
-                    Text("TRACKIFY").font(.system(size: 10, weight: .semibold)).tracking(2.4).foregroundStyle(Theme.stageMuted).padding(.top, 4)
+                    Text(calc.format(clockDate, "HH:mm")).font(.scaled(24, weight: .medium)).tabular().foregroundStyle(Theme.stageMuted)
+                    Text("TRACKIFY").font(.scaled(10, weight: .semibold)).tracking(2.4).foregroundStyle(Theme.stageMuted).padding(.top, 4)
                 }
             }
         }
@@ -237,10 +237,10 @@ struct BarRaceStage: View {
         let pct = row.ms <= 0 ? 0 : max(0.03, Double(row.ms) / Double(maxMs) * 0.78)
         let barW = CGFloat(pct) * trackW
         return HStack(spacing: 8) {
-            Text("\(index + 1)").font(.system(size: 14, weight: .bold)).tabular()
+            Text("\(index + 1)").font(.scaled(14, weight: .bold)).tabular()
                 .foregroundStyle(Theme.rank(index) ?? Theme.stageMuted)
                 .frame(width: 20, alignment: .trailing)
-            Text(row.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.stageInk).lineLimit(1)
+            Text(row.name).font(.scaled(13, weight: .semibold)).foregroundStyle(Theme.stageInk).lineLimit(1)
                 .frame(width: nameW, alignment: .leading)
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 3).fill(Theme.stageTrack).frame(width: max(0, trackW - 72), height: 20)
@@ -249,14 +249,14 @@ struct BarRaceStage: View {
                     .shadow(color: color.opacity(0.5), radius: 9, y: 8)
                 if row.ms > 0 {
                     Text(Accent.initials(row.name))
-                        .font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                        .font(.scaled(11, weight: .bold)).foregroundStyle(.white)
                         .frame(width: 36, height: 36)
                         .background(color, in: RoundedRectangle(cornerRadius: 6))
                         .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.white, lineWidth: 3))
                         .shadow(color: .black.opacity(0.15), radius: 3, y: 2)
                         .offset(x: barW - 18)
                 }
-                Text(Fmt.raceDuration(row.ms)).font(.system(size: 16, weight: .semibold)).tabular().foregroundStyle(Theme.stageInk)
+                Text(Fmt.raceDuration(row.ms)).font(.scaled(16, weight: .semibold)).tabular().foregroundStyle(Theme.stageInk)
                     .fixedSize()
                     .offset(x: barW + (row.ms > 0 ? 26 : 4))
             }

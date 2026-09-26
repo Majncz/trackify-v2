@@ -57,7 +57,7 @@ run_ios() { # name device appearance orientation contentSize testFilter
   TEST_RUNNER_SHOT_CONTENT_SIZE="$size" TEST_RUNNER_TRACKIFY_SERVER="$SERVER" \
     xcodebuild test-without-building -xctestrun "$XCTESTRUN" -destination "id=$udid" \
       -only-testing:"$only" -resultBundlePath "$OUT/xcresult/$name.xcresult" \
-      -test-timeouts-enabled YES -maximum-test-execution-time-allowance 900 \
+      -test-timeouts-enabled YES -maximum-test-execution-time-allowance 600 \
       > "$OUT/logs/ios-$name.log" 2>&1 || { echo "!! $name tests failed"; FAILS=$((FAILS+1)); grep -E "error:|failed|XCTAssert" "$OUT/logs/ios-$name.log" | head -20; }
   xcrun simctl shutdown "$udid" >/dev/null 2>&1
 }
@@ -69,8 +69,10 @@ if [ -n "$XCTESTRUN" ]; then
     quick)
       run_ios iphone17pro-light "iPhone 17 Pro" light portrait "" "$WALK"
       run_ios ipad13-landscape "iPad Pro 13-inch (M5)" light landscape "" "$WALK/test02Walk"
+      run_ios render "iPhone 17 Pro" light portrait "" "TrackifyRenderTests"
       ;;
     full)
+      run_ios render "iPhone 17 Pro" light portrait "" "TrackifyRenderTests"
       run_ios iphone17pro-light "iPhone 17 Pro" light portrait "" "$WALK"
       run_ios iphone17pro-dark "iPhone 17 Pro" dark portrait "" "$WALK"
       run_ios iphone17 "iPhone 17" light portrait "" "$WALK/test02Walk"

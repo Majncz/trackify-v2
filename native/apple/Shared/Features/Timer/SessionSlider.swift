@@ -156,7 +156,7 @@ struct StampField: View {
 
     var body: some View {
         VStack(alignment: alignRight ? .trailing : .leading, spacing: 4) {
-            Text(label).font(.system(size: 14)).foregroundStyle(Theme.mutedForeground)
+            Text(label).font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
             Button {
                 hour = DayCalc.current.hour(Date(ms: value))
                 minute = DayCalc.current.minute(Date(ms: value))
@@ -165,7 +165,7 @@ struct StampField: View {
                 HStack {
                     Text(clock(value)).font(.mono(15))
                     Spacer(minLength: 8)
-                    Image(systemName: "clock").font(.system(size: 13)).foregroundStyle(Theme.mutedForeground)
+                    Image(systemName: "clock").font(.scaled(13)).foregroundStyle(Theme.mutedForeground)
                 }
                 .padding(.horizontal, 12)
                 .frame(width: 124, height: 40)
@@ -183,7 +183,7 @@ struct StampField: View {
                     #endif
             }
             Text(blocked ? "That time overlaps other work" : Fmt.agoLabel(value, now: now))
-                .font(.system(size: 13))
+                .font(.scaled(13))
                 .foregroundStyle(blocked ? Theme.destructive : Theme.mutedForeground)
         }
     }

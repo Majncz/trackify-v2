@@ -210,6 +210,7 @@ final class AppModel {
         await engine.reset()
         CredentialStore.shared.clear()
         DataCache.clear()
+        ChatSession.shared.reset()
         session = nil
         api.token = nil
         running = nil

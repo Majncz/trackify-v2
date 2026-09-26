@@ -3,16 +3,6 @@ import SwiftUI
 import AppIntents
 import TrackifyKit
 
-@main
-struct TrackifyWidgetBundle: WidgetBundle {
-    var body: some Widget {
-        TimerWidget()
-        #if os(iOS)
-        TrackifyLiveActivity()
-        if #available(iOS 18.0, *) { TimerControl() }
-        #endif
-    }
-}
 
 // MARK: - Timeline
 

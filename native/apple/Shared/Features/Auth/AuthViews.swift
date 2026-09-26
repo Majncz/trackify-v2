@@ -14,7 +14,7 @@ struct AuthFlowView: View {
                 VStack(spacing: 6) {
                     AppGlyph(size: 56)
                     Wordmark(size: 26)
-                    Text("Track your time efficiently").font(.system(size: 14)).foregroundStyle(Theme.mutedForeground)
+                    Text("Track your time efficiently").font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
                 }
                 .padding(.top, 36)
 
@@ -65,10 +65,10 @@ private struct ServerField: View {
                 withAnimation(.easeOut(duration: 0.18)) { expanded.toggle() }
             } label: {
                 HStack(spacing: 4) {
-                    Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).rotationEffect(.degrees(expanded ? 90 : 0))
-                    Text("Advanced").font(.system(size: 13, weight: .medium))
+                    Image(systemName: "chevron.right").font(.scaled(11, weight: .semibold)).rotationEffect(.degrees(expanded ? 90 : 0))
+                    Text("Advanced").font(.scaled(13, weight: .medium))
                     if !expanded && model.serverString != APIClient.liveServer.absoluteString {
-                        Text("· \(URL(string: model.serverString)?.host ?? model.serverString)").font(.system(size: 13)).lineLimit(1)
+                        Text("· \(URL(string: model.serverString)?.host ?? model.serverString)").font(.scaled(13)).lineLimit(1)
                     }
                 }
                 .foregroundStyle(Theme.mutedForeground)
@@ -113,17 +113,17 @@ private struct LoginForm: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Sign in").font(.system(size: 22, weight: .bold))
-                Text("Enter your email and password").font(.system(size: 14)).foregroundStyle(Theme.mutedForeground)
+                Text("Sign in").font(.scaled(22, weight: .bold))
+                Text("Enter your email and password").font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
             }
             if registered {
                 Text("Account created. You can sign in now.")
-                    .font(.system(size: 13)).foregroundStyle(Theme.emeraldText)
+                    .font(.scaled(13)).foregroundStyle(Theme.emeraldText)
                     .padding(10).frame(maxWidth: .infinity, alignment: .leading)
                     .background(Theme.emerald.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
             }
             if let reason = model.signedOutReason {
-                Text(reason).font(.system(size: 13)).foregroundStyle(Theme.mutedForeground)
+                Text(reason).font(.scaled(13)).foregroundStyle(Theme.mutedForeground)
             }
             VStack(alignment: .leading, spacing: 6) {
                 FieldLabel(text: "Email")
@@ -144,7 +144,7 @@ private struct LoginForm: View {
                     FieldLabel(text: "Password")
                     Spacer()
                     Button("Forgot password?") { screen = .forgot }
-                        .font(.system(size: 13)).buttonStyle(.plain).foregroundStyle(Theme.mutedForeground)
+                        .font(.scaled(13)).buttonStyle(.plain).foregroundStyle(Theme.mutedForeground)
                 }
                 TField(placeholder: "", text: $password, secure: true)
                     .focused($focus, equals: .password)
@@ -168,7 +168,7 @@ private struct LoginForm: View {
                 Text("Don't have an account?").foregroundStyle(Theme.mutedForeground)
                 Button("Register") { screen = .register }.buttonStyle(.plain).fontWeight(.semibold)
             }
-            .font(.system(size: 14))
+            .font(.scaled(14))
             .frame(maxWidth: .infinity)
         }
         .card(padding: 24)
@@ -203,8 +203,8 @@ private struct RegisterForm: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Create an account").font(.system(size: 22, weight: .bold))
-                Text("Enter your details to register").font(.system(size: 14)).foregroundStyle(Theme.mutedForeground)
+                Text("Create an account").font(.scaled(22, weight: .bold))
+                Text("Enter your details to register").font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
             }
             VStack(alignment: .leading, spacing: 6) {
                 FieldLabel(text: "Email")
@@ -232,7 +232,7 @@ private struct RegisterForm: View {
                 Text("Already have an account?").foregroundStyle(Theme.mutedForeground)
                 Button("Sign in") { screen = .login }.buttonStyle(.plain).fontWeight(.semibold)
             }
-            .font(.system(size: 14)).frame(maxWidth: .infinity)
+            .font(.scaled(14)).frame(maxWidth: .infinity)
         }
         .card(padding: 24)
     }
@@ -265,13 +265,13 @@ private struct ForgotForm: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Forgot password").font(.system(size: 22, weight: .bold))
-                Text("We'll email you a link to reset it").font(.system(size: 14)).foregroundStyle(Theme.mutedForeground)
+                Text("Forgot password").font(.scaled(22, weight: .bold))
+                Text("We'll email you a link to reset it").font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
             }
             if sent {
                 HStack(spacing: 8) {
                     Image(systemName: "envelope").foregroundStyle(Theme.emerald)
-                    Text("Check your email for a reset link").font(.system(size: 14))
+                    Text("Check your email for a reset link").font(.scaled(14))
                 }
                 .padding(12).frame(maxWidth: .infinity, alignment: .leading)
                 .background(Theme.emerald.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
@@ -291,7 +291,7 @@ private struct ForgotForm: View {
                     .disabled(busy || email.isEmpty)
             }
             Button("Back to sign in") { screen = .login }
-                .buttonStyle(.plain).font(.system(size: 14, weight: .semibold)).frame(maxWidth: .infinity)
+                .buttonStyle(.plain).font(.scaled(14, weight: .semibold)).frame(maxWidth: .infinity)
         }
         .card(padding: 24)
         .onAppear { email = model.lastEmail }

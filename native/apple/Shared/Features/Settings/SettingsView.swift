@@ -40,7 +40,7 @@ private struct CardTitle: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Label(title, systemImage: icon).font(.cardTitle)
-            if let subtitle { Text(subtitle).font(.system(size: 13)).foregroundStyle(Theme.mutedForeground) }
+            if let subtitle { Text(subtitle).font(.scaled(13)).foregroundStyle(Theme.mutedForeground) }
         }
     }
 }
@@ -60,8 +60,8 @@ private struct AccountCard: View {
             HStack(spacing: 12) {
                 Image(systemName: "envelope").foregroundStyle(Theme.mutedForeground)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Email").font(.system(size: 13)).foregroundStyle(Theme.mutedForeground)
-                    Text(model.profile?.email ?? model.session?.email ?? "").font(.system(size: 15, weight: .medium))
+                    Text("Email").font(.scaled(13)).foregroundStyle(Theme.mutedForeground)
+                    Text(model.profile?.email ?? model.session?.email ?? "").font(.scaled(15, weight: .medium))
                 }
             }
             .padding(12)
@@ -76,12 +76,12 @@ private struct AccountCard: View {
                         status = .idle
                     }
                     .accessibilityIdentifier("displayName")
-                Text("Shown when you are tracking a task.").font(.system(size: 12)).foregroundStyle(Theme.mutedForeground)
+                Text("Shown when you are tracking a task.").font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
                 HStack(spacing: 12) {
                     Button(status == .saving ? "Saving..." : "Save name", action: save)
                         .buttonStyle(.t(.primary))
                         .disabled(name.trimmingCharacters(in: .whitespaces) == saved.trimmingCharacters(in: .whitespaces) || status == .saving || name.trimmingCharacters(in: .whitespaces).isEmpty)
-                    if status == .saved { Text("Saved").font(.system(size: 14)).foregroundStyle(Theme.mutedForeground) }
+                    if status == .saved { Text("Saved").font(.scaled(14)).foregroundStyle(Theme.mutedForeground) }
                     InlineError(text: error)
                 }
             }
@@ -125,13 +125,13 @@ private struct HiddenTasksCard: View {
             if !model.hiddenLoaded {
                 Skeleton(height: 44)
             } else if model.hiddenTasks.isEmpty {
-                Text("No hidden tasks").font(.system(size: 14)).foregroundStyle(Theme.mutedForeground)
+                Text("No hidden tasks").font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
             } else {
                 ForEach(model.hiddenTasks) { t in
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(t.name).font(.system(size: 15, weight: .medium))
-                            Text(Fmt.durationWords(t.totalMs)).font(.system(size: 13)).foregroundStyle(Theme.mutedForeground).tabular()
+                            Text(t.name).font(.scaled(15, weight: .medium))
+                            Text(Fmt.durationWords(t.totalMs)).font(.scaled(13)).foregroundStyle(Theme.mutedForeground).tabular()
                         }
                         Spacer()
                         Button {
@@ -172,13 +172,13 @@ private struct PreferencesCard: View {
                 .onChange(of: showSeconds) { _, v in AppGroup.defaults.set(v, forKey: SharedKeys.menuBarShowSeconds) }
             Toggle("Hide the task name in the menu bar", isOn: $hideName)
                 .onChange(of: hideName) { _, v in AppGroup.defaults.set(v, forKey: SharedKeys.menuBarHideName) }
-            Text("Toggle the menu-bar panel from anywhere with ⌃⌥T.").font(.system(size: 12)).foregroundStyle(Theme.mutedForeground)
+            Text("Toggle the menu-bar panel from anywhere with ⌃⌥T.").font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
             Hairline()
             #endif
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("“Still tracking?” reminder").font(.system(size: 14))
-                    Text("Get a notification when a timer runs this long.").font(.system(size: 12)).foregroundStyle(Theme.mutedForeground)
+                    Text("“Still tracking?” reminder").font(.scaled(14))
+                    Text("Get a notification when a timer runs this long.").font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
                 }
                 Spacer()
                 Picker("Reminder", selection: $reminderHours) {
@@ -218,7 +218,7 @@ private struct SecurityCard: View {
             CardTitle(icon: "lock", title: "Security")
             if model.canChangePassword {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Change password").font(.system(size: 14, weight: .semibold))
+                    Text("Change password").font(.scaled(14, weight: .semibold))
                     TField(placeholder: "Current password", text: $current, secure: true)
                     TField(placeholder: "New password (min. 6 characters)", text: $new, secure: true)
                     TField(placeholder: "Confirm new password", text: $confirm, secure: true)
@@ -226,7 +226,7 @@ private struct SecurityCard: View {
                         Button(busy ? "Saving..." : "Change password", action: changePassword)
                             .buttonStyle(.t(.outline))
                             .disabled(busy || current.isEmpty || new.isEmpty)
-                        if let pwStatus { Text(pwStatus).font(.system(size: 14)).foregroundStyle(Theme.mutedForeground) }
+                        if let pwStatus { Text(pwStatus).font(.scaled(14)).foregroundStyle(Theme.mutedForeground) }
                     }
                     InlineError(text: pwError)
                 }
@@ -234,9 +234,9 @@ private struct SecurityCard: View {
             if model.canDeleteAccount {
                 Hairline()
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Delete account").font(.system(size: 14, weight: .semibold))
+                    Text("Delete account").font(.scaled(14, weight: .semibold))
                     Text("Permanently deletes your account, tasks, time entries and billing history. This can't be undone.")
-                        .font(.system(size: 13)).foregroundStyle(Theme.mutedForeground)
+                        .font(.scaled(13)).foregroundStyle(Theme.mutedForeground)
                     Button("Delete account…") { deletePassword = ""; deleteError = nil; showDelete = true }
                         .buttonStyle(.t(.outline))
                         .foregroundStyle(Theme.destructive)
@@ -248,7 +248,7 @@ private struct SecurityCard: View {
             SheetScaffold(title: "Delete your account?", onClose: { showDelete = false }) {
                 VStack(alignment: .leading, spacing: 14) {
                     Text("Enter your password to confirm. Everything in your Trackify account is deleted for good.")
-                        .font(.system(size: 14)).foregroundStyle(Theme.mutedForeground)
+                        .font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
                     TField(placeholder: "Password", text: $deletePassword, secure: true)
                     InlineError(text: deleteError)
                     HStack {
@@ -295,13 +295,13 @@ private struct AboutCard: View {
             CardTitle(icon: "server.rack", title: "Server")
             Text(model.session?.server ?? model.serverString).font(.mono(13)).textSelection(.enabled)
             Text("To use another server, sign out and open “Advanced” on the sign-in screen.")
-                .font(.system(size: 12)).foregroundStyle(Theme.mutedForeground)
+                .font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
             Hairline()
             let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
             let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
             HStack(spacing: 8) {
                 AppGlyph(size: 22)
-                Text("Trackify \(v) (\(b))").font(.system(size: 13)).foregroundStyle(Theme.mutedForeground)
+                Text("Trackify \(v) (\(b))").font(.scaled(13)).foregroundStyle(Theme.mutedForeground)
             }
         }
         .card(padding: 20)

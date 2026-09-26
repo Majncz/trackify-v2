@@ -27,7 +27,7 @@ targets:
     platform: iOS
     sources:
       - path: Shared
-        excludes: ["Features/Billing/**", "Features/Chat/**"]   # TEMP: in progress
+        excludes: []
       - path: Intents
       - path: iOS
         excludes: ["*.plist", "*.entitlements"]
@@ -108,7 +108,7 @@ targets:
     platform: macOS
     sources:
       - path: Shared
-        excludes: ["Features/Billing/**", "Features/Chat/**"]   # TEMP: in progress
+        excludes: []
       - path: Intents
       - path: macOS
         excludes: ["*.plist", "*.entitlements"]
@@ -182,6 +182,25 @@ targets:
         TEAM_ID_PREFIX: ""
 
   # ───────────── Tests ─────────────
+  # Renders widget / Live Activity views to PNGs with ImageRenderer (widgets can't be added to a home screen in CI).
+  TrackifyRenderTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Widgets
+        excludes: ["*.plist", "*.entitlements", "WidgetBundle.swift"]
+      - path: Intents
+      - path: Shared/Design
+      - path: RenderTests
+    dependencies:
+      - package: TrackifyKit
+      - sdk: WidgetKit.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(TRACKIFY_BUNDLE_ID).rendertests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) RENDER_TESTS"
+
   TrackifyUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -207,6 +226,7 @@ schemes:
       config: Debug
       targets:
         - TrackifyUITests
+        - TrackifyRenderTests
   TrackifyMac:
     build:
       targets:

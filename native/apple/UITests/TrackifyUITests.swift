@@ -172,4 +172,16 @@ final class ScreenshotWalkTests: TrackifyUITestCase {
         scrollDown(2)
         shot("23-settings-more")
     }
+
+    /// Live Activity on the lock screen and in the Dynamic Island (timer running on the demo account in CI).
+    func test03LiveActivity() {
+        launch()
+        XCTAssertTrue(waitFor(app.staticTexts["Dashboard"], 40))
+        guard app.buttons["runningClock"].waitForExistence(timeout: 10) else { return }
+        Thread.sleep(forTimeInterval: 3)
+        XCUIDevice.shared.press(.home)
+        shot("24-dynamic-island", settle: 2.5)
+        XCUIDevice.shared.perform(NSSelectorFromString("pressLockButton"))
+        shot("25-lock-screen-live-activity", settle: 3)
+    }
 }

@@ -61,14 +61,14 @@ struct GroupEditorSheet: View {
                         Button("Clear selection") { selected.removeAll() }.buttonStyle(.t(.ghost, .sm))
                         Spacer()
                         if !filter.trimmingCharacters(in: .whitespaces).isEmpty {
-                            Text("\(filtered.count) match\(filtered.count == 1 ? "" : "es")").font(.system(size: 12)).foregroundStyle(Theme.mutedForeground)
+                            Text("\(filtered.count) match\(filtered.count == 1 ? "" : "es")").font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
                         }
                     }
                 }
                 ScrollView {
                     LazyVStack(spacing: 2) {
                         if filtered.isEmpty {
-                            Text(allTasks.isEmpty ? "No tasks yet." : "No tasks match.").font(.system(size: 14)).foregroundStyle(Theme.mutedForeground).padding(.vertical, 24)
+                            Text(allTasks.isEmpty ? "No tasks yet." : "No tasks match.").font(.scaled(14)).foregroundStyle(Theme.mutedForeground).padding(.vertical, 24)
                         }
                         ForEach(filtered) { t in row(t) }
                     }
@@ -78,7 +78,7 @@ struct GroupEditorSheet: View {
                 if isCreate {
                     let total = selected.compactMap { id in allTasks.first { $0.id == id } }.reduce(Int64(0)) { $0 + Analytics.taskMs($1, from: range.from, to: range.to) }
                     Text("\(selected.count) task\(selected.count == 1 ? "" : "s") selected · \(Fmt.fmtMs(total))")
-                        .font(.system(size: 13)).foregroundStyle(Theme.mutedForeground).tabular()
+                        .font(.scaled(13)).foregroundStyle(Theme.mutedForeground).tabular()
                 }
                 HStack(spacing: 8) {
                     Spacer()
@@ -97,7 +97,7 @@ struct GroupEditorSheet: View {
     private var colourPicker: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Group colour").font(.system(size: 12, weight: .medium))
+                Text("Group colour").font(.scaled(12, weight: .medium))
                 Spacer()
                 Segmented(items: [(false, "Custom"), (true, "Auto")], selection: $auto, compact: true).frame(width: 150)
             }
@@ -124,7 +124,7 @@ struct GroupEditorSheet: View {
                     Circle().fill(Color(hex: preview)).frame(width: 10, height: 10)
                     Text(isCreate ? "Color will follow the automatic palette from the group id after you save."
                                   : "Uses the automatic palette from the group id. Choose Custom to pick a preset.")
-                        .font(.system(size: 11)).foregroundStyle(Theme.mutedForeground)
+                        .font(.scaled(11)).foregroundStyle(Theme.mutedForeground)
                 }
             }
         }
@@ -140,19 +140,19 @@ struct GroupEditorSheet: View {
             HStack(spacing: 10) {
                 Image(systemName: on ? "checkmark.square.fill" : "square")
                     .foregroundStyle(ok ? Theme.foreground : Theme.mutedForeground)
-                Text(t.name).font(.system(size: 14)).lineLimit(1)
+                Text(t.name).font(.scaled(14)).lineLimit(1)
                 if let gn = groupName(of: t), !ok || editing == nil {
-                    Text(gn).font(.system(size: 10, weight: .medium)).foregroundStyle(Theme.mutedForeground).lineLimit(1)
+                    Text(gn).font(.scaled(10, weight: .medium)).foregroundStyle(Theme.mutedForeground).lineLimit(1)
                         .padding(.horizontal, 6).padding(.vertical, 1)
                         .background(Theme.muted, in: Capsule())
                 }
                 if t.hidden {
-                    Text("Hidden").font(.system(size: 10, weight: .medium)).foregroundStyle(Theme.mutedForeground)
+                    Text("Hidden").font(.scaled(10, weight: .medium)).foregroundStyle(Theme.mutedForeground)
                         .padding(.horizontal, 6).padding(.vertical, 1)
                         .overlay(Capsule().strokeBorder(Theme.border))
                 }
                 Spacer()
-                Text(Fmt.fmtMs(Analytics.taskMs(t, from: range.from, to: range.to))).font(.system(size: 12)).tabular().foregroundStyle(Theme.mutedForeground)
+                Text(Fmt.fmtMs(Analytics.taskMs(t, from: range.from, to: range.to))).font(.scaled(12)).tabular().foregroundStyle(Theme.mutedForeground)
             }
             .padding(.horizontal, 10)
             .frame(minHeight: 36)
