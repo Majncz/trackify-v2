@@ -45,7 +45,11 @@ class TrackifyUITestCase: XCTestCase {
         let tab = app.tabBars.buttons[label]
         if tab.exists { tab.tap(); return }
         let nav = app.descendants(matching: .any).matching(identifier: "nav-\(label)").firstMatch
-        if nav.exists { nav.tap(); Thread.sleep(forTimeInterval: 0.8); return }
+        if nav.exists {
+            nav.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            Thread.sleep(forTimeInterval: 0.8)
+            return
+        }
         let cell = app.collectionViews.cells.containing(.staticText, identifier: label).firstMatch
         if cell.exists { cell.tap(); return }
         let text = app.staticTexts[label].firstMatch

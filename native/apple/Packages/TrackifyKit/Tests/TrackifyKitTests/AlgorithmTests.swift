@@ -319,6 +319,25 @@ final class AnalyticsTests: XCTestCase {
         XCTAssertEqual(calc.dayKey(AICadence.yearly.coverageEnd(start: d, calc: calc)), "2026-12-31")
     }
 
+    /// One accent resolver for every surface: grouped → resolveGroupAccent(group), ungrouped → taskAccentHex(task.id).
+    func testSingleAccentResolver() {
+        let g = TaskGroupRef(id: "grp", name: "G", color: "#123456")
+        let auto = TaskGroupRef(id: "abc", name: "Auto", color: nil)
+        let grouped = TrackifyTask(id: "t1", name: "A", taskGroupId: "grp", taskGroup: g)
+        let autoGrouped = TrackifyTask(id: "t2", name: "B", taskGroupId: "abc", taskGroup: auto)
+        let loose = TrackifyTask(id: "a", name: "C")
+        XCTAssertEqual(grouped.accentHex, "#123456")
+        XCTAssertEqual(autoGrouped.accentHex, "#00796b")
+        XCTAssertEqual(loose.accentHex, "#4527a0")
+        let snap = WidgetSnapshot.build(tasks: [grouped, autoGrouped, loose], running: RunningTimer(taskId: "a", startTime: 0, pending: false),
+                                        session: StoredSession(server: "s", token: "t", userId: "u", email: "e"))
+        for t in [grouped, autoGrouped, loose] {
+            XCTAssertEqual(snap.tasks.first { $0.id == t.id }?.accentHex, t.accentHex)
+        }
+        XCTAssertEqual(snap.running?.accentHex, loose.accentHex)
+        XCTAssertEqual(snap.applying(running: RunningTimer(taskId: "t1", startTime: 0, pending: true)).running?.accentHex, "#123456")
+    }
+
     func testSnapshotToday() {
         let now = ISODate.parse("2026-09-26T10:00:00Z")!
         let t = TrackifyTask(id: "1", name: "One", events: [ev("1", "2026-09-26T06:00:00Z", "2026-09-26T07:00:00Z")])

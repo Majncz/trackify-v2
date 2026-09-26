@@ -39,8 +39,8 @@ struct SessionRangeSlider: View {
                     .frame(width: max(2, endX - startX), height: trackH)
                     .offset(x: startX, y: trackCenter - trackH / 2)
                 // Labels
-                label(clock(model.start), x: startX, side: close ? .left : .center)
-                label(model.endIsLive ? "Now" : clock(model.end), x: endX, side: close ? .right : .center)
+                label(clock(model.start), x: startX, side: close ? .left : .center, width: w)
+                label(model.endIsLive ? "Now" : clock(model.end), x: endX, side: close ? .right : .center, width: w)
                 // Knobs
                 knobView(active: model.drag == .start).offset(x: startX - knob / 2, y: trackCenter - knob / 2)
                     .accessibilityElement()
@@ -109,13 +109,18 @@ struct SessionRangeSlider: View {
 
     enum Side { case left, center, right }
 
-    private func label(_ text: String, x: Double, side: Side) -> some View {
+    private func label(_ text: String, x: Double, side: Side, width: Double) -> some View {
         let w: CGFloat = 120
-        let (align, dx): (Alignment, CGFloat) = switch side {
+        let half: CGFloat = 24   // ≈ half a "HH:mm" mono label
+        var (align, dx): (Alignment, CGFloat) = switch side {
         case .left: (.trailing, x - 8 - w)
         case .center: (.center, x - w / 2)
         case .right: (.leading, x + 8)
         }
+        // Keep labels inside the slider bounds.
+        let textLeft: CGFloat = side == .left ? x - 8 - 2 * half : (side == .center ? x - half : x + 8)
+        if textLeft < 0 { align = .leading; dx = 0 }
+        else if textLeft + 2 * half > width { align = .trailing; dx = width - w }
         return Text(text)
             .font(.mono(12))
             .foregroundStyle(Theme.foreground)

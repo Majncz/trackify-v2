@@ -19,7 +19,11 @@ struct YearlyCalendarView: View {
 
     var body: some View {
         let calc = DayCalc.current
-        let months = data.monthLabels(calc: calc)
+        // Drop a month label that would collide with the next one (partial first month).
+        let allMonths = data.monthLabels(calc: calc)
+        let months = allMonths.enumerated().filter { i, m in
+            i + 1 >= allMonths.count || allMonths[i + 1].index - m.index >= 3
+        }.map(\.element)
         let todayKey = calc.dayKey(Date())
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 4) {

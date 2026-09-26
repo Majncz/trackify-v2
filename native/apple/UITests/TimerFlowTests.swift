@@ -107,6 +107,7 @@ final class TimerFlowTests: TrackifyUITestCase {
         XCTAssertTrue(waitFor(app.buttons["logPastSave"], 5))
         shot("flow-04-logpast")
         app.buttons["logPastSave"].tap()
+        shot("flow-04b-after-save", settle: 2.5)
         let deadline = Date().addingTimeInterval(15)
         var after = before
         while Date() < deadline && after <= before {

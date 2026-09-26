@@ -41,17 +41,17 @@ struct TimerProvider: TimelineProvider {
 extension WidgetSnapshot {
     static let preview = WidgetSnapshot(
         signedIn: true, serverUrl: "", userId: "u", updatedAt: 0,
-        running: .init(taskId: "1", taskName: "Learning Swift", accentHex: "#0277bd", startTime: Date().ms - 47 * 60_000),
+        running: .init(taskId: "1", taskName: "Learning Swift", accentHex: Accent.taskAccentHex("1"), startTime: Date().ms - 47 * 60_000),
         todayTotalMs: 3 * HOUR_MS + 12 * MINUTE_MS, todayKey: DayCalc.current.dayKey(Date()),
         tasks: [
-            .init(id: "1", name: "Learning Swift", accentHex: "#0277bd", todayMs: 47 * MINUTE_MS, totalMs: 56 * HOUR_MS),
-            .init(id: "2", name: "Code review", accentHex: "#ef6c00", todayMs: 70 * MINUTE_MS, totalMs: 54 * HOUR_MS),
-            .init(id: "3", name: "Bombay kitchen hub", accentHex: "#558b2f", todayMs: 45 * MINUTE_MS, totalMs: 40 * HOUR_MS),
-            .init(id: "4", name: "Emails & admin", accentHex: "#ad1457", todayMs: 30 * MINUTE_MS, totalMs: 28 * HOUR_MS),
-            .init(id: "5", name: "Research: pricing", accentHex: "#4527a0", todayMs: 0, totalMs: 32 * HOUR_MS),
-            .init(id: "6", name: "Standup", accentHex: "#37474f", todayMs: 15 * MINUTE_MS, totalMs: 21 * HOUR_MS),
-            .init(id: "7", name: "Design system", accentHex: "#00796b", todayMs: 0, totalMs: 12 * HOUR_MS),
-            .init(id: "8", name: "Hiring", accentHex: "#c62828", todayMs: 0, totalMs: 6 * HOUR_MS),
+            .init(id: "1", name: "Learning Swift", accentHex: Accent.taskAccentHex("1"), todayMs: 47 * MINUTE_MS, totalMs: 56 * HOUR_MS),
+            .init(id: "2", name: "Code review", accentHex: Accent.taskAccentHex("2"), todayMs: 70 * MINUTE_MS, totalMs: 54 * HOUR_MS),
+            .init(id: "3", name: "Bombay kitchen hub", accentHex: Accent.taskAccentHex("3"), todayMs: 45 * MINUTE_MS, totalMs: 40 * HOUR_MS),
+            .init(id: "4", name: "Emails & admin", accentHex: Accent.taskAccentHex("4"), todayMs: 30 * MINUTE_MS, totalMs: 28 * HOUR_MS),
+            .init(id: "5", name: "Research: pricing", accentHex: Accent.taskAccentHex("5"), todayMs: 0, totalMs: 32 * HOUR_MS),
+            .init(id: "6", name: "Standup", accentHex: Accent.taskAccentHex("6"), todayMs: 15 * MINUTE_MS, totalMs: 21 * HOUR_MS),
+            .init(id: "7", name: "Design system", accentHex: Accent.taskAccentHex("7"), todayMs: 0, totalMs: 12 * HOUR_MS),
+            .init(id: "8", name: "Hiring", accentHex: Accent.taskAccentHex("8"), todayMs: 0, totalMs: 6 * HOUR_MS),
         ])
 }
 
@@ -204,13 +204,16 @@ struct RunningPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Wordmark(size: 13)
-            Spacer(minLength: 2)
             if let r = s.running {
                 HStack(spacing: 5) {
                     AccentDot(hex: r.accentHex, size: 7)
                     Text(r.taskName).font(.system(size: 13, weight: .semibold)).lineLimit(1)
                 }
+                .padding(.top, 6)
                 LiveClock(start: r.startTime, size: 22)
+                Text("since \(DayCalc.current.format(Date(ms: r.startTime), "HH:mm")) · today \(Fmt.durationWords(s.todayTotal(now: now)))")
+                    .font(.system(size: 11)).monospacedDigit().foregroundStyle(Theme.mutedForeground).lineLimit(1)
+                Spacer(minLength: 4)
                 Button(intent: WidgetStopIntent()) {
                     Label("Stop", systemImage: "square.fill").font(.system(size: 12, weight: .semibold))
                         .frame(maxWidth: .infinity, minHeight: 26)
@@ -219,10 +222,13 @@ struct RunningPanel: View {
                 }
                 .buttonStyle(.plain)
             } else {
+                Spacer(minLength: 4)
                 Text("Not tracking").font(.system(size: 13, weight: .semibold))
                 Text("Today \(Fmt.durationWords(s.todayTotal(now: now)))").font(.system(size: 12)).monospacedDigit().foregroundStyle(Theme.mutedForeground)
+                Spacer(minLength: 4)
             }
         }
+        .frame(maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
