@@ -89,7 +89,9 @@ class TimerNotifier(private val context: Context) {
         NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
     }
 
+    /** Re-post from the latest snapshot (e.g. right after the permission was granted). */
     fun invalidate() {
         lastKey = null
+        update(co.bitterlemon.trackify.widget.WidgetSnapshot.read(context))
     }
 }

@@ -187,6 +187,7 @@ class AppGraph(private val context: Context) {
         scope.launch { session.signOut() }
         engine.clear()
         repo.clear()
+        co.bitterlemon.trackify.ui.team.PresenceCache.map.clear()
         socket.disconnect()
         notifier.cancel()
         TimerSyncWorker.cancel(context)

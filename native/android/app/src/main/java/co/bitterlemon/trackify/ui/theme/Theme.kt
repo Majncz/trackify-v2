@@ -141,4 +141,5 @@ fun TrackifyTheme(themePref: String = "system", content: @Composable () -> Unit)
     }
 }
 
-val MonoDigits = TextStyle(fontFamily = Mono, fontFeatureSettings = "tnum")
+val MonoDigits = TextStyle(fontFeatureSettings = "tnum")
+val Tabular = TextStyle(fontFeatureSettings = "tnum")

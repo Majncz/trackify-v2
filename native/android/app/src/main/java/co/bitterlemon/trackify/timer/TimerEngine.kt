@@ -32,6 +32,8 @@ data class TimerUi(
     val pending: Boolean = false,
     /** A stop is queued ("Saving…" on stop buttons). */
     val saving: Boolean = false,
+    /** Tasks whose stretch is still being saved (yellow pending ring on their cards). */
+    val savingTaskIds: Set<String> = emptySet(),
 )
 
 sealed class AdjustResult {
@@ -75,6 +77,13 @@ class TimerEngine(
         running = s.running,
         pending = s.queue.isNotEmpty(),
         saving = s.queue.any { it is TimerOp.Stop },
+        savingTaskIds = s.queue.mapNotNull {
+            when (it) {
+                is TimerOp.Stop -> it.taskId
+                is TimerOp.Switch -> it.prevTaskId
+                else -> null
+            }
+        }.toSet(),
     )
 
     private fun load(): TimerPersisted = try {
