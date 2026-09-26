@@ -5,6 +5,7 @@ import TrackifyKit
 struct LeaderboardCard: View {
     @Environment(AppModel.self) private var model
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var day = DayCalc.current.dayKey(Date())
     @State private var range: LeaderboardRange = .day
     @State private var data: PresenceResponse?
@@ -98,7 +99,7 @@ struct LeaderboardCard: View {
                 HStack(spacing: 0) {
                     ForEach(LeaderboardRange.allCases, id: \.self) { r in
                         Button { range = r } label: {
-                            Text(r.label).font(.scaled(12, weight: .medium)).lineLimit(1).fixedSize()
+                            Text(typeSize.isAccessibilitySize ? r.shortLabel : r.label).font(.scaled(12, weight: .medium)).lineLimit(1).fixedSize()
                                 .foregroundStyle(range == r ? Theme.foreground : Theme.mutedForeground)
                                 .padding(.horizontal, 8).frame(height: 26)
                                 .background(range == r ? Theme.muted : .clear, in: RoundedRectangle(cornerRadius: 4))
@@ -222,5 +223,12 @@ struct LeaderboardRow: View {
             }
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+extension LeaderboardRange {
+    /// Compact labels for accessibility text sizes.
+    var shortLabel: String {
+        switch self { case .day: "Day"; case .week: "Week"; case .month: "Month" }
     }
 }
