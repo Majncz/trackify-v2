@@ -1,0 +1,77 @@
+name: native-apple
+on:
+  push:
+    branches: [lane/native]
+    paths:
+      - native/apple/**
+      - .github/workflows/native-apple.yml
+  workflow_dispatch:
+    inputs:
+      screenshots:
+        description: "Run the screenshot walk"
+        default: "true"
+
+concurrency:
+  group: native-apple-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  APPLE: native/apple
+  DD: ${{ github.workspace }}/native/apple/build/dd
+  OUT: ${{ github.workspace }}/native/apple/build/out
+  TRACKIFY_SERVER: https://trackify-native.dev.bitterlemon.co
+
+jobs:
+  apple:
+    runs-on: macos-26
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tools
+        run: |
+          brew install xcodegen >/dev/null
+          xcodebuild -version
+          mkdir -p "$OUT"
+
+      - name: TrackifyKit tests (incl. live read-only checks)
+        working-directory: native/apple/Packages/TrackifyKit
+        run: TRACKIFY_LIVE=1 swift test 2>&1 | tee "$OUT/kit-tests.log" | grep -E "error|failed|Executed .* tests" | tail -20; test ${PIPESTATUS[0]} -eq 0
+
+      - name: Generate project
+        working-directory: native/apple
+        run: |
+          xcodegen generate
+          zip -qr "$OUT/generated.zip" Trackify.xcodeproj iOS/Info.plist iOS/*.entitlements macOS/Info.plist macOS/*.entitlements Widgets/*.plist Widgets/*.entitlements
+
+      - name: Build iOS (simulator)
+        working-directory: native/apple
+        run: |
+          set -o pipefail
+          xcodebuild -project Trackify.xcodeproj -scheme Trackify \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath "$DD" \
+            CODE_SIGNING_ALLOWED=NO build-for-testing 2>&1 | tee "$OUT/ios-build.log" | grep -E "error:|warning: .*(deprecated|unused)|BUILD|\*\*" | head -150
+
+      - name: Build macOS (ad-hoc)
+        if: always()
+        working-directory: native/apple
+        run: |
+          set -o pipefail
+          xcodebuild -project Trackify.xcodeproj -scheme TrackifyMac -destination 'platform=macOS' \
+            -derivedDataPath "$DD" CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+            CODE_SIGN_ENTITLEMENTS= CODE_SIGNING_REQUIRED=NO build 2>&1 | tee "$OUT/mac-build.log" | grep -E "error:|BUILD|\*\*" | head -150
+          APP="$DD/Build/Products/Debug/Trackify.app"
+          ditto -c -k --keepParent "$APP" "$OUT/Trackify-macOS.zip"
+
+      - name: Screenshots (iOS + macOS)
+        if: success() && (github.event_name == 'push' || inputs.screenshots == 'true')
+        working-directory: native/apple
+        run: bash Scripts/ci-screenshots.sh
+
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-out
+          path: native/apple/build/out
+          retention-days: 7
