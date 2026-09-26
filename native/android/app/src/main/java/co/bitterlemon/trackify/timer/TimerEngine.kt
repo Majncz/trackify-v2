@@ -219,30 +219,40 @@ class TimerEngine(
         }
     }
 
+    /**
+     * Send the head of the queue (under the lock, so the loop and [drain] never send the same op twice) and
+     * apply the outcome. Returns null when there is nothing to do.
+     */
+    private suspend fun step(): OpOutcome? = lock.withLock {
+        val op = _state.value.queue.firstOrNull() ?: return@withLock null
+        if (userId() == null) return@withLock null
+        val outcome = send(op)
+        when (outcome) {
+            OpOutcome.Done -> {
+                attempt = 0
+                mutate { TimerLogic.complete(it, op.id, System.currentTimeMillis()) }
+            }
+            is OpOutcome.Rejected -> {
+                attempt = 0
+                mutate { TimerLogic.complete(it, op.id, System.currentTimeMillis()) }
+                _errors.tryEmit(outcome.message)
+            }
+            else -> Unit
+        }
+        outcome
+    }
+
+    private suspend fun afterApplied() {
+        if (_state.value.queue.isEmpty()) refreshTruth()
+        onOpApplied()
+    }
+
     private suspend fun loop() {
         while (true) {
-            val op = _state.value.queue.firstOrNull() ?: break
-            if (userId() == null) break
-            val outcome = lock.withLock { send(op) }
-            when (outcome) {
-                OpOutcome.Done -> {
-                    attempt = 0
-                    mutate { TimerLogic.complete(it, op.id, System.currentTimeMillis()) }
-                    if (_state.value.queue.isEmpty()) {
-                        refreshTruth()
-                    }
-                    onOpApplied()
-                }
-                is OpOutcome.Rejected -> {
-                    attempt = 0
-                    mutate { TimerLogic.complete(it, op.id, System.currentTimeMillis()) }
-                    _errors.tryEmit(outcome.message)
-                    if (_state.value.queue.isEmpty()) refreshTruth()
-                    onOpApplied()
-                }
+            when (step() ?: break) {
+                OpOutcome.Done, is OpOutcome.Rejected -> afterApplied()
                 OpOutcome.Unauthorized -> {
-                    onUnauthorized()
-                    break
+                    onUnauthorized(); break
                 }
                 OpOutcome.Retry -> {
                     val wait = TimerLogic.backoffMs(attempt++)
@@ -252,21 +262,13 @@ class TimerEngine(
         }
     }
 
-    /** Replay everything now (WorkManager). Returns true when the queue is empty. */
+    /** Replay everything now (WorkManager, notification/widget actions). Returns true when the queue is empty. */
     suspend fun drain(maxMillis: Long = 60_000): Boolean {
         val deadline = System.currentTimeMillis() + maxMillis
         var tries = 0
         while (System.currentTimeMillis() < deadline) {
-            val op = _state.value.queue.firstOrNull() ?: return true
-            if (userId() == null) return true
-            val outcome = lock.withLock { send(op) }
-            when (outcome) {
-                OpOutcome.Done, is OpOutcome.Rejected -> {
-                    mutate { TimerLogic.complete(it, op.id, System.currentTimeMillis()) }
-                    if (outcome is OpOutcome.Rejected) _errors.tryEmit(outcome.message)
-                    if (_state.value.queue.isEmpty()) refreshTruth()
-                    onOpApplied()
-                }
+            when (step() ?: return true) {
+                OpOutcome.Done, is OpOutcome.Rejected -> afterApplied()
                 OpOutcome.Unauthorized -> {
                     onUnauthorized(); return true
                 }

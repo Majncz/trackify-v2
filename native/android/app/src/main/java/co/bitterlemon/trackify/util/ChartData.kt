@@ -110,30 +110,56 @@ object ChartData {
 
     fun buildWeekGrid(eventsByDate: Map<LocalDate, List<DayEvent>>, today: LocalDate = Time.today(), days: Int = DAYS_TO_LOAD, zone: ZoneId = Time.zone()): WeekGrid {
         val list = (0 until days).map { today.minusDays((days - 1 - it).toLong()) }
+        val grid = list.map { day -> buildDayRow(day, eventsByDate[day] ?: emptyList(), zone) }
+        return finishGrid(list, grid)
+    }
+
+    /** 24 hour cells for one local day. */
+    fun buildDayRow(day: LocalDate, evs: List<DayEvent>, zone: ZoneId = Time.zone()): List<HourCell> {
+        val dayStart = day.atStartOfDay(zone)
+        return (0 until 24).map { h ->
+            val hs = dayStart.plusHours(h.toLong()).toInstant().toEpochMilli()
+            val he = dayStart.plusHours(h + 1L).toInstant().toEpochMilli()
+            val cell = HourCell()
+            for (e in evs) {
+                val o = overlap(e.from, e.to, hs, he)
+                if (o > 0) {
+                    val m = o / 60000.0
+                    cell.totalMinutes += m
+                    cell.taskMinutes[e.taskName] = (cell.taskMinutes[e.taskName] ?: 0.0) + m
+                }
+            }
+            cell
+        }
+    }
+
+    fun finishGrid(days: List<LocalDate>, grid: List<List<HourCell>>): WeekGrid {
         var maxMin = 0.0
         var has = false
-        val grid = list.map { day ->
-            val evs = eventsByDate[day] ?: emptyList()
-            val dayStart = day.atStartOfDay(zone)
-            (0 until 24).map { h ->
-                val hs = dayStart.plusHours(h.toLong()).toInstant().toEpochMilli()
-                val he = dayStart.plusHours(h + 1L).toInstant().toEpochMilli()
-                val cell = HourCell()
-                for (e in evs) {
-                    val o = overlap(e.from, e.to, hs, he)
-                    if (o > 0) {
-                        val m = o / 60000.0
-                        cell.totalMinutes += m
-                        cell.taskMinutes[e.taskName] = (cell.taskMinutes[e.taskName] ?: 0.0) + m
-                    }
-                }
-                if (cell.totalMinutes > 0) {
-                    has = true; maxMin = max(maxMin, cell.totalMinutes)
-                }
-                cell
-            }
+        for (row in grid) for (c in row) if (c.totalMinutes > 0) {
+            has = true; maxMin = max(maxMin, c.totalMinutes)
         }
-        return WeekGrid(list, grid, if (maxMin == 0.0) 1.0 else maxMin, has)
+        return WeekGrid(days, grid, if (maxMin == 0.0) 1.0 else maxMin, has)
+    }
+
+    /**
+     * Adds the live timer to a grid built without it, rebuilding only the day rows the live stretch touches
+     * (the 1000-day grid is otherwise reused as is every 10 s).
+     */
+    fun withLiveRows(base: WeekGrid, baseEvents: Map<LocalDate, List<DayEvent>>, live: DayEvent?, zone: ZoneId = Time.zone()): Pair<WeekGrid, Map<LocalDate, List<DayEvent>>> {
+        if (live == null) return base to baseEvents
+        val events = HashMap(baseEvents)
+        var d = Time.localDate(live.from, zone)
+        val last = Time.localDate(live.to, zone)
+        val touched = HashSet<LocalDate>()
+        while (!d.isAfter(last)) {
+            events[d] = (events[d] ?: emptyList()) + live
+            touched.add(d); d = d.plusDays(1)
+        }
+        val index = base.days.withIndex().associate { it.value to it.index }
+        val grid = base.grid.toMutableList()
+        for (day in touched) index[day]?.let { i -> grid[i] = buildDayRow(day, events[day] ?: emptyList(), zone) }
+        return finishGrid(base.days, grid) to events
     }
 
     fun buildDaySegments(hourCells: List<HourCell>, sph: Int, maxBridge: Int): List<WeeklySegment> {

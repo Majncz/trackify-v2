@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import co.bitterlemon.trackify.AppGraph
+import kotlinx.coroutines.launch
 
 /** Notification / widget actions → timer engine (optimistic; WorkManager replays if offline). */
 class TimerActionReceiver : BroadcastReceiver() {
@@ -29,6 +30,16 @@ class TimerActionReceiver : BroadcastReceiver() {
             ACTION_STOP -> graph.engine.stop()
             ACTION_START -> intent.getStringExtra(EXTRA_TASK)?.let { graph.engine.start(it) }
             ACTION_TOGGLE -> graph.engine.toggle(intent.getStringExtra(EXTRA_TASK))
+        }
+        // Keep the process alive briefly so the op usually reaches the server right away;
+        // if not, the persisted queue + TimerSyncWorker replay it later.
+        val pending = goAsync()
+        graph.scope.launch {
+            try {
+                kotlinx.coroutines.withTimeoutOrNull(8_000) { graph.engine.drain(8_000) }
+            } finally {
+                pending.finish()
+            }
         }
     }
 }

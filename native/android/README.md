@@ -133,8 +133,8 @@ disconnects.
 
 ## Tests
 
-- `./gradlew :app:testDebugUnitTest` runs 47 JVM tests. They cover the WEB_AUDIT test vectors (group, task and race
-  colours), the yearly heat levels, every formatting helper, the session-range and log-past algorithms, the timer
+- `./gradlew :app:testDebugUnitTest` runs 52 JVM tests. They cover the WEB_AUDIT test vectors (group, task and race
+  colours), the yearly heat levels, every formatting helper, the session-range and log-past algorithms, the heat-grid and calendar builders, the timer
   queue rules and the chat stream assembly.
 - The app was also tested end to end against the lane server on emulators:
   - Pixel 8 and a small 360 dp phone, both on API 36.

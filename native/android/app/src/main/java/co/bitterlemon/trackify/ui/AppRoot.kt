@@ -112,12 +112,20 @@ private fun MainShell(pendingRoute: MutableState<String?>) {
     }
 
     val isTab = tabs.any { it.route == route }
-    fun go(r: String) = nav.navigate(r) {
-        popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-        launchSingleTop = true
-        restoreState = true
-    }
     fun isSelected(tab: Tab) = route == tab.route || (tab.route == "home" && route?.startsWith("task/") == true)
+    fun go(r: String) {
+        // Re-selecting the current tab (e.g. Home while a task detail is open) returns to the tab's root.
+        val current = tabs.firstOrNull { isSelected(it) }?.route
+        if (current == r) {
+            if (route != r) nav.popBackStack(r, inclusive = false)
+            return
+        }
+        nav.navigate(r) {
+            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
     BoxWithConstraints(Modifier.fillMaxSize()) {
     val wide = maxWidth >= 600.dp
     Scaffold(

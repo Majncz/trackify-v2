@@ -77,14 +77,20 @@ class StartTaskAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val id = parameters[TaskKey] ?: return
         val g = AppGraph.get(context)
-        if (g.session.session.value != null) g.engine.start(id)
+        if (g.session.session.value != null) {
+            g.engine.start(id)
+            kotlinx.coroutines.withTimeoutOrNull(8_000) { g.engine.drain(8_000) }
+        }
     }
 }
 
 class StopAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val g = AppGraph.get(context)
-        if (g.session.session.value != null) g.engine.stop()
+        if (g.session.session.value != null) {
+            g.engine.stop()
+            kotlinx.coroutines.withTimeoutOrNull(8_000) { g.engine.drain(8_000) }
+        }
     }
 }
 

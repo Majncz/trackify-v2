@@ -155,7 +155,7 @@ fun HomeScreen(onOpenTask: (String) -> Unit) {
                 if (!twoPane) item(key = "leaderboard") { LeaderboardCard(Modifier.widthIn(max = 896.dp)) }
                 item(key = "tasks-title") {
                     Text(
-                        "Tasks (${tasks.size})", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground,
+                        if (tasksOrNull == null) "Tasks" else "Tasks (${tasks.size})", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground,
                         modifier = Modifier.widthIn(max = 896.dp).fillMaxWidth(),
                     )
                 }

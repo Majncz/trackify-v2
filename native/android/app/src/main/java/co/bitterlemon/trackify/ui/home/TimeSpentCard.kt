@@ -98,12 +98,22 @@ fun TimeSpentCard(tasks: List<Task>, liveTaskId: String?, liveStart: Long?) {
     var mode by rememberSaveable { mutableStateOf("weekly") }
     // Live timer is a synthetic event refreshed every 10 s (web).
     val liveNow = co.bitterlemon.trackify.ui.team.rememberTicker(liveTaskId != null, 10_000)
-    val model by produceState<TimeSpentModel?>(null, tasks, liveTaskId, liveStart, liveNow) {
+    // The expensive 1000-day grid is built once per task list; the live stretch only rebuilds its own day rows.
+    val base by produceState<Pair<Map<LocalDate, List<DayEvent>>, WeekGrid>?>(null, tasks) {
         value = withContext(Dispatchers.Default) {
+            val ebd = ChartData.eventsByDate(tasks.map { t -> t.name to t.events.map { it.fromMs to it.toMs } })
+            ebd to ChartData.buildWeekGrid(ebd)
+        }
+    }
+    val model by produceState<TimeSpentModel?>(null, base, liveTaskId, liveStart, liveNow) {
+        val b = base ?: return@produceState
+        value = withContext(Dispatchers.Default) {
+            val liveTask = tasks.firstOrNull { it.id == liveTaskId }
+            val liveEvent = if (liveTask != null && liveStart != null) DayEvent(liveTask.name, liveStart, liveNow) else null
+            val (grid, ebd) = ChartData.withLiveRows(b.second, b.first, liveEvent)
             val withLive = ChartData.withLive(tasks, liveTaskId, liveStart, liveNow)
-            val ebd = ChartData.eventsByDate(withLive.map { it.first.name to it.second })
             val (wc, other) = ChartData.weeklyTaskColors(withLive, tasks, liveTaskId)
-            TimeSpentModel(ebd, ChartData.buildWeekGrid(ebd), ChartData.buildYearly(ebd), wc, other, ChartData.yearlyTaskColors(tasks))
+            TimeSpentModel(ebd, grid, ChartData.buildYearly(ebd), wc, other, ChartData.yearlyTaskColors(tasks))
         }
     }
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = ChartData.DAYS_TO_LOAD - 1)
