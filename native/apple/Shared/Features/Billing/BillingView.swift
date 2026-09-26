@@ -66,7 +66,9 @@ struct BillingView: View {
     }
 
     private var showsSelectionBar: Bool {
-        tab == .sessions && store.hasEnrolled && !store.sessionsLoading && store.sessionsError == nil && !store.sessions.isEmpty
+        guard tab == .sessions && store.hasEnrolled && !store.sessionsLoading && store.sessionsError == nil && !store.sessions.isEmpty else { return false }
+        // On phones the sticky bar would sit over the page permanently; show it once something is picked.
+        return wide || !store.selectedSessions.isEmpty
     }
 
     // MARK: Tabs

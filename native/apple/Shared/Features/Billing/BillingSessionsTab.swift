@@ -37,6 +37,15 @@ struct BillingSessionsTab: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             BillingFiltersBar(store: store, wide: wide)
+            if !wide && store.selectedSessions.isEmpty && !store.unpaidInList.isEmpty && store.status != .paid {
+                Button { store.toggleAllUnpaid() } label: {
+                    Label("Select all unpaid (\(store.unpaidInList.count))", systemImage: "checkmark.circle")
+                        .font(.scaled(13, weight: .medium))
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(Theme.foreground)
+                .accessibilityIdentifier("selectAllUnpaid")
+            }
             ledger
         }
         .card()
