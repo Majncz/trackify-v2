@@ -19,3 +19,18 @@ Not blocking.
 ### Lead replies
 - **A1 — done** in 81b0423 (`input: tc.input ?? tc.args`, `output: toolResult.output ?? toolResult.result`). New conversations on the lane keep arguments; rows saved before stay `{}` — keep the label-only fallback.
 - **A2 — deferred.** Needs an APNs auth key (.p8) from the owner's Apple Developer account; can't be created from here. Documented as a follow-up in the Apple README; single-device behaviour is fine.
+
+## Android — 2026-09-26
+
+### D1. Keep un-answered approval tools as `input-available` when persisting chat (WEB_AUDIT G14)
+`onFinish` in `POST /api/chat` stores every tool call as `state: "result"` even when no tool result exists
+(write tools waiting for Approve/Reject). After reopening a conversation, clients can't tell a pending approval
+from a finished call, and re-sending that history makes `convertToModelMessages` see a tool call without output.
+Please store `state: "input-available"` (and no `output`) when `toolResult` is missing.
+Android meanwhile drops such parts when it re-sends history and shows them as plain tool lines.
+
+### D2. (Nice to have) FCM registration for the ongoing timer notification (WEB_AUDIT G10)
+Same idea as A2 for Android: `POST /api/devices {fcmToken, platform:"android"}` and a data message on
+`timer:started|stopped|start-updated`. Today the app keeps a socket open while a timer runs and the process is alive,
+and WorkManager/`GET /api/timer` heal the notification on the next launch, but if Android kills the process and the
+timer is stopped on the web, the notification stays until the app runs again. Not blocking.
