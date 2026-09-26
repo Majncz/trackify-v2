@@ -105,11 +105,14 @@ fun YearlyCalendar(
                         }
                 ) {
                     var lastMonth = -1
+                    var lastLabelEnd = -1f
                     data.weeks.forEachIndexed { wi, monday ->
                         if (monday.monthValue != lastMonth) {
-                            if (lastMonth != -1 || wi == 0) {
-                                val m = measurer.measure(Time.format(monday, "MMM"), TextStyle(fontSize = 9.sp, color = muted))
+                            val m = measurer.measure(Time.format(monday, "MMM"), TextStyle(fontSize = 9.sp, color = muted))
+                            // Skip a label that would collide with the previous one (month change in the first column).
+                            if (wi * col >= lastLabelEnd + 4f) {
                                 drawText(m, topLeft = Offset(wi * col, 0f))
+                                lastLabelEnd = wi * col + m.size.width
                             }
                             lastMonth = monday.monthValue
                         }

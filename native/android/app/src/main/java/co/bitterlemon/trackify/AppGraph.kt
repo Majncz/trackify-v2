@@ -146,20 +146,27 @@ class AppGraph(private val context: Context) {
         scope.launch {
             combine(engine.ui, repo.tasks, session.session) { ui, tasks, s -> Triple(ui, tasks, s) }
                 .debounce(150)
-                .collect { (ui, tasks, s) ->
-                    val snap = WidgetSnapshot.build(s != null, session.server.value, s?.userId, ui.running, ui.pending, tasks)
-                    WidgetSnapshot.write(context, snap)
-                    notifier.update(snap)
-                    WidgetUpdater.updateAll(context)
-                    WidgetUpdater.requestTileUpdate(context)
-                    Shortcuts.update(context, snap)
-                }
+                .collect { syncSurfaces() }
         }
         scope.launch {
-            engine.ui.combine(session.session) { ui, _ -> ui.running?.taskId }.distinctUntilChanged().collect {
+            engine.ui.combine(session.session) { ui, s -> if (s == null) null else ui.running?.taskId }.distinctUntilChanged().collect { runningId ->
                 updateSocket()
+                if (runningId != null) co.bitterlemon.trackify.timer.TimerRefreshWorker.schedule(context)
+                else co.bitterlemon.trackify.timer.TimerRefreshWorker.cancel(context)
             }
         }
+    }
+
+    /** Push the current timer/task state to the notification, widgets, tile and launcher shortcuts. */
+    fun syncSurfaces() {
+        val s = session.session.value
+        val ui = engine.ui.value
+        val snap = WidgetSnapshot.build(s != null, session.server.value, s?.userId, ui.running, ui.pending, repo.tasks.value)
+        WidgetSnapshot.write(context, snap)
+        notifier.update(snap)
+        WidgetUpdater.updateAll(context)
+        WidgetUpdater.requestTileUpdate(context)
+        Shortcuts.update(context, snap)
     }
 
     suspend fun signIn(email: String, password: String): Result<Unit> = runCatching {

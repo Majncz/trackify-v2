@@ -102,8 +102,10 @@ private fun MainShell(pendingRoute: MutableState<String?>) {
     val status by graph.socket.status.collectAsState()
     val snackbar = remember { SnackbarHostState() }
 
+    val currentRoute by androidx.compose.runtime.rememberUpdatedState(route)
     LaunchedEffect(Unit) {
-        graph.engine.errors.collect { snackbar.showSnackbar("Couldn't save: $it") }
+        // Home shows its own "Failed to save" alert (web); elsewhere a snackbar.
+        graph.engine.errors.collect { if (currentRoute != "home") snackbar.showSnackbar("Couldn't save: $it") }
     }
     LaunchedEffect(pendingRoute.value) {
         pendingRoute.value?.let { nav.navigate(it); pendingRoute.value = null }
