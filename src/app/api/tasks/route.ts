@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { createHash } from "node:crypto";
 
 const taskSchema = z.object({
   name: z.string().min(1).max(100),
@@ -37,7 +38,16 @@ export async function GET(request: NextRequest) {
       orderBy: { name: "asc" },
     });
 
-    return NextResponse.json(tasks);
+    // ETag so native apps (and the web) can revalidate the full list cheaply.
+    const body = JSON.stringify(tasks);
+    const etag = `W/"${createHash("sha1").update(body).digest("base64url")}"`;
+    const headers = { ETag: etag, "Cache-Control": "private, no-cache" };
+    if (request.headers.get("if-none-match") === etag) {
+      return new NextResponse(null, { status: 304, headers });
+    }
+    return new NextResponse(body, {
+      headers: { ...headers, "Content-Type": "application/json" },
+    });
   } catch (error) {
     console.error("GET /api/tasks:", error);
     const detail = devErrorDetail(error);
