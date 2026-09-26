@@ -567,8 +567,8 @@ Use markdown: **bold** for emphasis, tables for data, keep responses concise.`,
                   type: `tool-${toolCall.toolName}`,
                   toolCallId: toolCall.toolCallId,
                   state: "result",
-                  input: tc.args || {},
-                  output: toolResult?.result,
+                  input: tc.input ?? tc.args ?? {},
+                  output: toolResult?.output ?? toolResult?.result,
                 });
               }
             }

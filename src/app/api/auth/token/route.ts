@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { randomBytes } from "crypto";
-import { getAuthUser } from "@/lib/api-auth";
+import { getAuthUser, TOKEN_LIFETIME_DAYS } from "@/lib/api-auth";
+import { verifyPassword } from "@/lib/password";
 
 const tokenRequestSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(1, "Password is required"),
+  /** Shown in token lists, e.g. "Trackify for Mac". */
+  deviceName: z.string().trim().min(1).max(60).optional(),
 });
 
 /**
@@ -17,7 +19,7 @@ const tokenRequestSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email, password } = tokenRequestSchema.parse(body);
+    const { email, password, deviceName } = tokenRequestSchema.parse(body);
 
     // Find user by email
     const user = await prisma.user.findUnique({
@@ -32,7 +34,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate password
-    const isValid = await bcrypt.compare(password, user.password);
+    const isValid = await verifyPassword(password, user.password);
     if (!isValid) {
       return NextResponse.json(
         { error: "Invalid email or password" },
@@ -43,15 +45,16 @@ export async function POST(request: NextRequest) {
     // Generate secure token (32 bytes = 64 hex characters)
     const token = randomBytes(32).toString("hex");
 
-    // Create token with 30-day expiry
+    // Sliding expiry: getAuthUser pushes it out again while the device keeps using it.
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
+    expiresAt.setDate(expiresAt.getDate() + TOKEN_LIFETIME_DAYS);
 
     const apiToken = await prisma.apiToken.create({
       data: {
         token,
         userId: user.id,
         expiresAt,
+        ...(deviceName && { name: deviceName }),
       },
     });
 
