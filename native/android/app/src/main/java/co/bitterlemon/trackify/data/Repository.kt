@@ -68,7 +68,8 @@ class Repository(
     fun loadCache() {
         try {
             if (cacheFile.exists()) {
-                _tasks.value = AppJson.decodeFromString(ListSerializer(Task.serializer()), cacheFile.readText())
+                val cached = AppJson.decodeFromString(ListSerializer(Task.serializer()), cacheFile.readText())
+                if (_tasks.value == null) _tasks.value = cached
                 etag = etagFile.takeIf { it.exists() }?.readText()?.takeIf { it.isNotBlank() }
             }
         } catch (e: Exception) {
@@ -132,6 +133,8 @@ class Repository(
                 if (newTag != null) etagFile.writeText(newTag) else etagFile.delete()
             } catch (_: Exception) {
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             if (_tasks.value == null) _tasksError.value = e.message ?: "Failed to load tasks"
         }

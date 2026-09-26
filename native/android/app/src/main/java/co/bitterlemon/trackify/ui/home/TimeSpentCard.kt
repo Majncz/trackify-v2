@@ -97,12 +97,7 @@ private class TimeSpentModel(
 fun TimeSpentCard(tasks: List<Task>, liveTaskId: String?, liveStart: Long?) {
     var mode by rememberSaveable { mutableStateOf("weekly") }
     // Live timer is a synthetic event refreshed every 10 s (web).
-    var liveNow by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(liveTaskId, liveStart) {
-        while (liveTaskId != null) {
-            liveNow = System.currentTimeMillis(); delay(10_000)
-        }
-    }
+    val liveNow = co.bitterlemon.trackify.ui.team.rememberTicker(liveTaskId != null, 10_000)
     val model by produceState<TimeSpentModel?>(null, tasks, liveTaskId, liveStart, liveNow) {
         value = withContext(Dispatchers.Default) {
             val withLive = ChartData.withLive(tasks, liveTaskId, liveStart, liveNow)

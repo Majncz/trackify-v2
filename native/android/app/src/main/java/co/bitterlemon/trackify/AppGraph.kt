@@ -95,7 +95,8 @@ class AppGraph(private val context: Context) {
 
     fun start() {
         engine.ensureUser(session.session.value?.userId)
-        repo.loadCache()
+        // Cached tasks can be large (every event); parse off the main thread.
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) { repo.loadCache() }
         observeEffects()
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
@@ -171,9 +172,13 @@ class AppGraph(private val context: Context) {
         _sessionExpired.value = false
         engine.ensureUser(res.user.id)
         updateSocket()
-        repo.refreshAll()
-        engine.refreshTruth()
-        repo.profile.value?.id?.let { if (it != res.user.id) session.updateUserId(it) }
+        // The login screen leaves composition right away; load data in the app scope.
+        scope.launch {
+            repo.refreshAll()
+            engine.refreshTruth()
+            repo.profile.value?.id?.let { if (it != res.user.id) session.updateUserId(it) }
+        }
+        Unit
     }
 
     /** Sign out: flush the queue briefly, revoke the token, wipe local data. */

@@ -65,6 +65,7 @@ import co.bitterlemon.trackify.util.Accents
 import co.bitterlemon.trackify.util.Format
 import co.bitterlemon.trackify.util.Time
 import kotlinx.coroutines.delay
+import androidx.lifecycle.repeatOnLifecycle
 import java.time.LocalDate
 import java.time.ZoneOffset
 
@@ -107,13 +108,18 @@ object Period {
     }
 }
 
+/** A clock that ticks only while the screen is visible (no work in the background). */
 @Composable
 fun rememberTicker(active: Boolean, periodMs: Long = 1000): Long {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(active) {
+    val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    LaunchedEffect(active, owner) {
         now = System.currentTimeMillis()
-        while (active) {
-            delay(periodMs); now = System.currentTimeMillis()
+        if (!active) return@LaunchedEffect
+        owner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            while (true) {
+                now = System.currentTimeMillis(); delay(periodMs - (System.currentTimeMillis() % periodMs).coerceAtMost(periodMs - 1))
+            }
         }
     }
     return now
@@ -139,12 +145,16 @@ fun LeaderboardCard(modifier: Modifier = Modifier) {
     val myId = graph.repo.profile.collectAsState().value?.id ?: session?.userId
     var picker by remember { mutableStateOf(false) }
 
+    val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     LaunchedEffect(dayKey, rangeKey, reloadTick) {
-        while (true) {
-            runCatching { graph.api.presence(dayKey, range.key) }.onSuccess { data = it; PresenceCache.map[cacheKey] = it }
-            loading = false
-            if (!current) break
-            delay(15_000)
+        // Poll every 15 s for the current period, only while visible.
+        owner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            while (true) {
+                runCatching { graph.api.presence(dayKey, range.key) }.onSuccess { data = it; PresenceCache.map[cacheKey] = it }
+                loading = false
+                if (!current) break
+                delay(15_000)
+            }
         }
     }
     LaunchedEffect(Unit) { graph.repo.presenceSignal.collect { reloadTick++ } }
