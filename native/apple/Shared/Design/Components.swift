@@ -422,7 +422,11 @@ struct FlowLayout: Layout {
         var out: [[(Int, CGSize)]] = [[]]
         var x: CGFloat = 0
         for (i, s) in subviews.enumerated() {
-            let sz = s.sizeThatFits(.unspecified)
+            var sz = s.sizeThatFits(.unspecified)
+            if maxWidth.isFinite && sz.width > maxWidth {
+                sz = s.sizeThatFits(ProposedViewSize(width: maxWidth, height: nil))
+                sz.width = min(sz.width, maxWidth)
+            }
             if !out[out.count - 1].isEmpty && x + sz.width > maxWidth {
                 out.append([])
                 x = 0
@@ -489,5 +493,16 @@ struct CopyButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
+    }
+}
+
+extension View {
+    /// Tracks this view's width into a binding (initial + changes).
+    func readWidth(_ width: Binding<CGFloat>) -> some View {
+        background(GeometryReader { g in
+            Color.clear
+                .onAppear { width.wrappedValue = g.size.width }
+                .onChange(of: g.size.width) { _, w in width.wrappedValue = w }
+        })
     }
 }

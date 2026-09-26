@@ -44,6 +44,8 @@ class TrackifyUITestCase: XCTestCase {
     func go(_ label: String) {
         let tab = app.tabBars.buttons[label]
         if tab.exists { tab.tap(); return }
+        let nav = app.descendants(matching: .any).matching(identifier: "nav-\(label)").firstMatch
+        if nav.exists { nav.tap(); Thread.sleep(forTimeInterval: 0.8); return }
         let cell = app.collectionViews.cells.containing(.staticText, identifier: label).firstMatch
         if cell.exists { cell.tap(); return }
         let text = app.staticTexts[label].firstMatch
@@ -116,7 +118,8 @@ final class ScreenshotWalkTests: TrackifyUITestCase {
         // Task detail
         let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'taskCard-'")).element(boundBy: 1)
         if card.waitForExistence(timeout: 5) {
-            card.tap()
+            // Tap the title area — the lower half holds Start/Stop buttons.
+            card.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.12)).tap()
             if waitFor(app.buttons["taskName"], 8) {
                 shot("08-task-detail", settle: 1.5)
                 scrollDown(2)
@@ -161,6 +164,11 @@ final class ScreenshotWalkTests: TrackifyUITestCase {
 
         go("Chat")
         shot("21-chat", settle: 1.5)
+        let firstConversation = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'chatTab-'")).firstMatch
+        if firstConversation.waitForExistence(timeout: 3) {
+            firstConversation.tap()
+            shot("21-chat-conversation", settle: 3)
+        }
 
         if isPad || !app.tabBars.firstMatch.exists {
             go("Settings")

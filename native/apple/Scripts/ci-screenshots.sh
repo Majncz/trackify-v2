@@ -60,6 +60,10 @@ run_ios() { # name device appearance orientation contentSize testFilter
       -test-timeouts-enabled YES -maximum-test-execution-time-allowance 600 \
       > "$OUT/logs/ios-$name.log" 2>&1 || { echo "!! $name tests failed"; FAILS=$((FAILS+1)); grep -E "error:|failed|XCTAssert" "$OUT/logs/ios-$name.log" | head -20; }
   xcrun simctl shutdown "$udid" >/dev/null 2>&1
+  # XCUIScreen captures in portrait device coordinates — rotate landscape shots upright.
+  if [ "$orient" = "landscape" ]; then
+    for f in "$SHOTS/$name"-*.png; do [ -f "$f" ] && sips -r 270 "$f" >/dev/null; done
+  fi
 }
 
 WALK="TrackifyUITests/ScreenshotWalkTests"

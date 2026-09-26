@@ -69,7 +69,7 @@ T1=$(ps -o cputime= -p "$PID" | awk -F: '{ if (NF==3) print ($1*3600)+($2*60)+$3
 RSS=$(ps -o rss= -p "$PID" | tr -d ' ')
 python3 -c "print(f'macOS idle CPU over 30 s (menu bar only, timer running): {($T1-$T0)/30*100:.2f}% ; RSS {int('$RSS')/1024:.1f} MB')" | tee -a "$OUT/perf.txt"
 
-launch panel-dark -TrackifyShowPanelWindow YES -AppleInterfaceStyle Dark
+launch panel-dark -TrackifyShowPanelWindow YES -TrackifyAppearance dark
 capture_window panel-dark
 
 for screen in home stats visualizations billing chat settings; do
@@ -78,9 +78,9 @@ for screen in home stats visualizations billing chat settings; do
 done
 launch dash-small -TrackifyOpenDashboard YES -TrackifyScreen home -TrackifyWindowSize 900x600
 capture_window dashboard-small
-launch dash-dark -TrackifyOpenDashboard YES -TrackifyScreen home -TrackifyWindowSize 1200x820 -AppleInterfaceStyle Dark
+launch dash-dark -TrackifyOpenDashboard YES -TrackifyScreen home -TrackifyWindowSize 1200x820 -TrackifyAppearance dark
 capture_window dashboard-home-dark
-launch dash-stats-dark -TrackifyOpenDashboard YES -TrackifyScreen stats -TrackifyWindowSize 1200x820 -AppleInterfaceStyle Dark
+launch dash-stats-dark -TrackifyOpenDashboard YES -TrackifyScreen stats -TrackifyWindowSize 1200x820 -TrackifyAppearance dark
 capture_window dashboard-stats-dark
 
 # Long task name in the menu bar (native account)

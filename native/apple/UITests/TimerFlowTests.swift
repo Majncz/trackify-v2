@@ -57,20 +57,34 @@ final class TimerFlowTests: TrackifyUITestCase {
         super.tearDown()
     }
 
+    /// Finds a task-card button, expanding "Show All" and scrolling as needed.
+    func taskButton(_ id: String) -> XCUIElement {
+        let b = app.buttons[id]
+        if !b.exists, app.buttons["showAllTasks"].exists { app.buttons["showAllTasks"].tap() }
+        var tries = 0
+        while (!b.exists || !b.isHittable) && tries < 6 { app.swipeUp(velocity: .slow); tries += 1 }
+        return b
+    }
+
+    func scrollToTop() { for _ in 0..<5 { app.swipeDown(velocity: .fast) } }
+
     func testStartSwitchStopFixAndLogPast() {
         launch(account: "\(account):\(password)", extra: ["-TrackifyFreshLogin", "YES"])
         XCTAssertTrue(waitFor(app.staticTexts["Dashboard"], 40))
 
         // Start Alpha — optimistic UI, then the server confirms.
-        let startAlpha = app.buttons["start-UITest Alpha"]
-        XCTAssertTrue(waitFor(startAlpha, 15))
+        XCTAssertTrue(waitFor(app.buttons["newTask"], 15))
+        let startAlpha = taskButton("start-UITest Alpha")
+        XCTAssertTrue(waitFor(startAlpha, 10))
         startAlpha.tap()
+        scrollToTop()
         XCTAssertTrue(waitFor(app.buttons["stopRunning"], 5), "running banner missing")
         XCTAssertTrue(expectServer { ($0["taskId"] as? String) == self.taskId("UITest Alpha") }, "server never saw Alpha running")
         shot("flow-01-running")
 
         // Switch to Beta.
-        app.buttons["start-UITest Beta"].tap()
+        taskButton("start-UITest Beta").tap()
+        scrollToTop()
         XCTAssertTrue(expectServer { ($0["taskId"] as? String) == self.taskId("UITest Beta") }, "switch not saved")
         shot("flow-02-switched")
 
@@ -89,7 +103,7 @@ final class TimerFlowTests: TrackifyUITestCase {
         // Log past time on Alpha → the server has a new manual entry.
         let alphaId = taskId("UITest Alpha") ?? ""
         let before = (api("GET", "/api/events?taskId=\(alphaId)") as? [[String: Any]])?.count ?? 0
-        app.buttons["logPast-UITest Alpha"].tap()
+        taskButton("logPast-UITest Alpha").tap()
         XCTAssertTrue(waitFor(app.buttons["logPastSave"], 5))
         shot("flow-04-logpast")
         app.buttons["logPastSave"].tap()
@@ -103,6 +117,7 @@ final class TimerFlowTests: TrackifyUITestCase {
 
         // Live sync: a timer started elsewhere (API) shows up via the socket.
         _ = api("POST", "/api/timer/switch", ["taskId": taskId("UITest Beta") ?? ""])
+        scrollToTop()
         XCTAssertTrue(waitFor(app.buttons["stopRunning"], 15), "socket timer:started not reflected")
         shot("flow-05-live-sync")
         _ = api("POST", "/api/timer/stop", [:])

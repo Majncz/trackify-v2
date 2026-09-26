@@ -22,6 +22,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        if model.isTestHookEnabled, let a = UserDefaults.standard.string(forKey: "TrackifyAppearance") {
+            NSApp.appearance = NSAppearance(named: a == "dark" ? .darkAqua : .aqua)
+        }
         dashboard = DashboardWindowController(model: model)
         statusItem = StatusItemController(model: model, openDashboard: { [weak self] screen in self?.dashboard.show(screen) })
         hotKey = GlobalHotKey(keyCode: 0x11 /* kVK_ANSI_T */, modifiers: [.control, .option]) { [weak self] in

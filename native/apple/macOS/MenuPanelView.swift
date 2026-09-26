@@ -247,7 +247,7 @@ struct MenuPanelView: View {
                 } else {
                     TimelineView(.periodic(from: .now, by: 30)) { ctx in
                         let today = Analytics.todayMs(t, now: ctx.date)
-                        Text("\(Fmt.durationWords(today)) / \(Fmt.durationWords(t.totalMs))")
+                        Text(today > 0 ? "\(Fmt.durationWords(today)) today · \(Fmt.durationWords(t.totalMs))" : Fmt.durationWords(t.totalMs))
                             .font(.scaled(11)).tabular().foregroundStyle(Theme.mutedForeground)
                     }
                 }

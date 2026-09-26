@@ -63,6 +63,7 @@ struct ChatTabStrip: View {
                             ChatTabButton(title: c.tabTitle, active: session.currentId == c.id) {
                                 session.select(c.id)
                             }
+                            .accessibilityIdentifier("chatTab-\(c.id)")
                             .contextMenu {
                                 Button(role: .destructive) {
                                     Task { await session.deleteConversation(c.id) }

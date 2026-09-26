@@ -383,12 +383,11 @@ struct BillingSessionRowView: View {
 
     private var info: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
+            FlowLayout(spacing: 6, lineSpacing: 4) {
                 Text(row.taskName)
                     .font(.scaled(14, weight: .medium))
                     .foregroundStyle(Theme.foreground)
-                    .lineLimit(2)
-                    .layoutPriority(1)
+                    .lineLimit(1)
                 if let g = row.taskGroup {
                     AccentBadge(text: g.name, hex: row.accentHex)
                 }

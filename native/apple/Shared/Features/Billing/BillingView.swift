@@ -38,8 +38,7 @@ struct BillingView: View {
             .padding(16)
             .frame(maxWidth: 896)
             .frame(maxWidth: .infinity)
-            .background(GeometryReader { g in Color.clear.preference(key: WidthKey.self, value: g.size.width) })
-            .onPreferenceChange(WidthKey.self) { width = $0 }
+            .readWidth($width)
         }
         .background(Theme.background)
         .safeAreaInset(edge: .bottom) {

@@ -41,6 +41,7 @@ struct DashboardView: View {
             List(selection: selection) {
                 ForEach(items, id: \.0) { item in
                     Label(item.1, systemImage: item.2).tag(item.0)
+                        .accessibilityIdentifier("nav-\(item.1)")
                 }
             }
             .navigationSplitViewColumnWidth(min: 180, ideal: 200)
