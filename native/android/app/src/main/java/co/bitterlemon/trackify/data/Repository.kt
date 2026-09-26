@@ -54,6 +54,12 @@ class Repository(
     private val _dataVersion = MutableStateFlow(0L)
     val dataVersion: StateFlow<Long> = _dataVersion.asStateFlow()
 
+    private val _billingTasks = MutableStateFlow<List<BillingTask>?>(null)
+    val billingTasks: StateFlow<List<BillingTask>?> = _billingTasks.asStateFlow()
+
+    suspend fun refreshBillingTasks(): Result<List<BillingTask>> =
+        runCatching { api.billingTasks() }.onSuccess { _billingTasks.value = it }
+
     private var refreshJob: Job? = null
     private var presenceJob: Job? = null
 
@@ -73,6 +79,7 @@ class Repository(
         _stats.value = null
         _profile.value = null
         _tasksError.value = null
+        _billingTasks.value = null
         runCatching { cacheFile.delete() }
     }
 

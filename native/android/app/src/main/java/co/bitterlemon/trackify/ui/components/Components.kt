@@ -25,7 +25,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ErrorOutline
@@ -133,7 +139,7 @@ fun TCard(
     )
 }
 
-enum class BtnVariant { Default, Destructive, Outline, Secondary, Ghost }
+enum class BtnVariant { Default, Destructive, Outline, Secondary, Ghost, DestructiveGhost }
 enum class BtnSize { Default, Sm, Lg, Icon }
 
 @Composable
@@ -154,6 +160,7 @@ fun TButton(
         BtnVariant.Outline -> c.background to c.foreground
         BtnVariant.Secondary -> c.muted to c.foreground
         BtnVariant.Ghost -> Color.Transparent to c.foreground
+        BtnVariant.DestructiveGhost -> Color.Transparent to c.destructive
     }
     val height = when (size) {
         BtnSize.Sm -> 32.dp
@@ -227,34 +234,50 @@ fun TInput(
     enabled: Boolean = true,
     minLines: Int = 1,
     trailing: @Composable (() -> Unit)? = null,
+    suffix: String? = null,
 ) {
+    var focused by remember { mutableStateOf(false) }
     Column(modifier) {
         if (label != null) {
             Text(label, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = T.c.foreground)
             Spacer(Modifier.height(6.dp))
         }
-        OutlinedTextField(
+        BasicTextField(
             value = value,
             onValueChange = onValueChange,
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = placeholder?.let { { Text(it, color = T.c.mutedForeground, fontSize = 15.sp) } },
+            modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
             singleLine = singleLine,
             minLines = minLines,
+            maxLines = if (singleLine) 1 else 8,
             enabled = enabled,
             textStyle = TextStyle(fontSize = 15.sp, color = T.c.foreground),
+            cursorBrush = SolidColor(T.c.foreground),
             visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
             keyboardOptions = KeyboardOptions(keyboardType = if (password) KeyboardType.Password else keyboardType, imeAction = imeAction),
             keyboardActions = KeyboardActions(onAny = { onIme?.invoke() }),
-            shape = ControlShape,
-            trailingIcon = trailing,
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = T.c.foreground.copy(alpha = 0.35f),
-                unfocusedBorderColor = T.c.border,
-                disabledBorderColor = T.c.border,
-                cursorColor = T.c.foreground,
-                focusedContainerColor = T.c.background,
-                unfocusedContainerColor = T.c.background,
-            ),
+            decorationBox = { inner ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 44.dp)
+                        .clip(ControlShape)
+                        .background(T.c.background)
+                        .border(1.dp, if (focused) T.c.foreground.copy(alpha = 0.35f) else T.c.border, ControlShape)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = if (singleLine) Alignment.CenterVertically else Alignment.Top,
+                ) {
+                    Box(Modifier.weight(1f)) {
+                        if (value.isEmpty() && placeholder != null) {
+                            Text(placeholder, color = T.c.mutedForeground, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        inner()
+                    }
+                    if (suffix != null) {
+                        Spacer(Modifier.width(6.dp)); Text(suffix, color = T.c.mutedForeground, fontSize = 14.sp)
+                    }
+                    if (trailing != null) trailing()
+                }
+            },
         )
     }
 }

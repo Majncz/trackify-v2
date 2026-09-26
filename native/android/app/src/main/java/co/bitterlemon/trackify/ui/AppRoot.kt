@@ -131,7 +131,7 @@ private fun MainShell(pendingRoute: MutableState<String?>) {
                 HorizontalDivider(color = T.c.border)
                 NavigationBar(containerColor = T.c.card, tonalElevation = 0.dp) {
                     tabs.forEach { tab ->
-                        val selected = route == tab.route || (tab.route == "home" && route?.startsWith("task/") == true && false)
+                        val selected = route == tab.route || (tab.route == "home" && route?.startsWith("task/") == true)
                         NavigationBarItem(
                             selected = selected,
                             onClick = {
@@ -165,7 +165,7 @@ private fun MainShell(pendingRoute: MutableState<String?>) {
                 composable("chat") { ChatScreen() }
                 composable("settings") { SettingsScreen(onBack = { nav.popBackStack() }) }
                 composable("task/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { e ->
-                    TaskDetailScreen(e.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() })
+                    TaskDetailScreen(e.arguments?.getString("id") ?: "", onBack = { nav.popBackStack() }, onOpenBilling = { nav.navigate("billing") { launchSingleTop = true } })
                 }
             }
         }
