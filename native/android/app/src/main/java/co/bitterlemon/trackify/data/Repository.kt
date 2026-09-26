@@ -30,6 +30,8 @@ class Repository(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val cacheFile get() = File(context.filesDir, "tasks_cache.json")
+    private val etagFile get() = File(context.filesDir, "tasks_cache.etag")
+    @Volatile private var etag: String? = null
 
     private val _tasks = MutableStateFlow<List<Task>?>(null)
     val tasks: StateFlow<List<Task>?> = _tasks.asStateFlow()
@@ -67,6 +69,7 @@ class Repository(
         try {
             if (cacheFile.exists()) {
                 _tasks.value = AppJson.decodeFromString(ListSerializer(Task.serializer()), cacheFile.readText())
+                etag = etagFile.takeIf { it.exists() }?.readText()?.takeIf { it.isNotBlank() }
             }
         } catch (e: Exception) {
             Log.w("Repository", "cache unreadable", e)
@@ -81,6 +84,8 @@ class Repository(
         _tasksError.value = null
         _billingTasks.value = null
         runCatching { cacheFile.delete() }
+        runCatching { etagFile.delete() }
+        etag = null
     }
 
     /** Debounced refresh of tasks + stats (+ presence signal). */
@@ -117,11 +122,14 @@ class Repository(
 
     suspend fun refreshTasks() {
         try {
-            val list = api.tasks()
-            _tasks.value = list
+            val (list, newTag) = api.tasksConditional(if (_tasks.value != null) etag else null)
             _tasksError.value = null
+            if (list == null) return // 304: cached list is current
+            _tasks.value = list
+            etag = newTag
             try {
                 cacheFile.writeText(AppJson.encodeToString(ListSerializer(Task.serializer()), list))
+                if (newTag != null) etagFile.writeText(newTag) else etagFile.delete()
             } catch (_: Exception) {
             }
         } catch (e: Exception) {

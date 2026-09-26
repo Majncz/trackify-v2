@@ -150,6 +150,30 @@ class ApiClient(
     suspend fun tasks(hidden: Boolean = false) =
         call("GET", "/api/tasks", ListSerializer(Task.serializer()), query = if (hidden) mapOf("hidden" to "true") else emptyMap())
 
+    /**
+     * GET /api/tasks with `If-None-Match`. Returns (null, etag) on 304 = reuse the cached list.
+     * Servers without ETags always answer 200 with a null etag.
+     */
+    suspend fun tasksConditional(etag: String?): Pair<List<Task>?, String?> = withContext(Dispatchers.IO) {
+        val rb = authed(Request.Builder().url(url("/api/tasks"))).header("Accept", "application/json")
+        if (etag != null) rb.header("If-None-Match", etag)
+        val r = try {
+            http.newCall(rb.build()).execute()
+        } catch (e: IOException) {
+            throw NetworkException(e)
+        }
+        r.use {
+            if (it.code == 304) return@withContext null to etag
+            val text = try { it.body.string() } catch (e: IOException) { throw NetworkException(e) }
+            if (!it.isSuccessful) {
+                if (it.code == 401 && token() != null) onUnauthorized()
+                val msg = text.jsonObjOrNull()?.str("error") ?: defaultMessage(it.code)
+                throw ApiException(it.code, msg, text, text.trimStart().startsWith("{"))
+            }
+            AppJson.decodeFromString(ListSerializer(Task.serializer()), text) to it.header("ETag")
+        }
+    }
+
     suspend fun createTask(name: String) = call("POST", "/api/tasks", Task.serializer(), obj { put("name", name) })
     suspend fun renameTask(id: String, name: String) = call("PUT", "/api/tasks/$id", Task.serializer(), obj { put("name", name) })
     suspend fun setHidden(id: String, hidden: Boolean) = call("PUT", "/api/tasks/$id", Task.serializer(), obj { put("hidden", hidden) })
