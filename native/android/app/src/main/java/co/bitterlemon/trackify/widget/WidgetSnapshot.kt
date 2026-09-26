@@ -39,6 +39,13 @@ data class WidgetSnapshotData(
 
 object WidgetSnapshot {
     @Volatile private var cached: WidgetSnapshotData? = null
+    private val _flow = kotlinx.coroutines.flow.MutableStateFlow<WidgetSnapshotData?>(null)
+
+    /** Live snapshot for running Glance sessions (they recompose on change). */
+    fun flow(context: Context): kotlinx.coroutines.flow.StateFlow<WidgetSnapshotData?> {
+        if (_flow.value == null) _flow.value = read(context)
+        return _flow
+    }
 
     fun build(signedIn: Boolean, server: String, userId: String?, running: Running?, pending: Boolean, tasks: List<Task>?): WidgetSnapshotData {
         val list = tasks ?: emptyList()
@@ -69,6 +76,7 @@ object WidgetSnapshot {
 
     fun write(context: Context, data: WidgetSnapshotData) {
         cached = data
+        _flow.value = data
         try {
             file(context).writeText(AppJson.encodeToString(WidgetSnapshotData.serializer(), data))
         } catch (_: Exception) {

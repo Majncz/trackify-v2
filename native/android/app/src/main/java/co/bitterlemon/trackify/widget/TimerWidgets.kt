@@ -5,6 +5,8 @@ import android.content.Intent
 import android.os.SystemClock
 import android.widget.RemoteViews
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -87,12 +89,12 @@ class StopAction : ActionCallback {
 }
 
 @Composable
-private fun Chrono(startTime: Long, sizeLayout: Int) {
+private fun Chrono(startTime: Long, sizeLayout: Int, height: Int = 36) {
     val ctx = LocalContext.current
     val rv = RemoteViews(ctx.packageName, sizeLayout)
     val base = SystemClock.elapsedRealtime() - (System.currentTimeMillis() - startTime)
     rv.setChronometer(R.id.chrono, base, null, true)
-    AndroidRemoteViews(rv)
+    AndroidRemoteViews(rv, modifier = GlanceModifier.height(height.dp))
 }
 
 @Composable
@@ -131,8 +133,11 @@ class SmallTimerWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val snap = WidgetSnapshot.read(context)
-        provideContent { GlanceTheme { SmallContent(context, snap) } }
+        val flow = WidgetSnapshot.flow(context)
+        provideContent {
+            val snap by flow.collectAsState()
+            GlanceTheme { SmallContent(context, snap ?: WidgetSnapshot.read(context)) }
+        }
     }
 }
 
@@ -168,7 +173,7 @@ private fun SmallContent(context: Context, snap: WidgetSnapshotData) {
             Text("Not tracking", style = TextStyle(color = Muted, fontSize = 12.sp))
             Text(
                 "Today ${Format.durationWords(snap.todayTotalLive(now))}",
-                style = TextStyle(color = Fg, fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace),
+                style = TextStyle(color = Fg, fontSize = 18.sp, fontWeight = FontWeight.Bold),
                 maxLines = 1,
             )
             Spacer(GlanceModifier.height(8.dp))
@@ -192,8 +197,11 @@ class LargeTimerWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(setOf(DpSize(250.dp, 180.dp), DpSize(250.dp, 300.dp)))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val snap = WidgetSnapshot.read(context)
-        provideContent { GlanceTheme { LargeContent(context, snap) } }
+        val flow = WidgetSnapshot.flow(context)
+        provideContent {
+            val snap by flow.collectAsState()
+            GlanceTheme { LargeContent(context, snap ?: WidgetSnapshot.read(context)) }
+        }
     }
 }
 
@@ -210,7 +218,7 @@ private fun LargeContent(context: Context, snap: WidgetSnapshotData) {
                 Text("Today ", style = TextStyle(color = Muted, fontSize = 12.sp))
                 Text(
                     Format.durationWords(snap.todayTotalLive(now)),
-                    style = TextStyle(color = Fg, fontSize = 12.sp, fontWeight = FontWeight.Medium, fontFamily = FontFamily.Monospace),
+                    style = TextStyle(color = Fg, fontSize = 12.sp, fontWeight = FontWeight.Medium),
                 )
             }
         }
@@ -234,7 +242,7 @@ private fun LargeContent(context: Context, snap: WidgetSnapshotData) {
                         )
                     }
                     Text(r.taskName, style = TextStyle(color = Fg, fontSize = 15.sp, fontWeight = FontWeight.Medium), maxLines = 1)
-                    Chrono(r.startTime, R.layout.widget_chrono_large)
+                    Chrono(r.startTime, R.layout.widget_chrono_large, 30)
                 }
                 Pill("Stop", Destructive, White, R.drawable.ic_stop, GlanceModifier.clickable(actionRunCallback<StopAction>()))
             }
@@ -263,7 +271,7 @@ private fun LargeContent(context: Context, snap: WidgetSnapshotData) {
                     Text(t.name, style = TextStyle(color = Fg, fontSize = 14.sp), maxLines = 1, modifier = GlanceModifier.defaultWeight())
                     Text(
                         if (t.todayMs > 0) Format.durationWords(t.todayMs) else "",
-                        style = TextStyle(color = Muted, fontSize = 12.sp, fontFamily = FontFamily.Monospace),
+                        style = TextStyle(color = Muted, fontSize = 12.sp),
                     )
                     Spacer(GlanceModifier.width(8.dp))
                     Box(

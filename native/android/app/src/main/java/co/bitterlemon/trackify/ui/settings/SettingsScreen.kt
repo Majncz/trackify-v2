@@ -29,6 +29,7 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -188,6 +189,18 @@ fun SettingsScreen(onBack: () -> Unit) {
                 }
             }
         }
+        item {
+            TCard(Modifier.widthIn(max = 896.dp).fillMaxWidth()) {
+                CardTitle(Icons.Outlined.Widgets, "Widgets & Quick Settings", "Start and stop without opening the app.")
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TButton("Add timer widget", { pinWidget(context, co.bitterlemon.trackify.widget.SmallTimerWidgetReceiver::class.java) }, variant = BtnVariant.Outline, size = BtnSize.Sm)
+                    TButton("Add tasks widget", { pinWidget(context, co.bitterlemon.trackify.widget.LargeTimerWidgetReceiver::class.java) }, variant = BtnVariant.Outline, size = BtnSize.Sm)
+                    if (android.os.Build.VERSION.SDK_INT >= 33) {
+                        TButton("Add Quick Settings tile", { requestTile(context) }, variant = BtnVariant.Outline, size = BtnSize.Sm)
+                    }
+                }
+            }
+        }
         if (!securityUnsupported) {
             item {
                 TCard(Modifier.widthIn(max = 896.dp).fillMaxWidth()) {
@@ -220,6 +233,26 @@ fun SettingsScreen(onBack: () -> Unit) {
 
     if (pwOpen) ChangePasswordDialog(onDismiss = { pwOpen = false }, onUnsupported = { securityUnsupported = true; pwOpen = false })
     if (deleteOpen) DeleteAccountDialog(onDismiss = { deleteOpen = false }, onUnsupported = { securityUnsupported = true; deleteOpen = false })
+}
+
+private fun pinWidget(context: android.content.Context, receiver: Class<*>) {
+    val mgr = android.appwidget.AppWidgetManager.getInstance(context)
+    if (mgr.isRequestPinAppWidgetSupported) {
+        mgr.requestPinAppWidget(android.content.ComponentName(context, receiver), null, null)
+    } else {
+        android.widget.Toast.makeText(context, "Long-press your home screen and pick Widgets → Trackify.", android.widget.Toast.LENGTH_LONG).show()
+    }
+}
+
+private fun requestTile(context: android.content.Context) {
+    if (android.os.Build.VERSION.SDK_INT < 33) return
+    val sbm = context.getSystemService(android.app.StatusBarManager::class.java) ?: return
+    sbm.requestAddTileService(
+        android.content.ComponentName(context, co.bitterlemon.trackify.tile.TimerTileService::class.java),
+        "Trackify",
+        android.graphics.drawable.Icon.createWithResource(context, co.bitterlemon.trackify.R.drawable.ic_stat_timer),
+        context.mainExecutor,
+    ) { }
 }
 
 @Composable
