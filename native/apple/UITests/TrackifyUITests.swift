@@ -196,4 +196,19 @@ final class ScreenshotWalkTests: TrackifyUITestCase {
         XCUIDevice.shared.perform(NSSelectorFromString("pressLockButton"))
         shot("25-lock-screen-live-activity", settle: 3)
     }
+
+    /// Short pass over the main screens for the device matrix (keeps CI time bounded).
+    func test04KeyScreens() {
+        launch()
+        XCTAssertTrue(waitFor(app.staticTexts["Dashboard"], 40))
+        shot("k1-home", settle: 2.5)
+        scrollDown(2)
+        shot("k2-home-tasks")
+        go("Stats"); shot("k3-stats", settle: 2)
+        go("Team"); shot("k4-team", settle: 2.5)
+        go("Billing"); shot("k5-billing", settle: 2.5)
+        go("Chat"); shot("k6-chat", settle: 1.5)
+        if isPad || !app.tabBars.firstMatch.exists { go("Settings") } else { go("Home"); app.buttons["openSettings"].tap() }
+        shot("k7-settings", settle: 1.5)
+    }
 }

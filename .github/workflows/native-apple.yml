@@ -24,7 +24,7 @@ env:
 jobs:
   apple:
     runs-on: macos-26
-    timeout-minutes: 100
+    timeout-minutes: 110
     steps:
       - uses: actions/checkout@v4
 
@@ -60,11 +60,15 @@ jobs:
           xcodebuild -project Trackify.xcodeproj -scheme TrackifyMac -destination 'platform=macOS' \
             -derivedDataPath "$DD" CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
             CODE_SIGN_ENTITLEMENTS= CODE_SIGNING_REQUIRED=NO build 2>&1 | tee "$OUT/mac-build.log" | grep -E "error:|BUILD|\*\*" | head -150
-          APP="$DD/Build/Products/Debug/Trackify.app"
-          ditto -c -k --keepParent "$APP" "$OUT/Trackify-macOS.zip"
+          # Distributable build: Release, ad-hoc signed (Debug stays for the screenshot hooks).
+          xcodebuild -project Trackify.xcodeproj -scheme TrackifyMac -configuration Release -destination 'platform=macOS' \
+            -derivedDataPath "$DD" CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+            CODE_SIGN_ENTITLEMENTS= CODE_SIGNING_REQUIRED=NO build 2>&1 | tee "$OUT/mac-release-build.log" | grep -E "error:|BUILD|\*\*" | head -50
+          ditto -c -k --keepParent "$DD/Build/Products/Release/Trackify.app" "$OUT/Trackify-macOS.zip"
 
       - name: Screenshots, flows, performance (iOS + macOS)
         if: success() && inputs.shots != 'none'
+        timeout-minutes: 85
         working-directory: native/apple
         env:
           SHOT_SET: ${{ inputs.shots || 'quick' }}
@@ -96,6 +100,7 @@ jobs:
           xcodebuild -project Trackify.xcodeproj -scheme Trackify -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$DD" CODE_SIGNING_ALLOWED=NO IPHONEOS_DEPLOYMENT_TARGET=17.0 build-for-testing 2>&1 | tee "$OUT/ios18-build.log" | grep -E "error:|BUILD|\*\*" | head -80
       - name: iPhone SE (3rd gen) · iOS 18
+        timeout-minutes: 30
         working-directory: native/apple
         env:
           SHOT_SET: legacy

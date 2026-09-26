@@ -57,7 +57,7 @@ run_ios() { # name device appearance orientation contentSize testFilter
   TEST_RUNNER_SHOT_CONTENT_SIZE="$size" TEST_RUNNER_TRACKIFY_SERVER="$SERVER" \
     xcodebuild test-without-building -xctestrun "$XCTESTRUN" -destination "id=$udid" \
       -only-testing:"$only" -resultBundlePath "$OUT/xcresult/$name.xcresult" \
-      -test-timeouts-enabled YES -maximum-test-execution-time-allowance 600 \
+      -test-timeouts-enabled YES -maximum-test-execution-time-allowance 480 \
       > "$OUT/logs/ios-$name.log" 2>&1 || { echo "!! $name tests failed"; FAILS=$((FAILS+1)); grep -E "error:|failed|XCTAssert" "$OUT/logs/ios-$name.log" | head -20; }
   xcrun simctl shutdown "$udid" >/dev/null 2>&1
   # XCUIScreen captures in portrait device coordinates — rotate landscape shots upright.
@@ -77,19 +77,22 @@ if [ -n "$XCTESTRUN" ]; then
       ;;
     full)
       run_ios render "iPhone 17 Pro" light portrait "" "TrackifyRenderTests"
-      run_ios iphone17pro-light "iPhone 17 Pro" light portrait "" "$WALK"
-      run_ios iphone17pro-dark "iPhone 17 Pro" dark portrait "" "$WALK"
-      run_ios iphone17 "iPhone 17" light portrait "" "$WALK/test02Walk"
-      run_ios iphone17promax "iPhone 17 Pro Max" light portrait "" "$WALK/test02Walk"
-      run_ios iphone16e-small "iPhone 16e" light portrait "" "$WALK/test02Walk"
-      run_ios iphone17pro-landscape "iPhone 17 Pro" light landscape "" "$WALK/test02Walk"
-      run_ios iphone17pro-axl "iPhone 17 Pro" light portrait "UICTContentSizeCategoryAccessibilityL" "$WALK/test02Walk"
+      run_ios iphone17pro-light "iPhone 17 Pro" light portrait "" "$WALK/test01Login"
+      run_ios iphone17pro-light "iPhone 17 Pro" light portrait "" "$WALK/test02Walk"
+      run_ios iphone17pro-light-la "iPhone 17 Pro" light portrait "" "$WALK/test03LiveActivity"
+      run_ios iphone17pro-dark "iPhone 17 Pro" dark portrait "" "$WALK/test02Walk"
+      KEY="$WALK/test04KeyScreens"
+      run_ios iphone17 "iPhone 17" light portrait "" "$KEY"
+      run_ios iphone17promax "iPhone 17 Pro Max" light portrait "" "$KEY"
+      run_ios iphone16e-small "iPhone 16e" light portrait "" "$KEY"
+      run_ios iphone17pro-landscape "iPhone 17 Pro" light landscape "" "$KEY"
+      run_ios iphone17pro-axl "iPhone 17 Pro" light portrait "UICTContentSizeCategoryAccessibilityL" "$KEY"
       run_ios ipad13-portrait "iPad Pro 13-inch (M5)" light portrait "" "$WALK/test02Walk"
-      run_ios ipad13-landscape "iPad Pro 13-inch (M5)" dark landscape "" "$WALK/test02Walk"
-      run_ios ipadmini-portrait "iPad mini (A17 Pro)" light portrait "" "$WALK/test02Walk"
+      run_ios ipad13-landscape "iPad Pro 13-inch (M5)" dark landscape "" "$KEY"
+      run_ios ipadmini-portrait "iPad mini (A17 Pro)" light portrait "" "$KEY"
       ;;
     legacy)
-      run_ios iphonese-ios18 "iPhone SE (3rd generation)" light portrait "" "$WALK"
+      run_ios iphonese-ios18 "iPhone SE (3rd generation)" light portrait "" "$WALK/test02Walk"
       ;;
   esac
   demo_timer_stop
