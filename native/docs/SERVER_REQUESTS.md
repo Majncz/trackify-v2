@@ -34,3 +34,8 @@ Same idea as A2 for Android: `POST /api/devices {fcmToken, platform:"android"}` 
 `timer:started|stopped|start-updated`. Today the app keeps a socket open while a timer runs and the process is alive,
 and WorkManager/`GET /api/timer` heal the notification on the next launch, but if Android kills the process and the
 timer is stopped on the web, the notification stays until the app runs again. Not blocking.
+- **D1 — done.** Tool calls without a result are persisted as `state:"input-available"` with `input` and no `output`
+  (the web already renders that as a pending approval card).
+- **D2 — deferred** (needs a Firebase project + server key from the owner). Meanwhile: while the ongoing notification is
+  shown, schedule a periodic WorkManager check (15 min, network-connected) of `GET /api/timer` that clears/updates the
+  notification — heals a web-side stop within ~15 min without push.

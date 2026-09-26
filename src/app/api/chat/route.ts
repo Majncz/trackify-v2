@@ -563,13 +563,24 @@ Use markdown: **bold** for emphasis, tables for data, keep responses concise.`,
                 const tc = toolCall as any;
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const toolResult = step.toolResults?.find((r: any) => r.toolCallId === toolCall.toolCallId) as any;
-                assistantParts.push({
-                  type: `tool-${toolCall.toolName}`,
-                  toolCallId: toolCall.toolCallId,
-                  state: "result",
-                  input: tc.input ?? tc.args ?? {},
-                  output: toolResult?.output ?? toolResult?.result,
-                });
+                const input = tc.input ?? tc.args ?? {};
+                // Write tools wait for the user's Approve/Reject: keep them pending, without output.
+                assistantParts.push(
+                  toolResult
+                    ? {
+                        type: `tool-${toolCall.toolName}`,
+                        toolCallId: toolCall.toolCallId,
+                        state: "result",
+                        input,
+                        output: toolResult.output ?? toolResult.result,
+                      }
+                    : {
+                        type: `tool-${toolCall.toolName}`,
+                        toolCallId: toolCall.toolCallId,
+                        state: "input-available",
+                        input,
+                      }
+                );
               }
             }
           }
