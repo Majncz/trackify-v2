@@ -201,7 +201,8 @@ final class ScreenshotWalkTests: TrackifyUITestCase {
     func test04KeyScreens() {
         launch()
         XCTAssertTrue(waitFor(app.staticTexts["Dashboard"], 40))
-        shot("k1-home", settle: 2.5)
+        waitFor(app.buttons["runningClock"], 8)
+        shot("k1-home", settle: 4)
         scrollDown(2)
         shot("k2-home-tasks")
         go("Stats"); shot("k3-stats", settle: 2)

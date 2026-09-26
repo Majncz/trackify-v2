@@ -30,7 +30,7 @@ struct YearlyCalendarView: View {
                 VStack(alignment: .trailing, spacing: gap) {
                     Color.clear.frame(height: 14)
                     ForEach(0..<7, id: \.self) { r in
-                        Text(r % 2 == 0 ? dayLabels[r] : "").font(.scaled(9)).foregroundStyle(Theme.mutedForeground)
+                        Text(r % 2 == 0 ? dayLabels[r] : "").font(.system(size: 9)).foregroundStyle(Theme.mutedForeground)
                             .frame(height: cell)
                     }
                 }
@@ -40,7 +40,7 @@ struct YearlyCalendarView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             ZStack(alignment: .topLeading) {
                                 ForEach(months, id: \.index) { m in
-                                    Text(m.label).font(.scaled(9)).foregroundStyle(Theme.mutedForeground)
+                                    Text(m.label).font(.system(size: 9)).foregroundStyle(Theme.mutedForeground)
                                         .fixedSize()
                                         .offset(x: CGFloat(m.index) * colW)
                                 }
@@ -146,7 +146,7 @@ struct WeeklyHeatGridView: View {
             HStack(spacing: 0) {
                 Color.clear.frame(width: labelW + gap, height: 10)
                 ForEach(0..<24, id: \.self) { h in
-                    Text(h % 6 == 0 ? "\(h)" : "").font(.scaled(9)).foregroundStyle(Theme.mutedForeground)
+                    Text(h % 6 == 0 ? "\(h)" : "").font(.system(size: 9)).lineLimit(1).fixedSize().foregroundStyle(Theme.mutedForeground)
                         .frame(width: hourW + (h < 23 ? gap : 0), alignment: .leading)
                 }
             }
@@ -179,7 +179,7 @@ struct WeeklyHeatGridView: View {
         let segments = WeeklyHeatGrid.segments(hourCells: cells, squaresPerHour: sph)
         let total = 24 * sph
         return HStack(spacing: gap) {
-            Text(DayCalc.current.format(day, "MMM d")).font(.scaled(11)).tabular().foregroundStyle(Theme.mutedForeground)
+            Text(DayCalc.current.format(day, "MMM d")).font(.system(size: 11)).tabular().foregroundStyle(Theme.mutedForeground)
                 .lineLimit(1).frame(width: labelW - 6, alignment: .trailing).padding(.trailing, 6)
             Canvas { ctx, _ in
                 for flat in 0..<total {
@@ -274,7 +274,7 @@ struct TimeSpentCard: View {
                 }
                 Spacer()
                 Segmented(items: [(Mode.weekly, "Weekly"), (Mode.yearly, "Yearly")], selection: $mode, compact: true)
-                    .frame(width: 150)
+                    .fixedSize()
             }
             Group {
                 switch mode {
