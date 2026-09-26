@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Settings, BarChart2, DollarSign } from "lucide-react";
+import { Settings, BarChart2, DollarSign, Clapperboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSocket } from "@/hooks/use-socket";
 import { usePathname } from "next/navigation";
@@ -21,7 +21,7 @@ export function Header() {
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b pt-[env(safe-area-inset-top,0px)]">
       <div className="max-w-4xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between">
         <Link href="/" className="font-bold text-lg flex items-center gap-2">
-          Trackify
+          Trackify.
           <span
             className={cn(
               "h-1.5 w-1.5 rounded-full transition-colors relative",
@@ -46,6 +46,16 @@ export function Header() {
               <span className="sr-only">Stats</span>
             </Button>
           </Link>
+          <Link href="/visualizations">
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(pathname === "/visualizations" && "text-primary")}
+            >
+              <Clapperboard className="h-5 w-5" />
+              <span className="sr-only">Visualizations</span>
+            </Button>
+          </Link>
           <Link href="/billing">
             <Button
               variant="ghost"
@@ -57,7 +67,11 @@ export function Header() {
             </Button>
           </Link>
           <Link href="/settings">
-            <Button variant="ghost" size="icon">
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(pathname === "/settings" && "text-primary")}
+            >
               <Settings className="h-5 w-5" />
               <span className="sr-only">Settings</span>
             </Button>

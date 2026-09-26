@@ -2,21 +2,32 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
-import { addDays, format } from "date-fns";
+import { format } from "date-fns";
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
-import { usePresence } from "@/hooks/use-presence";
+import {
+  isCurrentPeriod,
+  periodBounds,
+  stepPeriod,
+  usePresence,
+  type LeaderboardRange,
+} from "@/hooks/use-presence";
 import { useStats } from "@/hooks/use-stats";
 import { useLiveTimer } from "@/hooks/use-timer";
 import { formatDurationWords } from "@/lib/utils";
-import { liveTodayMs } from "@/lib/live-timer";
+import { liveRangeMs } from "@/lib/live-timer";
 import { cn } from "@/lib/utils";
 
 const MEDALS = ["1", "2", "3"] as const;
+const RANGES: { id: LeaderboardRange; label: string }[] = [
+  { id: "day", label: "Daily" },
+  { id: "week", label: "Weekly" },
+  { id: "month", label: "Monthly" },
+];
 
 function parseDayKey(key: string) {
   const [year, month, day] = key.split("-").map(Number);
@@ -27,20 +38,34 @@ function localDayKey(date = new Date()) {
   return format(date, "yyyy-MM-dd");
 }
 
+function rangeNoun(range: LeaderboardRange) {
+  if (range === "week") return "week";
+  if (range === "month") return "month";
+  return "day";
+}
+
+function yourPeriodLabel(range: LeaderboardRange, isCurrent: boolean) {
+  if (range === "week") return isCurrent ? "Your week" : "You that week";
+  if (range === "month") return isCurrent ? "Your month" : "You that month";
+  return isCurrent ? "Your today" : "You that day";
+}
+
 export function DailyLeaderboard() {
   const { data: session } = useSession();
   const [day, setDay] = useState(() => localDayKey());
+  const [range, setRange] = useState<LeaderboardRange>("day");
   const [pickerOpen, setPickerOpen] = useState(false);
   const today = localDayKey();
-  const isToday = day === today;
-  const { leaderboard, isLoading: presenceLoading } = usePresence(day);
+  const isCurrent = isCurrentPeriod(range, day, today);
+  const { leaderboard, isLoading: presenceLoading } = usePresence(day, range);
   const { data: stats, isLoading: statsLoading } = useStats();
   const { running, startTime } = useLiveTimer();
   const [now, setNow] = useState(() => Date.now());
+  const bounds = periodBounds(range, day);
 
-  const rows = leaderboard.filter((row) => row.todayMs > 0 || (isToday && row.startTime));
-  const anyoneLive = isToday && rows.some((row) => row.startTime);
-  const liveClock = isToday && (anyoneLive || (running && Boolean(startTime)));
+  const rows = leaderboard.filter((row) => row.todayMs > 0 || (isCurrent && row.startTime));
+  const anyoneLive = isCurrent && rows.some((row) => row.startTime);
+  const liveClock = isCurrent && (anyoneLive || (running && Boolean(startTime)));
 
   useEffect(() => {
     if (!liveClock) return;
@@ -48,25 +73,55 @@ export function DailyLeaderboard() {
     return () => window.clearInterval(id);
   }, [liveClock]);
 
-  const liveAll = isToday && running && startTime ? Math.max(0, now - startTime) : 0;
-  const liveToday = isToday && running && startTime ? liveTodayMs(startTime, now) : 0;
+  const liveAll = isCurrent && running && startTime ? Math.max(0, now - startTime) : 0;
+  const liveYou =
+    isCurrent && running && startTime ? liveRangeMs(startTime, now, bounds.start, bounds.end) : 0;
   const yourRow = rows.find((row) => row.userId === session?.user?.id);
-  const dayTotal = isToday
-    ? (stats?.todayTotal ?? 0) + liveToday
-    : yourRow?.todayMs ?? 0;
+  const yourTotal =
+    range === "day" && isCurrent
+      ? (stats?.todayTotal ?? 0) + liveYou
+      : (yourRow?.todayMs ?? 0) + liveYou;
   const allTimeTotal = (stats?.grandTotal ?? 0) + liveAll;
 
   const label = useMemo(() => {
-    if (isToday) return "Today";
-    return format(parseDayKey(day), "EEE d MMM");
-  }, [day, isToday]);
+    const selected = parseDayKey(day);
+    if (range === "week") {
+      if (isCurrent) return "This week";
+      const { start, end } = periodBounds("week", day);
+      if (start.getMonth() === end.getMonth()) {
+        return `${format(start, "d")}–${format(end, "d MMM")}`;
+      }
+      return `${format(start, "d MMM")} – ${format(end, "d MMM")}`;
+    }
+    if (range === "month") {
+      return isCurrent ? "This month" : format(selected, "MMM yyyy");
+    }
+    if (isCurrent) return "Today";
+    return format(selected, "EEE d MMM");
+  }, [day, isCurrent, range]);
+
+  const title = isCurrent
+    ? range === "week"
+      ? "This week’s leaderboard"
+      : range === "month"
+        ? "This month’s leaderboard"
+        : "Today’s leaderboard"
+    : "Leaderboard";
+
+  const subtitle = isCurrent
+    ? anyoneLive
+      ? "Live times, updating as people track"
+      : range === "day"
+        ? "Who’s grinding the most today"
+        : `Who’s grinding the most this ${rangeNoun(range)}`
+    : `How the grind looked that ${rangeNoun(range)}`;
 
   const pickDay = (next: string) => {
     if (!next) return;
     setDay(next > today ? today : next);
   };
 
-  if (presenceLoading && statsLoading && isToday) {
+  if (presenceLoading && statsLoading && isCurrent && range === "day") {
     return (
       <Card>
         <CardContent className="py-4 space-y-3">
@@ -82,16 +137,8 @@ export function DailyLeaderboard() {
       <CardContent className="py-4 space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <p className="text-base font-semibold">
-              {isToday ? "Today’s leaderboard" : "Leaderboard"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {isToday
-                ? anyoneLive
-                  ? "Live times, updating as people track"
-                  : "Who’s grinding the most today"
-                : "How the grind looked that day"}
-            </p>
+            <p className="text-base font-semibold">{title}</p>
+            <p className="text-xs text-muted-foreground">{subtitle}</p>
           </div>
           <div className="inline-flex shrink-0 items-center gap-1 self-start">
             <Button
@@ -99,47 +146,71 @@ export function DailyLeaderboard() {
               variant="ghost"
               size="sm"
               className="h-8 w-8 p-0"
-              aria-label="Previous day"
-              onClick={() => pickDay(localDayKey(addDays(parseDayKey(day), -1)))}
+              aria-label={`Previous ${rangeNoun(range)}`}
+              onClick={() => pickDay(stepPeriod(range, day, -1))}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="min-w-[8.5rem] gap-1.5 font-medium tabular-nums"
-                >
-                  <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                  {label}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="end">
-                <Calendar
-                  mode="single"
-                  selected={parseDayKey(day)}
-                  onSelect={(date) => {
-                    if (!date) return;
-                    pickDay(localDayKey(date));
-                    setPickerOpen(false);
-                  }}
-                  disabled={{ after: new Date() }}
-                  captionLayout="dropdown"
-                  startMonth={new Date(2018, 0)}
-                  endMonth={new Date()}
-                />
-              </PopoverContent>
-            </Popover>
+            <div className="inline-flex h-8 items-center rounded-md border border-input bg-background shadow-sm">
+              <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center border-r border-input text-muted-foreground hover:text-foreground"
+                    aria-label={label}
+                    title={label}
+                  >
+                    <CalendarIcon className="h-3.5 w-3.5" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <Calendar
+                    mode="single"
+                    selected={parseDayKey(day)}
+                    onSelect={(date) => {
+                      if (!date) return;
+                      pickDay(localDayKey(date));
+                      setPickerOpen(false);
+                    }}
+                    disabled={{ after: new Date() }}
+                    captionLayout="dropdown"
+                    startMonth={new Date(2018, 0)}
+                    endMonth={new Date()}
+                  />
+                </PopoverContent>
+              </Popover>
+              <div
+                className="inline-flex items-center p-0.5"
+                role="tablist"
+                aria-label="Leaderboard range"
+              >
+                {RANGES.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={range === item.id}
+                    className={cn(
+                      "h-7 rounded-sm px-2 text-xs font-medium transition-colors",
+                      range === item.id
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                    onClick={() => setRange(item.id)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <Button
               type="button"
               variant="ghost"
               size="sm"
               className="h-8 w-8 p-0"
-              aria-label="Next day"
-              disabled={isToday}
-              onClick={() => pickDay(localDayKey(addDays(parseDayKey(day), 1)))}
+              aria-label={`Next ${rangeNoun(range)}`}
+              disabled={isCurrent}
+              onClick={() => pickDay(stepPeriod(range, day, 1))}
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
@@ -148,8 +219,11 @@ export function DailyLeaderboard() {
         {rows.length > 0 ? (
           <ol className="space-y-2">
             {rows.map((row, index) => {
-              const isLive = isToday && Boolean(row.startTime);
-              const live = isLive && row.startTime ? liveTodayMs(row.startTime, now) : 0;
+              const isLive = isCurrent && Boolean(row.startTime);
+              const live =
+                isLive && row.startTime
+                  ? liveRangeMs(row.startTime, now, bounds.start, bounds.end)
+                  : 0;
               const sessionMs = isLive && row.startTime ? Math.max(0, now - row.startTime) : 0;
               const total = row.todayMs + live;
               const isYou = row.userId === session?.user?.id;
@@ -203,14 +277,18 @@ export function DailyLeaderboard() {
           </ol>
         ) : (
           !presenceLoading && (
-            <p className="text-sm text-muted-foreground">Nobody logged time that day.</p>
+            <p className="text-sm text-muted-foreground">
+              Nobody logged time that {rangeNoun(range)}.
+            </p>
           )
         )}
         <div className="flex items-end justify-between gap-4 border-t pt-3">
           <div>
-            <p className="text-xs font-medium text-muted-foreground">{isToday ? "Your today" : "You that day"}</p>
+            <p className="text-xs font-medium text-muted-foreground">
+              {yourPeriodLabel(range, isCurrent)}
+            </p>
             <p className="text-lg font-bold tabular-nums leading-tight">
-              {formatDurationWords(dayTotal)}
+              {formatDurationWords(yourTotal)}
             </p>
           </div>
           <div className="text-right">
