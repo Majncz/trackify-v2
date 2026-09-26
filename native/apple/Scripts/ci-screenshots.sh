@@ -56,9 +56,9 @@ run_ios() { # name device appearance orientation contentSize testFilter
   TEST_RUNNER_SHOT_DIR="$SHOTS" TEST_RUNNER_SHOT_PREFIX="$name" TEST_RUNNER_SHOT_ORIENTATION="$orient" \
   TEST_RUNNER_SHOT_CONTENT_SIZE="$size" TEST_RUNNER_TRACKIFY_SERVER="$SERVER" \
     xcodebuild test-without-building -xctestrun "$XCTESTRUN" -destination "id=$udid" \
-      -only-testing:"$only" -resultBundlePath "$OUT/xcresult/$name.xcresult" \
+      -only-testing:"$only" -resultBundlePath "$OUT/xcresult/$name-${only##*/}.xcresult" \
       -test-timeouts-enabled YES -maximum-test-execution-time-allowance 480 \
-      > "$OUT/logs/ios-$name.log" 2>&1 || { echo "!! $name tests failed"; FAILS=$((FAILS+1)); grep -E "error:|failed|XCTAssert" "$OUT/logs/ios-$name.log" | head -20; }
+      > "$OUT/logs/ios-$name-${only##*/}.log" 2>&1 || { echo "!! $name tests failed"; FAILS=$((FAILS+1)); grep -E "error:|failed|XCTAssert" "$OUT/logs/ios-$name-${only##*/}.log" | head -20; }
   xcrun simctl shutdown "$udid" >/dev/null 2>&1
   # XCUIScreen captures in portrait device coordinates — rotate landscape shots upright.
   if [ "$orient" = "landscape" ]; then
@@ -95,7 +95,7 @@ if [ -n "$XCTESTRUN" ]; then
       run_ios iphonese-ios18 "iPhone SE (3rd generation)" light portrait "" "$WALK/test02Walk"
       ;;
   esac
-  demo_timer_stop
+  [ "$SHOT_SET" != "legacy" ] && demo_timer_stop
   if [ "${RUN_FLOWS:-1}" = "1" ]; then
     run_ios flows "iPhone 17 Pro" light portrait "" "TrackifyUITests/TimerFlowTests"
   fi

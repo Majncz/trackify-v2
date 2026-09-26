@@ -148,12 +148,12 @@ struct BreakdownChartCard: View {
             .chartYAxis {
                 AxisMarks(position: .leading) { v in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 3])).foregroundStyle(Theme.border)
-                    AxisValueLabel { if let h = v.as(Double.self) { Text("\(Int(h))h").font(.scaled(11)) } }
+                    AxisValueLabel { if let h = v.as(Double.self) { Text("\(Int(h))h").font(.system(size: 11)) } }
                 }
             }
             .chartXAxis {
-                AxisMarks(values: .automatic(desiredCount: 7)) { _ in
-                    AxisValueLabel().font(.scaled(11))
+                AxisMarks(values: .automatic(desiredCount: rows.count > 7 ? 5 : 7)) { _ in
+                    AxisValueLabel().font(.system(size: 11))
                 }
             }
             .frame(height: 208)

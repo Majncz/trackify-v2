@@ -317,6 +317,14 @@ struct Segmented<T: Hashable>: View {
     var compact = false
 
     var body: some View {
+        // Equal-width segments when they fit; otherwise (large text) a scrollable strip — never truncated labels.
+        ViewThatFits(in: .horizontal) {
+            strip(fill: true)
+            ScrollView(.horizontal, showsIndicators: false) { strip(fill: false) }
+        }
+    }
+
+    private func strip(fill: Bool) -> some View {
         HStack(spacing: 2) {
             ForEach(items, id: \.0) { item in
                 let on = item.0 == selection
@@ -326,10 +334,10 @@ struct Segmented<T: Hashable>: View {
                     Text(item.1)
                         .font(.scaled(compact ? 12 : 13, weight: .medium))
                         .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+                        .fixedSize()
                         .foregroundStyle(on ? Theme.foreground : Theme.mutedForeground)
                         .padding(.horizontal, compact ? 8 : 10)
-                        .frame(maxWidth: .infinity, minHeight: compact ? 26 : 30)
+                        .frame(maxWidth: fill ? .infinity : nil, minHeight: compact ? 26 : 30)
                         .background(on ? Theme.background : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                         .shadow(color: on ? .black.opacity(0.08) : .clear, radius: 1, y: 1)
                         .contentShape(Rectangle())

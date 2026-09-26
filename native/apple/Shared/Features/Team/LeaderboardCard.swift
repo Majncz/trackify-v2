@@ -98,7 +98,7 @@ struct LeaderboardCard: View {
                 HStack(spacing: 0) {
                     ForEach(LeaderboardRange.allCases, id: \.self) { r in
                         Button { range = r } label: {
-                            Text(r.label).font(.scaled(12, weight: .medium))
+                            Text(r.label).font(.scaled(12, weight: .medium)).lineLimit(1).fixedSize()
                                 .foregroundStyle(range == r ? Theme.foreground : Theme.mutedForeground)
                                 .padding(.horizontal, 8).frame(height: 26)
                                 .background(range == r ? Theme.muted : .clear, in: RoundedRectangle(cornerRadius: 4))
