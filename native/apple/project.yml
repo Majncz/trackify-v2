@@ -29,6 +29,7 @@ targets:
       - path: Shared
       - path: Intents
       - path: iOS
+        excludes: ["*.plist", "*.entitlements"]
     dependencies:
       - package: TrackifyKit
       - target: TrackifyWidgets
@@ -72,6 +73,7 @@ targets:
     platform: iOS
     sources:
       - path: Widgets
+        excludes: ["*.plist", "*.entitlements"]
       - path: Intents
       - path: Shared/Design
     dependencies:
@@ -107,6 +109,7 @@ targets:
       - path: Shared
       - path: Intents
       - path: macOS
+        excludes: ["*.plist", "*.entitlements"]
     dependencies:
       - package: TrackifyKit
       - target: TrackifyMacWidgets
@@ -145,6 +148,7 @@ targets:
     platform: macOS
     sources:
       - path: Widgets
+        excludes: ["*.plist", "*.entitlements"]
       - path: Intents
       - path: Shared/Design
     dependencies:
