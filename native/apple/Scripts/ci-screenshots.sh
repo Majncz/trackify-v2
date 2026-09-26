@@ -91,6 +91,11 @@ if [ -n "$XCTESTRUN" ]; then
       run_ios ipad13-landscape "iPad Pro 13-inch (M5)" dark landscape "" "$KEY"
       run_ios ipadmini-portrait "iPad mini (A17 Pro)" light portrait "" "$KEY"
       ;;
+    axl)
+      run_ios iphone17pro-axl "iPhone 17 Pro" light portrait "UICTContentSizeCategoryAccessibilityL" "$WALK/test04KeyScreens"
+      run_ios iphone17pro-light "iPhone 17 Pro" light portrait "" "$WALK/test04KeyScreens"
+      RUN_FLOWS=0; RUN_MAC=0
+      ;;
     legacy)
       run_ios iphonese-ios18 "iPhone SE (3rd generation)" light portrait "" "$WALK/test02Walk"
       ;;

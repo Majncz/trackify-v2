@@ -128,7 +128,7 @@ struct MenuPanelView: View {
             HStack(alignment: .center) {
                 Button { fixing = r } label: {
                     TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                        Text(Fmt.duration(ctx.date.ms - r.startTime)).font(.scaled(30, weight: .bold, design: .monospaced)).tabular()
+                        Text(Fmt.duration(ctx.date.ms - r.startTime)).font(.scaled(30, weight: .bold, design: .monospaced)).tabular().lineLimit(1).minimumScaleFactor(0.5)
                     }
                 }
                 .buttonStyle(.plain)

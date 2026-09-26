@@ -73,52 +73,63 @@ extension RunningTimer: Identifiable { public var id: String { "\(taskId)-\(star
 /// "Currently tracking" card with the big clock (tap → Fix this session) and Stop.
 struct RunningBanner: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dynamicTypeSize) private var typeSize
     let running: RunningTimer
     var onFix: () -> Void
 
     var body: some View {
-        let task = model.task(running.taskId)
-        HStack(alignment: .center, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    if running.pending {
-                        Circle().fill(Theme.amber).frame(width: 6, height: 6)
-                    } else {
-                        Circle().fill(Theme.emerald).frame(width: 6, height: 6)
-                    }
-                    Text(running.pending ? "Syncing..." : "Currently tracking")
-                        .font(.scaled(13, weight: .medium))
-                        .foregroundStyle(Theme.mutedForeground)
-                }
-                HStack(spacing: 8) {
-                    Text(task?.name ?? "…").font(.scaled(18, weight: .semibold)).lineLimit(1)
-                    if let g = task?.taskGroup { GroupPill(name: g.name, hex: g.accentHex) }
-                }
-                Button(action: onFix) {
-                    TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                        Text(Fmt.duration(ctx.date.ms - running.startTime))
-                            .font(.clock).tabular()
-                            .foregroundStyle(Theme.foreground)
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Elapsed time. Fix this session")
-                .accessibilityIdentifier("runningClock")
-                Text("since \(clock(running.startTime)) · tap the clock to fix")
-                    .font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
+        let large = typeSize.isAccessibilitySize
+        Group {
+            if large {
+                VStack(alignment: .leading, spacing: 12) { info(large: true); stopButton }
+            } else {
+                HStack(alignment: .center, spacing: 16) { info(large: false); Spacer(minLength: 0); stopButton }
             }
-            Spacer(minLength: 0)
-            Button { model.stop() } label: {
-                Label(model.stopQueued ? "Saving..." : "Stop", systemImage: "square.fill")
-            }
-            .buttonStyle(.t(.destructive, .lg))
-            .accessibilityIdentifier("stopRunning")
         }
         .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
             .strokeBorder(running.pending ? Theme.pending : Theme.primary, lineWidth: running.pending ? 2 : 1))
         .pendingPulse(running.pending)
+    }
+
+    private var stopButton: some View {
+        Button { model.stop() } label: {
+            Label(model.stopQueued ? "Saving..." : "Stop", systemImage: "square.fill")
+        }
+        .buttonStyle(.t(.destructive, .lg))
+        .accessibilityIdentifier("stopRunning")
+    }
+
+    private func info(large: Bool) -> some View {
+        let task = model.task(running.taskId)
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Circle().fill(running.pending ? Theme.amber : Theme.emerald).frame(width: 6, height: 6)
+                Text(running.pending ? "Syncing..." : "Currently tracking")
+                    .font(.scaled(13, weight: .medium))
+                    .foregroundStyle(Theme.mutedForeground)
+            }
+            HStack(spacing: 8) {
+                Text(task?.name ?? "…").font(.scaled(18, weight: .semibold)).lineLimit(large ? 2 : 1)
+                if let g = task?.taskGroup, !large { GroupPill(name: g.name, hex: g.accentHex) }
+            }
+            if large, let g = task?.taskGroup { GroupPill(name: g.name, hex: g.accentHex) }
+            Button(action: onFix) {
+                TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                    Text(Fmt.duration(ctx.date.ms - running.startTime))
+                        .font(.clock).tabular()
+                        .lineLimit(1).minimumScaleFactor(0.5)
+                        .foregroundStyle(Theme.foreground)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Elapsed time. Fix this session")
+            .accessibilityIdentifier("runningClock")
+            Text("since \(clock(running.startTime)) · tap the clock to fix")
+                .font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
+        }
     }
 }
 

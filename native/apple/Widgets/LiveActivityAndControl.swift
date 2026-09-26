@@ -26,6 +26,7 @@ struct TrackifyLiveActivity: Widget {
                     Text(timerInterval: context.state.startTime...Date.distantFuture, countsDown: false)
                         .font(.system(size: 15, weight: .semibold, design: .monospaced))
                         .monospacedDigit()
+                        .lineLimit(1).minimumScaleFactor(0.5)
                         .multilineTextAlignment(.trailing)
                         .frame(maxWidth: 90)
                 }
@@ -34,6 +35,7 @@ struct TrackifyLiveActivity: Widget {
                         Text(timerInterval: context.state.startTime...Date.distantFuture, countsDown: false)
                             .font(.system(size: 34, weight: .bold, design: .monospaced))
                             .monospacedDigit()
+                        .lineLimit(1).minimumScaleFactor(0.5)
                         Spacer()
                         Button(intent: StopTimerIntent()) {
                             Label("Stop", systemImage: "square.fill")
@@ -52,6 +54,7 @@ struct TrackifyLiveActivity: Widget {
                 Text(timerInterval: context.state.startTime...Date.distantFuture, countsDown: false)
                     .font(.system(size: 14, weight: .semibold, design: .monospaced))
                     .monospacedDigit()
+                        .lineLimit(1).minimumScaleFactor(0.5)
                     .frame(maxWidth: 64)
             } minimal: {
                 Circle().fill(Color(hex: context.state.accentHex)).frame(width: 10, height: 10)
@@ -77,6 +80,7 @@ struct LiveActivityLockScreen: View {
                 Text(timerInterval: state.startTime...Date.distantFuture, countsDown: false)
                     .font(.system(size: 34, weight: .bold, design: .monospaced))
                     .monospacedDigit()
+                        .lineLimit(1).minimumScaleFactor(0.5)
                     .foregroundStyle(Theme.foreground)
             }
             Button(intent: StopTimerIntent()) {

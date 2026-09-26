@@ -93,6 +93,16 @@ UITests/, RenderTests/ screenshot walk + timer flow tests; widget/Live Activity 
   label ticks once per minute (per second only with "show seconds"); the panel/dashboard drop their view trees
   while hidden.
 
+## Measured (CI, GitHub `macos-26` runners)
+
+| What | Result |
+|---|---|
+| macOS idle CPU, menu-bar only, timer running, 30 s sample | **0.03–0.13 %**, RSS ≈ 75 MB |
+| iOS launch (`XCTApplicationLaunchMetric`, Debug build, iPhone 17 Pro simulator on a shared CI VM, 3 runs) | ≈ 2.3–3.2 s avg (cold, includes simulator overhead); cached tasks/profile render before the first network response |
+| TrackifyKit unit tests (Linux + macOS) | 49 tests, incl. audit test vectors, timer-queue/offline/legacy-fallback, SSE, Socket.IO frames; live read-only decoding + socket auth on macOS |
+| UI tests | screenshot walk (all screens), Live Activity on lock screen/Dynamic Island, end-to-end timer flow against the lane API (start → switch → fix → stop → log past → live sync via socket) |
+| Device matrix | iPhone 16e, 17, 17 Pro (light/dark, landscape, Accessibility-L), 17 Pro Max, iPad Pro 13" (portrait/landscape, sidebar), iPad mini, iPhone SE (3rd gen) on iOS 18.6; macOS panel/dashboard light+dark at 900×600 and 1200×820 |
+
 ## Tests & CI
 
 * Linux fast loop: `Scripts/linux-test.sh` runs TrackifyKit's unit tests in Docker (`swift:6.1-noble`);

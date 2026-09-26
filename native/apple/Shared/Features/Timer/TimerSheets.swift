@@ -63,7 +63,7 @@ struct FixSessionSheet: View {
         SheetScaffold(title: "Fix this session", onClose: { dismiss() }) {
             VStack(spacing: 20) {
                 VStack(spacing: 4) {
-                    Text(Fmt.durationWords(duration)).font(.dialogDuration).tabular().tracking(-0.5)
+                    Text(Fmt.durationWords(duration)).font(.dialogDuration).tabular().tracking(-0.5).lineLimit(1).minimumScaleFactor(0.5)
                         .contentTransition(.numericText())
                     Text(stillRunning ? "Started \(clock(slider.start)) · still running" : "Started \(clock(slider.start)) · stopped \(clock(slider.end))")
                         .font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
@@ -156,7 +156,7 @@ struct LogPastSheet: View {
         SheetScaffold(title: "Add time to \(task.name)", onClose: { dismiss() }) {
             VStack(spacing: 20) {
                 VStack(spacing: 4) {
-                    Text(Fmt.durationWords(duration)).font(.dialogDuration).tabular().tracking(-0.5)
+                    Text(Fmt.durationWords(duration)).font(.dialogDuration).tabular().tracking(-0.5).lineLimit(1).minimumScaleFactor(0.5)
                     Text("\(clock(slider.start)) → \(openedAt - slider.end < 90_000 ? "just now" : clock(slider.end))")
                         .font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
                 }

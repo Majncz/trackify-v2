@@ -216,7 +216,7 @@ struct EditEntrySheet: View {
     var body: some View {
         SheetScaffold(title: "Edit time entry", onClose: { dismiss() }) {
             VStack(alignment: .leading, spacing: 16) {
-                Text(Fmt.durationWords(max(0, to.ms - from.ms))).font(.dialogDuration).tabular().frame(maxWidth: .infinity)
+                Text(Fmt.durationWords(max(0, to.ms - from.ms))).font(.dialogDuration).tabular().lineLimit(1).minimumScaleFactor(0.5).frame(maxWidth: .infinity)
                 DatePicker("From", selection: $from, in: ...Date())
                 DatePicker("Until", selection: $to, in: from...Date())
                 if event.paymentRecordId != nil {
