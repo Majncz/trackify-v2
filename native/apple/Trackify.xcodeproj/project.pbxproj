@@ -14,6 +14,7 @@
 		08854BE8D2998A3E0EBAF9D6 /* LiveActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0B2CF537F4F3182417EBB8A /* LiveActivityController.swift */; };
 		0A3B5F34115D2476FCC64010 /* GroupEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0D725297D3FE5FA2D9DBDA /* GroupEditorSheet.swift */; };
 		0B31318F95AE26A4D0C359E5 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B32683C346A8E237873FEB4 /* AppModel.swift */; };
+		0BD702FC8799B1E9081FFFD8 /* Appearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C2BE051915ADDF32431C73 /* Appearance.swift */; };
 		1126F9DB203AE49BAF10B5B8 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFF4C03E9FD00987AF2CDC50 /* SettingsView.swift */; };
 		129E630C250CB0C29AFE0B53 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69F628C6E944BA1344E7D6DD /* RootView.swift */; };
 		15EE3CC342ABD361C44480EA /* TrackifyKit in Frameworks */ = {isa = PBXBuildFile; productRef = 57278ECC6C09B3B7147B37AF /* TrackifyKit */; };
@@ -93,6 +94,7 @@
 		A955B4CA4DE2D3417BC92C5A /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FF2C9922347D9306AE85EA6 /* ChatView.swift */; };
 		AA3B621A9DB9AC0014964E0B /* TimerIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DEBF7B4816D82B9A35A8CD7 /* TimerIntents.swift */; };
 		AB6699CBB165A0E60FEC4A38 /* AIBillingEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCC34543C0F643554117D78E /* AIBillingEditor.swift */; };
+		B27901FF5E6269A6C5E9152C /* Appearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C2BE051915ADDF32431C73 /* Appearance.swift */; };
 		B4DFD64F2BA6DFAE753EE3E5 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF517C3CFD78FE3E53EEFA2C /* Components.swift */; };
 		B4E8397EE4622E016DB77CFB /* TimerIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DEBF7B4816D82B9A35A8CD7 /* TimerIntents.swift */; };
 		B66B350F0552280198AA36F9 /* TaskDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A56284ED8953B84E2CCD4003 /* TaskDetailView.swift */; };
@@ -112,6 +114,7 @@
 		D4A0AAB4363156D1E603F0FF /* Shortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 285C8D93AE48FAF0F727773E /* Shortcuts.swift */; };
 		D550500B0C58C0C709C03537 /* ChatSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 155A2EC4D78AD2379B5FEBCF /* ChatSession.swift */; };
 		D7BBAB724C213485D3589515 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF517C3CFD78FE3E53EEFA2C /* Components.swift */; };
+		D7C7C11B161373CC910454EA /* Appearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C2BE051915ADDF32431C73 /* Appearance.swift */; };
 		D9D4D57F8BC7E1976ABD3ACB /* LiveActivityAndControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EC0896EC077C1C731A99E70 /* LiveActivityAndControl.swift */; };
 		DC6B9DED21D68B4C894D62BE /* TrackifyKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1BFED707E86CF539894FB6DB /* TrackifyKit */; };
 		E225263AB6B56876D06260B0 /* Reminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ED93246DD3CCA6D37F6C3F0 /* Reminder.swift */; };
@@ -120,6 +123,8 @@
 		E81FA1F3064406F6C61DC8FB /* TimerSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47597AC1B81C73F379412EA2 /* TimerSheets.swift */; };
 		E898EFF4E00091FCD8C062A1 /* SessionSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 516216E5BC416F6F7E0C725D /* SessionSlider.swift */; };
 		ECAF3B148F05B9B5CD9FC4AB /* TrackifyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA46E1310B6C0963019BC2EB /* TrackifyApp.swift */; };
+		EFA4CF1270A64144B0E2FC2E /* Appearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C2BE051915ADDF32431C73 /* Appearance.swift */; };
+		EFEB5D0D668853595150DA4B /* Appearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C2BE051915ADDF32431C73 /* Appearance.swift */; };
 		EFFFBD87B76994766E6EE472 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B57F32A85D9A205D5A82FEB1 /* HomeView.swift */; };
 		F149D16B257968D7017043CB /* DashboardWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 346DB28AAEA7CBAF7E6DDBBA /* DashboardWindow.swift */; };
 		F85219F1773D242C93A2FC6A /* TrackifyWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 055F04C0B7277CE71AA94E76 /* TrackifyWidgets.swift */; };
@@ -218,6 +223,7 @@
 		9967DD74CAED935A7779561D /* LiveActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityAttributes.swift; sourceTree = "<group>"; };
 		9E867DB2EC95A24AD2ABC2CD /* HeatViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeatViews.swift; sourceTree = "<group>"; };
 		9F1606A7944942FDA3744ACD /* DataCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataCache.swift; sourceTree = "<group>"; };
+		A0C2BE051915ADDF32431C73 /* Appearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Appearance.swift; sourceTree = "<group>"; };
 		A187C2681230764CB4CB34ED /* AuthViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViews.swift; sourceTree = "<group>"; };
 		A56284ED8953B84E2CCD4003 /* TaskDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskDetailView.swift; sourceTree = "<group>"; };
 		A5B6BF9AECFD881C074D051C /* StatusItemController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusItemController.swift; sourceTree = "<group>"; };
@@ -405,6 +411,7 @@
 		97D2976318161D0AA7B81C4E /* Design */ = {
 			isa = PBXGroup;
 			children = (
+				A0C2BE051915ADDF32431C73 /* Appearance.swift */,
 				CF517C3CFD78FE3E53EEFA2C /* Components.swift */,
 				4484A09B32DF794F9E4F1295 /* Theme.swift */,
 			);
@@ -766,6 +773,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EFEB5D0D668853595150DA4B /* Appearance.swift in Sources */,
 				D7BBAB724C213485D3589515 /* Components.swift in Sources */,
 				D9D4D57F8BC7E1976ABD3ACB /* LiveActivityAndControl.swift in Sources */,
 				386142FAA19F7C373298D97D /* LiveActivityAttributes.swift in Sources */,
@@ -793,6 +801,7 @@
 				E7CA7502F49453B27B8F6F1A /* AIBillingPeriodCard.swift in Sources */,
 				3BAF36B76D33141D8D6C9CD2 /* AIBillingTab.swift in Sources */,
 				4D4939651A0D9FDAE5438C53 /* AppModel.swift in Sources */,
+				EFA4CF1270A64144B0E2FC2E /* Appearance.swift in Sources */,
 				C8AB97B9285E7F6B994E1BD9 /* AuthViews.swift in Sources */,
 				391ABD9946492B56D49C45AB /* BillingGuide.swift in Sources */,
 				50AF117412F4CA25556D6307 /* BillingHistoryTab.swift in Sources */,
@@ -835,6 +844,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D7C7C11B161373CC910454EA /* Appearance.swift in Sources */,
 				320A6CE43D283FD092499CE0 /* Components.swift in Sources */,
 				92592BA5A6278AB24BB62B7C /* LiveActivityAndControl.swift in Sources */,
 				913D21E736390837FA0DF075 /* LiveActivityAttributes.swift in Sources */,
@@ -849,6 +859,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B27901FF5E6269A6C5E9152C /* Appearance.swift in Sources */,
 				30A0F89E4CF30514AE17BC43 /* Components.swift in Sources */,
 				58B7D167A2F40DE0EA16307D /* LiveActivityAndControl.swift in Sources */,
 				806107D544A37520F22D3CDD /* LiveActivityAttributes.swift in Sources */,
@@ -867,6 +878,7 @@
 				B9C1F4F5E7C84A25A760E3E6 /* AIBillingPeriodCard.swift in Sources */,
 				4D0DE7EBD63EA109EEB343AB /* AIBillingTab.swift in Sources */,
 				0B31318F95AE26A4D0C359E5 /* AppModel.swift in Sources */,
+				0BD702FC8799B1E9081FFFD8 /* Appearance.swift in Sources */,
 				57020A50A6EBEB39D571E208 /* AuthViews.swift in Sources */,
 				BF02CC88774AB6D16AA5742F /* BillingGuide.swift in Sources */,
 				66BFF4CA4DCF4C6A5F415C1B /* BillingHistoryTab.swift in Sources */,
