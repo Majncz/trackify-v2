@@ -152,6 +152,7 @@ struct BillingSummaryBar: View {
     let summary: BillingSummary?
     let failed: Bool
     let wide: Bool
+    @Environment(\.cardChrome) private var chrome
 
     private var columns: [GridItem] {
         Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top), count: wide ? 4 : 2)
@@ -165,8 +166,9 @@ struct BillingSummaryBar: View {
                     .font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
             } else {
                 VStack(spacing: 12) {
-                    ForEach(codes, id: \.self) { code in
+                    ForEach(Array(codes.enumerated()), id: \.element) { i, code in
                         if let t = summary.byCurrency[code] {
+                            if i > 0 && chrome == .plain && !wide { Hairline() }
                             currencyRow(code, t)
                         }
                     }
@@ -182,7 +184,40 @@ struct BillingSummaryBar: View {
         }
     }
 
+    @ViewBuilder
     private func currencyRow(_ code: String, _ t: BillingCurrencySummary) -> some View {
+        if chrome == .plain && !wide {
+            compactRow(code, t)
+        } else {
+            gridRow(code, t)
+        }
+    }
+
+    /// Phones: "Unpaid" big, the other three totals on one muted line.
+    private func compactRow(_ code: String, _ t: BillingCurrencySummary) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Unpaid (\(code))").font(.footnote.weight(.medium)).foregroundStyle(Theme.mutedForeground)
+            Text(Money.format(t.unpaidTotal, code)).font(.title2.weight(.bold)).tabular()
+                .lineLimit(1).minimumScaleFactor(0.6)
+            HStack(spacing: 14) {
+                mini("Week", Money.format(t.thisWeekTotal, code))
+                mini("Month", Money.format(t.thisMonthTotal, code))
+                mini("Paid", Money.format(t.allTimePaidTotal, code))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func mini(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title).font(.caption).foregroundStyle(Theme.mutedForeground)
+            Text(value).font(.subheadline.weight(.medium)).tabular().lineLimit(1).minimumScaleFactor(0.7)
+        }
+    }
+
+    private func gridRow(_ code: String, _ t: BillingCurrencySummary) -> some View {
         LazyVGrid(columns: columns, spacing: 8) {
             BillingStatCard(title: "Unpaid (\(code))", value: Money.format(t.unpaidTotal, code), highlight: true, wide: wide)
             BillingStatCard(title: "This week", value: Money.format(t.thisWeekTotal, code), wide: wide)

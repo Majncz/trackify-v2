@@ -183,6 +183,7 @@ struct LeaderboardCard: View {
 struct LeaderboardRow: View {
     let row: Leaderboard.Row
     let index: Int
+    @Environment(\.cardChrome) private var chrome
     @State private var ping = false
 
     var body: some View {
@@ -216,8 +217,8 @@ struct LeaderboardRow: View {
         .padding(.vertical, 6)
         .background {
             if row.isLive {
-                RoundedRectangle(cornerRadius: 8).fill(Theme.emerald.opacity(0.1))
-                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.emerald.opacity(0.25)))
+                RoundedRectangle(cornerRadius: 8).fill(Theme.emerald.opacity(chrome == .plain ? 0.08 : 0.1))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.emerald.opacity(chrome == .plain ? 0 : 0.25)))
             } else if row.isYou {
                 RoundedRectangle(cornerRadius: 8).fill(Theme.primary.opacity(0.05))
             }

@@ -93,6 +93,11 @@ class TrackifyUITestCase: XCTestCase {
         if b.waitForExistence(timeout: 3) { b.tap() }
     }
 
+    func waitGone(_ e: XCUIElement, _ timeout: TimeInterval = 5) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while e.exists && Date() < deadline { Thread.sleep(forTimeInterval: 0.3) }
+    }
+
     func dismissSheet() {
         let close = app.buttons["Close"].firstMatch
         if close.exists && close.isHittable { close.tap() }
@@ -142,12 +147,14 @@ final class ScreenshotWalkTests: TrackifyUITestCase {
             clock.tap()
             if waitFor(app.buttons["fixSave"], 5) { shot("03-fix-session") }
             dismissSheet()
+            waitGone(app.buttons["fixSave"])
         }
 
         // Search → filter, then a name that doesn't exist → "Create … and start"
         let search = app.textFields["taskSearch"]
         if search.waitForExistence(timeout: 5) {
-            search.tap()
+            if !search.isHittable { scrollTop() }
+            search.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             search.typeText("le")
             shot("04-search")
             search.typeText("sson plans")
@@ -211,7 +218,8 @@ final class ScreenshotWalkTests: TrackifyUITestCase {
         go("Team")
         waitFor(app.otherElements["leaderboard"], 10)
         shot("16-team", settle: 2.5)
-        let race = app.descendants(matching: .any).matching(identifier: "openRace").firstMatch
+        var race = app.descendants(matching: .any).matching(identifier: "openRace").firstMatch
+        if !race.waitForExistence(timeout: 3) { race = app.staticTexts["Race"].firstMatch }
         if race.waitForExistence(timeout: 3) {
             race.tap()
             shot("17-race", settle: 3)

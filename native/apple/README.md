@@ -72,7 +72,7 @@ Packages/TrackifyKit   Foundation-only Swift package (builds & tests on Linux)
   Analytics/SessionMath/TeamMath/BillingMath/Accent/Formatters — every web algorithm, with the audit's test vectors
   SharedStorage        Keychain (App Group access group) → App Group defaults fallback, widget snapshot
 Shared/                SwiftUI used by both apps: design system, AppModel, all feature screens
-iOS/                   App entry, tabs (iPhone) / sidebar (iPad), Live Activity controller
+iOS/                   App entry, Timer·Stats·Team·More tabs (iPhone) / sidebar (iPad), Live Activity controller
 macOS/                 NSStatusItem + panel, global hotkey (Carbon), dashboard window + activation policy
 Widgets/               WidgetKit: timer widgets (+accessory), Live Activity, Control (iOS 18)
 Intents/               App Intents shared by apps and widgets (Start Task, Stop Timer, Current Timer, widget buttons)
@@ -115,6 +115,8 @@ UITests/, RenderTests/ screenshot walk + timer flow tests; widget/Live Activity 
   job on iPhone SE (3rd gen) · iOS 18), the end-to-end timer flow test against the lane API, widget renders, and
   macOS screenshots + idle-CPU measurement. Artifacts: screenshots, `.xcresult`s, logs, `Trackify-macOS.zip`,
   generated project.
+* Versioning: CI builds are stamped `1.1.<n> (<n>)` with `n = git rev-list --count HEAD` (shown in More → About
+  and Settings); local builds use `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` from `Config/Base.xcconfig`.
 * Test hooks (DEBUG builds or `TRACKIFY_UI_TEST=1`): `-TrackifyServer <url>`, `-TrackifyAutoLogin email:password`,
   `-TrackifyFreshLogin YES`, `-TrackifyResetSession YES`, `-TrackifyScreen home|stats|team|billing|chat|settings|visualizations`,
   `-TrackifyBillingTab sessions|history|rates|ai`, `-TrackifyChatPrompt "…"`; macOS: `-TrackifyShowPanelWindow YES`,

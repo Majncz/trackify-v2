@@ -4,6 +4,7 @@ import TrackifyKit
 // MARK: - Sessions tab (billing-page.tsx ledger panel, session-ledger.tsx, session-row.tsx)
 
 struct BillingSessionsTab: View {
+    @Environment(\.cardChrome) private var chrome
     var store: BillingStore
     var wide: Bool
     var onGoRates: () -> Void
@@ -30,11 +31,13 @@ struct BillingSessionsTab: View {
 
     private var sessionsCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Sessions").font(.cardTitle).foregroundStyle(Theme.foreground)
-                Text("Billable time (rates below). List is the focus — use the compact bar to select payouts.")
-                    .font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
-                    .fixedSize(horizontal: false, vertical: true)
+            if chrome == .card {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Sessions").font(.cardTitle).foregroundStyle(Theme.foreground)
+                    Text("Billable time (rates below). List is the focus — use the compact bar to select payouts.")
+                        .font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             BillingFiltersBar(store: store, wide: wide)
             if !wide && store.selectedSessions.isEmpty && !store.unpaidInList.isEmpty && store.status != .paid {
@@ -110,6 +113,7 @@ struct BillingDashedBox: View {
 struct BillingFiltersBar: View {
     @Bindable var store: BillingStore
     var wide: Bool
+    @Environment(\.cardChrome) private var chrome
 
     private var columns: [GridItem] {
         Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .topLeading), count: wide ? 4 : 2)
@@ -131,13 +135,13 @@ struct BillingFiltersBar: View {
             if store.period == .custom {
                 customRange
             }
-            Rectangle().fill(Theme.border).frame(height: 2)
+            Rectangle().fill(Theme.border).frame(height: chrome == .plain ? 1 : 2)
             groupByRow
         }
-        .padding(10)
-        .background(Theme.card, in: shape)
-        .overlay(shape.strokeBorder(Theme.border, lineWidth: 2))
-        .shadow(color: .black.opacity(0.08), radius: 6, x: 0, y: 3)
+        .padding(chrome == .plain ? 0 : 10)
+        .background(chrome == .plain ? Color.clear : Theme.card, in: shape)
+        .overlay(shape.strokeBorder(chrome == .plain ? Color.clear : Theme.border, lineWidth: 2))
+        .shadow(color: .black.opacity(chrome == .plain ? 0 : 0.08), radius: 6, x: 0, y: 3)
     }
 
     private var customRange: some View {
@@ -237,10 +241,31 @@ struct BillingFilterMenu<V: Hashable>: View {
 struct BillingLedgerSection: View {
     let section: BillingMath.Section
     var store: BillingStore
+    @Environment(\.cardChrome) private var chrome
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
         let isCollapsed = store.collapsed.contains(section.key)
+        if chrome == .plain {
+            // Phones: a plain list — day header, then rows separated by hairlines.
+            VStack(alignment: .leading, spacing: 0) {
+                header(isCollapsed: isCollapsed).padding(.vertical, 6)
+                if !isCollapsed {
+                    ForEach(section.rows) { row in
+                        Hairline()
+                        BillingSessionRowView(row: row, selected: store.selected.contains(row.id)) {
+                            store.toggle(row.id)
+                        }
+                    }
+                }
+                Hairline()
+            }
+        } else {
+            boxed(isCollapsed: isCollapsed, shape: shape)
+        }
+    }
+
+    private func boxed(isCollapsed: Bool, shape: RoundedRectangle) -> some View {
         VStack(spacing: 0) {
             header(isCollapsed: isCollapsed)
             if !isCollapsed {
@@ -344,6 +369,7 @@ struct BillingSessionRowView: View {
     let row: BillingSessionRow
     let selected: Bool
     let onToggle: () -> Void
+    @Environment(\.cardChrome) private var chrome
 
     private var interactive: Bool { !row.isPaid }
     private var highlighted: Bool { interactive && selected }
@@ -360,9 +386,32 @@ struct BillingSessionRowView: View {
     }
 
     var body: some View {
+        if chrome == .plain { plainRow } else { boxedRow }
+    }
+
+    /// Phones: a plain row; selection shows as a light accent tint.
+    private var plainRow: some View {
+        HStack(alignment: .top, spacing: 10) {
+            BillingCheckbox(checked: selected, disabled: row.isPaid,
+                            label: row.isPaid ? "Session already paid" : "Select session to include in payment",
+                            action: onToggle)
+                .padding(.top, -4)
+            info
+            Spacer(minLength: 6)
+            trailing
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(highlighted ? Color(hex: row.accentHex, opacity: 0.12) : Color.clear)
+        .contentShape(Rectangle())
+        .onTapGesture { if interactive { onToggle() } }
+    }
+
+    private var boxedRow: some View {
         let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
         let accent = row.accentHex
-        HStack(alignment: .top, spacing: 8) {
+        return HStack(alignment: .top, spacing: 8) {
             BillingCheckbox(checked: selected, disabled: row.isPaid,
                             label: row.isPaid ? "Session already paid" : "Select session to include in payment",
                             action: onToggle)
