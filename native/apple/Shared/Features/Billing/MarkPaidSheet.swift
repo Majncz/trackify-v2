@@ -177,9 +177,9 @@ private struct MarkPaidLineRow: View {
                         Circle().fill(Color(hex: session.accentHex)).frame(width: 8, height: 8)
                         Text(session.taskName).lineLimit(2)
                     }
-                    Text("\(session.timeRangeShort) · \(Fmt.durationMinutes(Double(session.durationMinutes)))")
+                    Text(session.timeRangeShort)
                         .font(.subheadline).foregroundStyle(.secondary)
-                    Text("Calculated \(Money.format(session.earnings, session.currency))")
+                    Text("\(Fmt.durationMinutes(Double(session.durationMinutes))) · calculated \(Money.format(session.earnings, session.currency))")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 .monospacedDigit()
@@ -193,7 +193,7 @@ private struct MarkPaidLineRow: View {
                         .keyboardType(.decimalPad)
                         .textFieldStyle(.roundedBorder)
                         #endif
-                        .frame(width: 110)
+                        .frame(width: 96)
                         .accessibilityLabel("Amount for \(session.taskName) in \(Money.unitLabel(session.currency))")
                     Text(Money.unitLabel(session.currency)).foregroundStyle(.secondary)
                 }
