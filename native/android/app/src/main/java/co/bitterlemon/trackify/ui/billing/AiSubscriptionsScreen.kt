@@ -3,8 +3,6 @@ package co.bitterlemon.trackify.ui.billing
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
@@ -13,31 +11,32 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,7 +47,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -61,15 +59,15 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -78,20 +76,14 @@ import co.bitterlemon.trackify.data.AiAnalytics
 import co.bitterlemon.trackify.data.AiPeriod
 import co.bitterlemon.trackify.data.AiPreset
 import co.bitterlemon.trackify.ui.auth.friendlyError
-import co.bitterlemon.trackify.ui.components.BadgeVariant
-import co.bitterlemon.trackify.ui.components.BtnSize
-import co.bitterlemon.trackify.ui.components.BtnVariant
+import co.bitterlemon.trackify.ui.components.AccentDot
 import co.bitterlemon.trackify.ui.components.ConfirmDialog
-import co.bitterlemon.trackify.ui.components.DateField
+import co.bitterlemon.trackify.ui.components.RowDivider
+import co.bitterlemon.trackify.ui.components.ScreenBar
+import co.bitterlemon.trackify.ui.components.SectionLabel
 import co.bitterlemon.trackify.ui.components.Skeleton
-import co.bitterlemon.trackify.ui.components.TBadge
-import co.bitterlemon.trackify.ui.components.TButton
-import co.bitterlemon.trackify.ui.components.TCard
-import co.bitterlemon.trackify.ui.components.TDialog
-import co.bitterlemon.trackify.ui.components.TInput
-import co.bitterlemon.trackify.ui.components.TSelect
+import co.bitterlemon.trackify.ui.components.SurfaceBlock
 import co.bitterlemon.trackify.ui.components.TooltipPopup
-import co.bitterlemon.trackify.ui.stats.rangeBounds
 import co.bitterlemon.trackify.ui.theme.T
 import co.bitterlemon.trackify.ui.theme.Tabular
 import co.bitterlemon.trackify.util.Format
@@ -117,6 +109,9 @@ object AiCadence {
         "yearly" -> LocalDate.of(start.year, 12, 31)
         else -> start.withDayOfMonth(start.lengthOfMonth())
     }
+
+    /** Running / Depleted / Ended (web period card badge). */
+    fun state(p: AiPeriod): String = if (p.depletedAt != null) "Depleted" else if (p.metrics.isActive) "Running" else "Ended"
 }
 
 private fun providerLabel(raw: String): String = try {
@@ -125,10 +120,20 @@ private fun providerLabel(raw: String): String = try {
     "Open link"
 }
 
-private fun localDateLabel(ms: Long) = java.text.DateFormat.getDateInstance(java.text.DateFormat.SHORT).format(java.util.Date(ms))
+private fun dateLabel(ms: Long) = Time.format(ms, "MMM d, yyyy")
+
+private fun trimNum(v: Double) = if (v == Math.floor(v)) v.toLong().toString() else v.toString()
 
 @Composable
-fun AiBillingTab() {
+private fun stateColor(state: String): Color = when (state) {
+    "Running" -> T.c.green
+    "Depleted" -> T.c.amber
+    else -> T.c.mutedForeground.copy(alpha = 0.5f)
+}
+
+/** Billing → AI subscriptions (web AI billing tab). */
+@Composable
+fun AiSubscriptionsScreen(onBack: () -> Unit) {
     val graph = AppGraph.get(LocalContext.current)
     val scope = rememberCoroutineScope()
     var viewCurrency by rememberSaveable { mutableStateOf("CZK") }
@@ -137,11 +142,12 @@ fun AiBillingTab() {
     var presets by remember { mutableStateOf<List<AiPreset>>(emptyList()) }
     var tick by remember { mutableStateOf(0) }
     var chartMonthly by rememberSaveable { mutableStateOf(true) }
-    var showPast by rememberSaveable { mutableStateOf(false) }
-    var dialog by remember { mutableStateOf<Pair<Boolean, AiPeriod?>?>(null) }
+    var form by remember { mutableStateOf<Pair<Boolean, AiPeriod?>?>(null) }
+    var detail by remember { mutableStateOf<String?>(null) }
     var deleting by remember { mutableStateOf<AiPeriod?>(null) }
-    var patchError by remember { mutableStateOf<String?>(null) }
+    var actionError by remember { mutableStateOf<String?>(null) }
     var patching by remember { mutableStateOf(false) }
+    var currencySheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(viewCurrency, tick) {
         runCatching { graph.api.aiAnalytics(viewCurrency) }.onSuccess { data = it; error = null }.onFailure { if (data == null) error = friendlyError(it, "Failed to load AI analytics") }
@@ -153,124 +159,192 @@ fun AiBillingTab() {
         scope.launch {
             try {
                 graph.api.patchAiPeriod(p.id, buildJsonObject { put("depletedAt", depleted?.let { JsonPrimitive(Time.iso(it)) } ?: JsonNull) })
-                patchError = null; tick++
+                actionError = null; tick++
             } catch (e: Exception) {
-                patchError = friendlyError(e, "Could not update entry")
+                actionError = friendlyError(e, "Could not update entry")
             }
             patching = false
         }
     }
 
-    Column(Modifier.widthIn(max = 896.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Column {
-            Text("AI billing", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground)
-            Text(buildAnnotatedString {
-                append("Each row is a budget line — lifetime totals add up simply (100 + 150 = 250). Timer overlap is split automatically when billing windows overlap: the earliest-start row wins each slice. Active days counts whole calendar days from the row start through today, the end date, or depletion — whichever comes first. Use ")
-                withStyle(SpanStyle(color = T.c.foreground, fontWeight = FontWeight.Medium)) { append("Mark depleted") }
-                append(" to cap the window when credits run out before the calendar end.")
-            }, fontSize = 14.sp, color = T.c.mutedForeground, lineHeight = 20.sp)
+    Column(Modifier.fillMaxSize()) {
+        ScreenBar("AI subscriptions", onBack = onBack) {
+            IconButton({ form = true to null }) { Icon(Icons.Outlined.Add, "Add AI billing", tint = T.c.foreground) }
         }
-        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            CurrencySelect(viewCurrency, { viewCurrency = it }, Modifier.weight(1f), label = "View totals in")
-            TButton("Add AI billing", { dialog = true to null }, icon = Icons.Outlined.Add)
-        }
-        val d = data
-        if (d != null && d.fxMissingCurrencies.isNotEmpty()) {
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).border(1.dp, T.c.amber.copy(alpha = 0.5f), RoundedCornerShape(8.dp)).background(T.c.amber.copy(alpha = 0.1f)).padding(12.dp)) {
-                Text("Exchange rate unavailable", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground)
-                Text("Could not load rates for: ${d.fxMissingCurrencies.joinToString(", ")}. Lifetime and chart totals in $viewCurrency may be incomplete; native prices on each card are still shown.", fontSize = 13.sp, color = T.c.foreground)
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            val d = data
+            item {
+                Row(Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().padding(horizontal = 16.dp)) {
+                    DropChip("Totals in $viewCurrency", viewCurrency != "CZK") { currencySheet = true }
+                }
             }
-        }
-        when {
-            d == null && error != null -> Text(error!!, color = T.c.destructive, fontSize = 14.sp)
-            d == null -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { repeat(2) { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Skeleton(Modifier.weight(1f).height(72.dp)); Skeleton(Modifier.weight(1f).height(72.dp)) } } }
-            else -> {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Kpi("Lifetime AI billing (${d.viewCurrency})", Format.money(d.summary.lifetimeSpendInView, d.viewCurrency), true, Modifier.weight(1f).fillMaxHeight())
-                        Kpi("Overlap this month (${d.viewCurrency})", Format.money(d.summary.currentMonthOverlapSpendInView, d.viewCurrency), false, Modifier.weight(1f).fillMaxHeight())
-                    }
-                    Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Kpi("Active entries", "${d.summary.activeSubscriptions}", false, Modifier.weight(1f).fillMaxHeight())
-                        Kpi("Total entries", "${d.summary.periodCount}", false, Modifier.weight(1f).fillMaxHeight())
+            when {
+                d == null && error != null -> item { StateMessage(error ?: "", T.c.destructive) }
+                d == null -> item {
+                    Column(Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().padding(20.dp)) {
+                        Skeleton(Modifier.width(140.dp).height(14.dp)); Spacer(Modifier.height(8.dp))
+                        Skeleton(Modifier.width(200.dp).height(36.dp)); Spacer(Modifier.height(16.dp))
+                        Skeleton(Modifier.fillMaxWidth().height(200.dp))
                     }
                 }
-                if (d.cumulativeByMonth.isNotEmpty()) {
-                    TCard(Modifier.fillMaxWidth()) {
-                        Row(verticalAlignment = Alignment.Top) {
-                            Column(Modifier.weight(1f)) {
-                                Text(if (chartMonthly) "Spend per month" else "Cumulative spend", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground)
-                                Text(if (chartMonthly) "Monthly AI billing total in ${d.viewCurrency}" else "Running total in ${d.viewCurrency} over time", fontSize = 13.sp, color = T.c.mutedForeground)
+                else -> {
+                    item {
+                        Column(Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
+                            if (d.fxMissingCurrencies.isNotEmpty()) {
+                                Text(
+                                    "Exchange rate unavailable for ${d.fxMissingCurrencies.joinToString(", ")} — totals in ${d.viewCurrency} may be incomplete.",
+                                    fontSize = 14.sp, color = if (T.c.dark) T.c.amber400 else Color(0xFFB45309), modifier = Modifier.padding(bottom = 10.dp),
+                                )
                             }
-                            Row(Modifier.clip(RoundedCornerShape(6.dp)).border(1.dp, T.c.border, RoundedCornerShape(6.dp))) {
-                                listOf(true to "Monthly", false to "Cumulative").forEach { (m, l) ->
-                                    Text(
-                                        l, Modifier.background(if (chartMonthly == m) T.c.primary else Color.Transparent).clickable { chartMonthly = m }.padding(horizontal = 10.dp, vertical = 6.dp),
-                                        fontSize = 12.sp, fontWeight = FontWeight.Medium, color = if (chartMonthly == m) T.c.onPrimary else T.c.mutedForeground,
-                                    )
+                            Text("Lifetime AI billing", fontSize = 14.sp, color = T.c.mutedForeground)
+                            Text(Format.money(d.summary.lifetimeSpendInView, d.viewCurrency), fontSize = 34.sp, lineHeight = 40.sp, fontWeight = FontWeight.Bold, color = T.c.foreground, style = Tabular)
+                            SupportingParts(listOf("This month ${Format.money(d.summary.currentMonthOverlapSpendInView, d.viewCurrency)}", "${d.summary.activeSubscriptions} active", "${d.summary.periodCount} total"))
+                        }
+                    }
+                    if (d.cumulativeByMonth.isNotEmpty()) item {
+                        SurfaceBlock(Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                            Column(Modifier.padding(16.dp)) {
+                                FlowRow(
+                                    Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(if (chartMonthly) "Spend per month" else "Cumulative spend", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, modifier = Modifier.padding(end = 12.dp))
+                                    SingleChoiceSegmentedButtonRow {
+                                        listOf(true to "Monthly", false to "Cumulative").forEachIndexed { i, (m, l) ->
+                                            SegmentedButton(
+                                                chartMonthly == m, { chartMonthly = m }, SegmentedButtonDefaults.itemShape(i, 2),
+                                                icon = {},
+                                                colors = SegmentedButtonDefaults.colors(
+                                                    activeContainerColor = T.c.muted, activeContentColor = T.c.foreground, activeBorderColor = T.c.border,
+                                                    inactiveContainerColor = Color.Transparent, inactiveContentColor = T.c.mutedForeground, inactiveBorderColor = T.c.border,
+                                                ),
+                                            ) { Text(l, fontSize = 13.sp, maxLines = 1) }
+                                        }
+                                    }
                                 }
-                            }
-                        }
-                        Spacer(Modifier.height(12.dp))
-                        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).border(1.dp, T.c.border.copy(alpha = 0.6f), RoundedCornerShape(8.dp)).background(T.c.muted.copy(alpha = 0.2f)).padding(8.dp)) {
-                            SpendChart(if (chartMonthly) d.spendByMonth.map { it.month to it.totalInView } else d.cumulativeByMonth.map { it.month to it.totalInView }, chartMonthly, d.viewCurrency)
-                        }
-                    }
-                }
-                if (d.rankings.mostTrackedHours.isNotEmpty()) {
-                    TCard(Modifier.fillMaxWidth()) {
-                        Text("Most tracked hours credited", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground)
-                        Spacer(Modifier.height(8.dp))
-                        d.rankings.mostTrackedHours.forEachIndexed { i, r ->
-                            if (i > 0) HorizontalDivider(color = T.c.border.copy(alpha = 0.5f))
-                            Row(Modifier.padding(vertical = 8.dp)) {
-                                Text(r.name, fontSize = 14.sp, color = T.c.foreground, modifier = Modifier.weight(1f))
-                                Text("${trimNum(r.trackedHours)}h", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = T.c.foreground, style = Tabular)
+                                Spacer(Modifier.height(12.dp))
+                                SpendChart(if (chartMonthly) d.spendByMonth.map { it.month to it.totalInView } else d.cumulativeByMonth.map { it.month to it.totalInView }, chartMonthly, d.viewCurrency)
                             }
                         }
                     }
-                }
-                Text("Entries", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground)
-                patchError?.let { Text(it, color = T.c.destructive, fontSize = 14.sp) }
-                val active = d.periods.filter { it.metrics.isActive }
-                val past = d.periods.filter { !it.metrics.isActive }
-                if (d.periods.isEmpty()) {
-                    TCard(Modifier.fillMaxWidth(), border = T.c.border) {
-                        Text("No AI billing entries yet. Use Add AI billing to start tracking.", fontSize = 14.sp, color = T.c.mutedForeground, modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    if (d.rankings.mostTrackedHours.isNotEmpty()) {
+                        item { SectionLabel("Most tracked hours credited", Modifier.widthIn(max = BillingMaxWidth)) }
+                        items(d.rankings.mostTrackedHours, key = { "rk-" + it.id }) { r ->
+                            Row(Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(r.name, fontSize = 15.sp, color = T.c.foreground, modifier = Modifier.weight(1f))
+                                Text("${trimNum(r.trackedHours)}h", fontSize = 15.sp, color = T.c.foreground, style = Tabular)
+                            }
+                        }
                     }
-                } else {
-                    if (active.isEmpty()) Text("No active entries.", fontSize = 14.sp, color = T.c.mutedForeground)
-                    active.forEach { p -> PeriodCard(p, viewCurrency, patching, { patch(p, it) }, { dialog = true to p }, { deleting = p }) }
+                    actionError?.let { e -> item { Text(e, color = T.c.destructive, fontSize = 14.sp, modifier = Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) } }
+                    val active = d.periods.filter { it.metrics.isActive }
+                    val past = d.periods.filter { !it.metrics.isActive }
+                    if (d.periods.isEmpty()) item { StateMessage("No AI billing entries yet. Tap + to start tracking.") }
+                    if (active.isNotEmpty()) {
+                        item { SectionLabel("Active", Modifier.widthIn(max = BillingMaxWidth)) }
+                        items(active, key = { "a-" + it.id }) { p -> PeriodRow(p) { detail = p.id } }
+                    } else if (d.periods.isNotEmpty()) item { SectionLabel("Active", Modifier.widthIn(max = BillingMaxWidth)); Text("No active entries.", fontSize = 15.sp, color = T.c.mutedForeground, modifier = Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) }
                     if (past.isNotEmpty()) {
-                        Row(Modifier.clickable { showPast = !showPast }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(if (showPast) Icons.Outlined.KeyboardArrowDown else Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = T.c.mutedForeground, modifier = Modifier.size(16.dp))
-                            Text(" Past entries (${past.size})", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = T.c.mutedForeground)
-                        }
-                        if (showPast) past.forEach { p -> PeriodCard(p, viewCurrency, patching, { patch(p, it) }, { dialog = true to p }, { deleting = p }) }
+                        item { SectionLabel("Past (${past.size})", Modifier.widthIn(max = BillingMaxWidth)) }
+                        items(past, key = { "p-" + it.id }) { p -> PeriodRow(p) { detail = p.id } }
                     }
                 }
             }
         }
     }
 
-    dialog?.let { (_, editing) -> PeriodFormDialog(editing, presets, onDismiss = { dialog = null }, onSaved = { tick++ }) }
+    if (currencySheet) ChoiceSheet("View totals in", Currencies.options(viewCurrency), viewCurrency, { viewCurrency = it; currencySheet = false }, { currencySheet = false })
+    val open = detail?.let { id -> data?.periods?.firstOrNull { it.id == id } }
+    if (open != null) PeriodDetailSheet(
+        open, viewCurrency, patching,
+        onPatch = { patch(open, it) },
+        onEdit = { detail = null; form = true to open },
+        onDelete = { deleting = open },
+        onDismiss = { detail = null },
+    )
+    form?.let { (_, editing) -> PeriodFormSheet(editing, presets, onDismiss = { form = null }, onSaved = { tick++ }) }
     deleting?.let { p ->
         ConfirmDialog("Delete this AI billing entry?", "This removes only the billing line and analytics tied to it. Cannot be undone.", "Delete", onConfirm = {
+            detail = null
             scope.launch {
-                runCatching { graph.api.deleteAiPeriod(p.id) }.onFailure { patchError = friendlyError(it, "Could not delete") }
+                runCatching { graph.api.deleteAiPeriod(p.id) }.onFailure { actionError = friendlyError(it, "Could not delete") }
                 tick++
             }
         }, onDismiss = { deleting = null })
     }
 }
 
-private fun trimNum(v: Double) = if (v == Math.floor(v)) v.toLong().toString() else v.toString()
+@Composable
+private fun PeriodRow(p: AiPeriod, onClick: () -> Unit) {
+    val state = AiCadence.state(p)
+    val kind = if (p.billingKind == "recurring_monthly") "${AiCadence.label(AiCadence.normalize(p.billingCadence))} · ${Format.money(p.price, p.currency)}"
+    else "One-time · ${Format.money(p.price, p.currency)}"
+    Column(Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 20.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AccentDot(stateColor(state), 10.dp)
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Text(p.name, fontSize = 16.sp, color = T.c.foreground, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                SupportingParts(kind.split(" · ") + "${dateLabel(Time.parse(p.startsAt))} → ${p.endsAt?.let { dateLabel(Time.parse(it)) } ?: "open-ended"}")
+                SupportingParts(listOf(
+                    "${trimNum(p.metrics.trackedHours)}h over ${p.metrics.tasksWithTrackedTime} task${if (p.metrics.tasksWithTrackedTime == 1) "" else "s"}",
+                    "${p.metrics.durationDays} day${if (p.metrics.durationDays == 1) "" else "s"}", state,
+                ))
+            }
+        }
+        RowDivider(inset = 46.dp)
+    }
+}
 
 @Composable
-private fun Kpi(label: String, value: String, highlight: Boolean, modifier: Modifier) {
-    TCard(modifier, padding = androidx.compose.foundation.layout.PaddingValues(12.dp), border = if (highlight) T.c.primary.copy(alpha = 0.4f) else null, background = if (highlight) T.c.primary.copy(alpha = 0.05f) else null) {
-        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = T.c.mutedForeground)
-        Text(value, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, style = Tabular, maxLines = 1)
+private fun PeriodDetailSheet(p: AiPeriod, viewCurrency: String, patching: Boolean, onPatch: (Long?) -> Unit, onEdit: () -> Unit, onDelete: () -> Unit, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val state = AiCadence.state(p)
+    FormSheet(p.name, onDismiss, footer = {
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+            TextButton(onDelete) { Text("Delete", color = T.c.destructive) }
+            Spacer(Modifier.weight(1f))
+            if (p.depletedAt != null) OutlinedButton({ onPatch(null) }, enabled = !patching) { Text("Clear depletion", color = T.c.foreground) }
+            else if (p.metrics.isActive) OutlinedButton({ onPatch(System.currentTimeMillis()) }, enabled = !patching) { Text("Mark depleted", color = T.c.foreground) }
+            Button(onEdit, colors = primaryButton()) { Text("Edit") }
+        }
+    }) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AccentDot(stateColor(state), 10.dp); Spacer(Modifier.width(8.dp))
+            Text("$state · ${if (p.billingKind == "recurring_monthly") "Recurring" else "One-time"} · ${AiCadence.label(AiCadence.normalize(p.billingCadence))}", fontSize = 15.sp, color = T.c.mutedForeground)
+        }
+        Spacer(Modifier.height(8.dp))
+        val price = Format.money(p.price, p.currency) +
+            if (viewCurrency != p.currency && p.priceApproxCzk != null && viewCurrency == "CZK") " (~${Format.money(p.priceApproxCzk, "CZK")})" else ""
+        DetailLine(if (p.billingKind == "recurring_monthly") "Monthly price" else "One-time price", price)
+        DetailLine("Period", "${dateLabel(Time.parse(p.startsAt))} → ${p.endsAt?.let { dateLabel(Time.parse(it)) } ?: "open-ended"}")
+        if (p.depletedAt != null) DetailLine("Depleted", dateLabel(Time.parse(p.depletedAt)))
+        else {
+            var t = System.currentTimeMillis()
+            p.endsAt?.let { t = minOf(t, Time.parse(it)) }
+            DetailLine("Window closes", dateLabel(t))
+        }
+        DetailLine("Overlap hours (${p.metrics.tasksWithTrackedTime} tasks)", "${trimNum(p.metrics.trackedHours)}h")
+        DetailLine("Active days", "${p.metrics.durationDays}")
+        if (p.paidEarningsByCurrency.isNotEmpty()) DetailLine("Paid billable earnings", p.paidEarningsByCurrency.entries.joinToString(" · ") { (c, a) -> Format.money(a, c) })
+        p.billingEmail?.let { DetailLine("Account email", it) }
+        p.billingProviderUrl?.let { url ->
+            FlowRow(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Provider", fontSize = 15.sp, color = T.c.mutedForeground, modifier = Modifier.padding(end = 12.dp))
+                Text(
+                    providerLabel(url), fontSize = 15.sp, color = T.c.foreground, textDecoration = TextDecoration.Underline,
+                    modifier = Modifier.clickable(role = Role.Button) { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } },
+                )
+            }
+        }
+        p.note?.takeIf { it.isNotBlank() }?.let { Text(it, fontSize = 15.sp, color = T.c.mutedForeground, fontStyle = FontStyle.Italic, modifier = Modifier.padding(top = 8.dp)) }
+        Text(
+            "Overlap hours: timer time credited to this entry (earliest start wins when windows overlap). Paid billable earnings: paid billing sessions in this window — final once ended or depleted.",
+            fontSize = 13.sp, color = T.c.mutedForeground, lineHeight = 18.sp, modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
+        )
     }
 }
 
@@ -284,7 +358,7 @@ private fun SpendChart(points: List<Pair<String, Double>>, bars: Boolean, curren
     var origin by remember { mutableStateOf(Offset.Zero) }
     val maxV = points.maxOfOrNull { it.second } ?: 0.0
     val (axisMax, step) = StatsData.niceAxis(maxV)
-    val axisW = with(density) { 56.dp.toPx() }
+    val axisW = with(density) { 48.dp.toPx() }
     val bottomH = with(density) { 20.dp.toPx() }
     val labelStyle = TextStyle(fontSize = 11.sp, color = c.mutedForeground)
     BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -307,7 +381,7 @@ private fun SpendChart(points: List<Pair<String, Double>>, bars: Boolean, curren
                 var v = 0.0
                 while (v <= axisMax + 1e-9) {
                     val y = 8f + plotH * (1 - v / axisMax).toFloat()
-                    drawLine(c.border.copy(alpha = 0.6f), Offset(axisW, y), Offset(size.width, y), 1f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)))
+                    drawLine(c.border, Offset(axisW, y), Offset(size.width, y), 1f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)))
                     val m = measurer.measure(compactMoney(v), labelStyle)
                     drawText(m, topLeft = Offset(axisW - m.size.width - 6f, y - m.size.height / 2f))
                     v += step
@@ -317,6 +391,7 @@ private fun SpendChart(points: List<Pair<String, Double>>, bars: Boolean, curren
                 points.forEachIndexed { i, (month, value) ->
                     val cx = axisW + slot * (i + 0.5f)
                     val y = 8f + plotH * (1 - value / axisMax).toFloat()
+                    if (sel?.first == i) drawRoundRect(c.muted, Offset(cx - slot / 2, 8f), Size(slot, plotH), CornerRadius(4f))
                     if (bars) {
                         val w = minOf(slot * 0.7f, 28.dp.toPx())
                         drawRoundRect(if (month == current) c.primary else c.primary.copy(alpha = 0.45f), Offset(cx - w / 2, y), Size(w, 8f + plotH - y), CornerRadius(3.dp.toPx()))
@@ -324,10 +399,9 @@ private fun SpendChart(points: List<Pair<String, Double>>, bars: Boolean, curren
                         if (i == 0) path.moveTo(cx, y) else path.lineTo(cx, y)
                     }
                     if (i % labelEvery == 0) {
-                        val m = measurer.measure(month, labelStyle)
+                        val m = measurer.measure(monthLabel(month), labelStyle)
                         drawText(m, topLeft = Offset((cx - m.size.width / 2f).coerceAtLeast(axisW - 8f), size.height - bottomH + 4f))
                     }
-                    if (sel?.first == i) drawRoundRect(c.muted.copy(alpha = 0.5f), Offset(cx - slot / 2, 8f), Size(slot, plotH), CornerRadius(4f))
                 }
                 if (!bars) drawPath(path, c.primary, style = Stroke(2.dp.toPx()))
             }
@@ -335,11 +409,17 @@ private fun SpendChart(points: List<Pair<String, Double>>, bars: Boolean, curren
     }
     sel?.let { (i, anchor) ->
         TooltipPopup(anchor, { sel = null }, width = 200) {
-            Text(points[i].first, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = T.c.foreground)
+            Text(monthLabel(points[i].first, full = true), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = T.c.foreground)
             Text("${if (bars) "Spend" else "Total"}: ${Format.money(points[i].second, currency)}", fontSize = 12.sp, color = T.c.foreground, style = Tabular)
         }
     }
 }
+
+/** "2026-09" → "Sep" (or "Sep 2026" when [full]); raw key if it doesn't parse. */
+fun monthLabel(key: String, full: Boolean = false): String = runCatching {
+    val ym = YearMonth.parse(key)
+    Time.format(ym.atDay(1), if (full) "MMMM yyyy" else if (ym.monthValue == 1) "MMM yy" else "MMM")
+}.getOrDefault(key)
 
 private fun compactMoney(v: Double): String = when {
     v >= 1_000_000 -> "${trimNum(Format.round2(v / 1_000_000))}M"
@@ -348,85 +428,7 @@ private fun compactMoney(v: Double): String = when {
 }
 
 @Composable
-private fun PeriodCard(p: AiPeriod, viewCurrency: String, patching: Boolean, onPatch: (Long?) -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
-    val context = LocalContext.current
-    val state = if (p.depletedAt != null) "Depleted" else if (p.metrics.isActive) "Running" else "Ended"
-    val stateColor = when (state) {
-        "Running" -> T.c.green
-        "Depleted" -> T.c.amber
-        else -> T.c.border
-    }
-    val start = Time.parse(p.startsAt)
-    TCard(Modifier.fillMaxWidth(), padding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
-        Row(Modifier.height(IntrinsicSize.Min)) {
-            Box(Modifier.width(3.dp).fillMaxHeight().background(stateColor))
-            Column(Modifier.weight(1f).padding(14.dp)) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
-                    Text(p.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground)
-                    TBadge(state, variant = BadgeVariant.Outline, color = when (state) {
-                        "Running" -> if (T.c.dark) Color(0xFF4ADE80) else Color(0xFF15803D)
-                        "Depleted" -> if (T.c.dark) Color(0xFFFBBF24) else Color(0xFFB45309)
-                        else -> T.c.mutedForeground
-                    })
-                    TBadge(AiCadence.label(AiCadence.normalize(p.billingCadence)), variant = BadgeVariant.Outline, color = T.c.mutedForeground)
-                }
-                Spacer(Modifier.height(4.dp))
-                Text("${localDateLabel(start)} → ${p.endsAt?.let { localDateLabel(Time.parse(it)) } ?: "open-ended"}", fontSize = 12.sp, color = T.c.mutedForeground)
-                if (p.depletedAt != null) Text("Depleted ${localDateLabel(Time.parse(p.depletedAt))}", fontSize = 12.sp, color = if (T.c.dark) Color(0xCCFDE68A) else Color(0xCC78350F))
-                else {
-                    var t = System.currentTimeMillis()
-                    p.endsAt?.let { t = minOf(t, Time.parse(it)) }
-                    Text("Window closes: ${localDateLabel(t)}", fontSize = 12.sp, color = T.c.mutedForeground)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (p.depletedAt != null) TButton("Clear depletion", { onPatch(null) }, variant = BtnVariant.Ghost, size = BtnSize.Sm, enabled = !patching)
-                    else if (p.metrics.isActive) TButton("Mark depleted", { onPatch(System.currentTimeMillis()) }, variant = BtnVariant.Outline, size = BtnSize.Sm, enabled = !patching)
-                    Spacer(Modifier.weight(1f))
-                    IconButton(onEdit) { Icon(Icons.Outlined.Edit, "Edit AI billing entry", tint = T.c.foreground, modifier = Modifier.size(18.dp)) }
-                    IconButton(onDelete) { Icon(Icons.Outlined.Delete, "Delete AI billing entry", tint = T.c.destructive, modifier = Modifier.size(18.dp)) }
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    p.billingEmail?.let { KV("Account email: ", it) }
-                    p.billingProviderUrl?.let { url ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Provider: ", fontSize = 14.sp, color = T.c.mutedForeground)
-                            Row(Modifier.clickable { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } }, verticalAlignment = Alignment.CenterVertically) {
-                                Text(providerLabel(url), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline)
-                                Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, tint = T.c.mutedForeground, modifier = Modifier.padding(start = 3.dp).size(13.dp))
-                            }
-                        }
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(if (p.billingKind == "recurring_monthly") "Monthly price: " else "One-time price: ", fontSize = 14.sp, color = T.c.mutedForeground)
-                        Text(Format.money(p.price, p.currency), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, style = Tabular)
-                        if (viewCurrency != p.currency && p.priceApproxCzk != null && viewCurrency == "CZK") {
-                            Text(" (~${Format.money(p.priceApproxCzk, "CZK")} CZK)", fontSize = 12.sp, color = T.c.mutedForeground)
-                        }
-                    }
-                    KV("Overlap hours (${p.metrics.tasksWithTrackedTime} tasks): ", "${trimNum(p.metrics.trackedHours)}h")
-                    KV("Active days: ", "${p.metrics.durationDays}")
-                    if (p.paidEarningsByCurrency.isNotEmpty()) KV("Paid billable earnings: ", p.paidEarningsByCurrency.entries.joinToString("  ") { (cur, a) -> Format.money(a, cur) })
-                }
-                Spacer(Modifier.height(8.dp))
-                HorizontalDivider(color = T.c.border.copy(alpha = 0.6f))
-                Spacer(Modifier.height(6.dp))
-                Text("Overlap hours: timer time credited to this row (earliest-start wins across concurrent windows). Paid billable earnings: paid billing sessions in this window — final once ended or depleted.", fontSize = 11.sp, color = T.c.mutedForeground, lineHeight = 15.sp)
-                p.note?.takeIf { it.isNotBlank() }?.let { Spacer(Modifier.height(6.dp)); Text(it, fontSize = 12.sp, color = T.c.mutedForeground, fontStyle = FontStyle.Italic) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun KV(k: String, v: String) {
-    Text(buildAnnotatedString {
-        withStyle(SpanStyle(color = T.c.mutedForeground)) { append(k) }
-        withStyle(SpanStyle(color = T.c.foreground, fontWeight = FontWeight.SemiBold)) { append(v) }
-    }, fontSize = 14.sp, style = Tabular)
-}
-
-@Composable
-private fun PeriodFormDialog(editing: AiPeriod?, presets: List<AiPreset>, onDismiss: () -> Unit, onSaved: () -> Unit) {
+private fun PeriodFormSheet(editing: AiPeriod?, presets: List<AiPreset>, onDismiss: () -> Unit, onSaved: () -> Unit) {
     val graph = AppGraph.get(LocalContext.current)
     val scope = rememberCoroutineScope()
     val e = editing
@@ -492,95 +494,84 @@ private fun PeriodFormDialog(editing: AiPeriod?, presets: List<AiPreset>, onDism
         }
     }
 
-    TDialog(
-        if (e != null) "Edit AI billing" else "New AI billing", onDismiss, maxWidth = 672.dp,
-        description = "Same layout as Mark as paid: fill details below, then save. Depletion is set from the entry card after credits run out.",
-        footer = {
-            TButton("Cancel", onDismiss, variant = BtnVariant.Outline, enabled = !saving)
-            TButton(if (saving) "Saving…" else if (e != null) "Save entry" else "Create entry", { save() }, enabled = !saving)
-        },
-    ) {
-        InsetBox {
-            Column {
-                Text(if (recurring) "Recurring · ${AiCadence.label(cadence)}" else "One-time · ${AiCadence.label(cadence)}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground)
-                Text("${name.trim().ifEmpty { "Untitled" }} · ${price.replace(',', '.').toDoubleOrNull()?.let { Format.money(it, currency) } ?: "—"}", fontSize = 13.sp, color = T.c.mutedForeground)
+    FormSheet(if (e != null) "Edit AI billing" else "New AI billing", onDismiss, fullHeight = true, footer = {
+        error?.let { Text(it, color = T.c.destructive, fontSize = 14.sp, modifier = Modifier.padding(bottom = 8.dp)) }
+        Button({ save() }, Modifier.fillMaxWidth().heightIn(min = 52.dp), enabled = !saving, colors = primaryButton()) {
+            Text(if (saving) "Saving…" else if (e != null) "Save entry" else "Create entry", fontSize = 16.sp)
+        }
+    }) {
+        val gap = Modifier.height(12.dp)
+        if (e == null) {
+            BDropdown(presetId, listOf("" to "None") + presets.map { it.id to it.name }, { id ->
+                presetId = id
+                presets.firstOrNull { it.id == id }?.let { name = it.name }
+            }, "Preset (optional)")
+            Spacer(gap)
+        }
+        BField(name, { name = it.take(200) }, "Display name", placeholder = "e.g. Cursor Pro")
+        Spacer(gap)
+        BField(email, { email = it }, "Account email (optional)", placeholder = "you@example.com", keyboardType = KeyboardType.Email)
+        Spacer(gap)
+        BField(url, { url = it }, "Link to subscription provider (optional)", placeholder = "https://billing.example.com", keyboardType = KeyboardType.Uri)
+        FieldCaption("How you pay")
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            listOf("purchase" to "One-time", "recurring_monthly" to "Recurring").forEachIndexed { i, (k, l) ->
+                SegmentedButton(
+                    kind == k, { if (kind != k) { kind = k; cadence = "monthly"; hasEnd = false; purchaseComputed = true; endDate = startDate } },
+                    SegmentedButtonDefaults.itemShape(i, 2),
+                    colors = SegmentedButtonDefaults.colors(
+                        activeContainerColor = T.c.muted, activeContentColor = T.c.foreground, activeBorderColor = T.c.border,
+                        inactiveContainerColor = Color.Transparent, inactiveContentColor = T.c.mutedForeground, inactiveBorderColor = T.c.border,
+                    ),
+                ) { Text(l, maxLines = 1) }
             }
         }
-        Spacer(Modifier.height(12.dp))
-        val presetOptions = listOf("" to "—") + presets.map { it.id to it.name }
-        TSelect(presetId, presetOptions, { id ->
-            presetId = id
-            presets.firstOrNull { it.id == id }?.let { name = it.name }
-        }, label = "Preset (optional)", enabled = e == null)
-        Spacer(Modifier.height(10.dp))
-        TInput(name, { name = it.take(200) }, label = "Display name", placeholder = "e.g. Cursor Pro")
-        Spacer(Modifier.height(10.dp))
-        TInput(email, { email = it }, label = "Account email (optional)", placeholder = "you@example.com", keyboardType = KeyboardType.Email)
-        Spacer(Modifier.height(10.dp))
-        TInput(url, { url = it }, label = "Link to subscription provider (optional)", placeholder = "https://billing.example.com", keyboardType = KeyboardType.Uri)
-        Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
-            TInput(price, { price = it }, Modifier.weight(1f), label = if (recurring) "Monthly price" else "Amount paid", placeholder = "0", keyboardType = KeyboardType.Decimal)
-            CurrencySelect(currency, { currency = it }, Modifier.weight(1f))
+        Text(
+            if (recurring) "Each calendar month in the window adds one charge to totals."
+            else "Coverage closes at the end of the calendar period below (week / month / quarter / year) unless you pick another end date.",
+            fontSize = 13.sp, color = T.c.mutedForeground, modifier = Modifier.padding(top = 6.dp),
+        )
+        Spacer(gap)
+        val big = largeFont()
+        if (big) {
+            BField(price, { price = it }, if (recurring) "Monthly price" else "Amount paid", keyboardType = KeyboardType.Decimal)
+            Spacer(gap)
+            BDropdown(currency, Currencies.options(currency), { currency = it }, "Currency")
+        } else Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            BField(price, { price = it }, if (recurring) "Monthly price" else "Amount paid", Modifier.weight(1f), keyboardType = KeyboardType.Decimal)
+            BDropdown(currency, Currencies.options(currency), { currency = it }, "Currency", Modifier.weight(1f), fieldText = currency)
         }
-        Spacer(Modifier.height(10.dp))
-        TSelect(kind, listOf("purchase" to "One-time subscription", "recurring_monthly" to "Recurring subscription"), {
-            kind = it; cadence = "monthly"; hasEnd = false; purchaseComputed = true; endDate = startDate
-        }, label = "How you pay")
-        Text(
-            if (recurring) "Each calendar month in your window adds one charge in totals (cadence is stored). Charts still use month buckets for now."
-            else "One-time: coverage always closes at the end of the calendar period you pick below (week / month / quarter / year). You can override with a custom end date.",
-            fontSize = 12.sp, color = T.c.mutedForeground, modifier = Modifier.padding(top = 4.dp),
-        )
-        Spacer(Modifier.height(10.dp))
-        TSelect(cadence, AiCadence.options, { cadence = it }, label = if (recurring) "Billing cycle" else "Paid coverage period")
-        Text(
-            if (recurring) "Charts still attribute recurring spend by calendar month regardless of cycle."
-            else "Weekly = Monday–Sunday block containing the start date; monthly / quarterly / yearly = through the last day of that calendar bucket.",
-            fontSize = 12.sp, color = T.c.mutedForeground, modifier = Modifier.padding(top = 4.dp),
-        )
-        Spacer(Modifier.height(14.dp))
-        Text("SUBSCRIPTION PERIOD", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = T.c.mutedForeground, letterSpacing = 0.5.sp)
-        Spacer(Modifier.height(6.dp))
-        Text("Starts on", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = T.c.foreground)
-        Spacer(Modifier.height(4.dp))
-        DateField(startDate, { startDate = it }, maxDate = null)
+        Spacer(gap)
+        BDropdown(cadence, AiCadence.options, { cadence = it }, if (recurring) "Billing cycle" else "Paid coverage period")
+        FieldCaption("Subscription period")
+        BDateField(startDate, { startDate = it }, "Starts on")
         if (!recurring) {
-            if (purchaseComputed) {
-                Spacer(Modifier.height(6.dp))
-                Text("Coverage ends after period: ${localDateLabel(Time.endOfDay(AiCadence.coverageEnd(startDate, cadence)))}", fontSize = 13.sp, color = T.c.mutedForeground)
-            }
+            if (purchaseComputed) Text("Coverage ends after period: ${dateLabel(Time.endOfDay(AiCadence.coverageEnd(startDate, cadence)))}", fontSize = 14.sp, color = T.c.mutedForeground, modifier = Modifier.padding(top = 8.dp))
             CheckRow("Use a different end date", !purchaseComputed) { purchaseComputed = !it; if (it) endDate = AiCadence.coverageEnd(startDate, cadence) }
             if (!purchaseComputed) {
-                Text("Ends on", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = T.c.foreground)
-                Spacer(Modifier.height(4.dp))
-                DateField(endDate, { endDate = it }, maxDate = null, minDate = startDate)
+                BDateField(endDate, { endDate = it }, "Ends on", minDate = startDate)
             }
         } else {
             CheckRow("Ended / ends on a date", hasEnd) { hasEnd = it }
             if (hasEnd) {
-                Text("Ends on", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = T.c.foreground)
-                Spacer(Modifier.height(4.dp))
-                DateField(endDate, { endDate = it }, maxDate = null, minDate = startDate)
-            } else Text("Unchecked means still active (open-ended).", fontSize = 12.sp, color = T.c.mutedForeground)
+                BDateField(endDate, { endDate = it }, "Ends on", minDate = startDate)
+            } else Text("Unchecked means still active (open-ended).", fontSize = 13.sp, color = T.c.mutedForeground)
         }
-        Spacer(Modifier.height(12.dp))
-        TInput(note, { note = it.take(2000) }, label = "Note (optional)", placeholder = "Invoice ref, plan tier…", singleLine = false, minLines = 2)
+        Spacer(gap)
+        BField(note, { note = it.take(2000) }, "Note (optional)", placeholder = "Invoice ref, plan tier…", singleLine = false)
         if (e == null) {
+            Spacer(Modifier.height(4.dp))
             CheckRow("Save as new preset for next time", saveAsPreset) { saveAsPreset = it }
-            if (saveAsPreset) TInput(presetName, { presetName = it.take(120) }, placeholder = "Preset name")
+            if (saveAsPreset) BField(presetName, { presetName = it.take(120) }, "Preset name")
         }
-        error?.let { Spacer(Modifier.height(8.dp)); Text(it, color = T.c.destructive, fontSize = 14.sp) }
+        Spacer(Modifier.height(8.dp))
     }
 }
 
 @Composable
 private fun CheckRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(checked, onChange, colors = CheckboxDefaults.colors(checkedColor = T.c.primary, checkmarkColor = T.c.onPrimary))
-        Text(label, fontSize = 14.sp, color = T.c.foreground)
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Checkbox) { onChange(!checked) }, verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(checked, onChange, colors = CheckboxDefaults.colors(checkedColor = T.c.foreground, checkmarkColor = T.c.background, uncheckedColor = T.c.mutedForeground))
+        Text(label, fontSize = 15.sp, color = T.c.foreground)
     }
 }
-
-@Suppress("unused")
-private val keepRange = ::rangeBounds

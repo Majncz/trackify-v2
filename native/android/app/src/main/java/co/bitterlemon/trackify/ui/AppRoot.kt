@@ -68,7 +68,13 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import co.bitterlemon.trackify.AppGraph
 import co.bitterlemon.trackify.ui.auth.AuthFlow
+import co.bitterlemon.trackify.ui.billing.AiSubscriptionsScreen
+import co.bitterlemon.trackify.ui.billing.BillingRoutes
 import co.bitterlemon.trackify.ui.billing.BillingScreen
+import co.bitterlemon.trackify.ui.billing.PaymentDetailScreen
+import co.bitterlemon.trackify.ui.billing.PaymentsScreen
+import co.bitterlemon.trackify.ui.billing.RatesScreen
+import co.bitterlemon.trackify.ui.billing.SessionsScreen
 import co.bitterlemon.trackify.ui.chat.ChatScreen
 import co.bitterlemon.trackify.ui.components.CappedFontScale
 import co.bitterlemon.trackify.ui.home.HomeScreen
@@ -234,7 +240,14 @@ private fun AppNavHost(nav: NavHostController, onOpenBilling: () -> Unit) {
         }
         navigation(startDestination = "more", route = "tab_more") {
             composable("more") { MoreScreen(onOpen = { nav.navigate(it) }) }
-            composable("billing") { BillingScreen(onBack = back) }
+            composable("billing") { BillingScreen(onBack = back, onOpen = { nav.navigate(it) }) }
+            composable(BillingRoutes.SESSIONS) { SessionsScreen(onBack = back, onOpenRates = { nav.navigate(BillingRoutes.RATES) }) }
+            composable(BillingRoutes.PAYMENTS) { PaymentsScreen(onBack = back, onOpen = { nav.navigate("${BillingRoutes.PAYMENT}/$it") }) }
+            composable("${BillingRoutes.PAYMENT}/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { e ->
+                PaymentDetailScreen(e.arguments?.getString("id") ?: "", onBack = back)
+            }
+            composable(BillingRoutes.RATES) { RatesScreen(onBack = back) }
+            composable(BillingRoutes.AI) { AiSubscriptionsScreen(onBack = back) }
             composable("chat") { ChatScreen(onBack = back) }
             composable("settings") { SettingsScreen(onBack = back) }
             composable("hidden") { HiddenTasksScreen(onBack = back) }
