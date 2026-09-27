@@ -1,343 +1,305 @@
+#if os(macOS)
 import SwiftUI
 import WidgetKit
 import TrackifyKit
-#if canImport(ServiceManagement)
 import ServiceManagement
-#endif
 
-/// Settings (WEB_AUDIT §1.12) + native extras: password, account deletion, server, reminders, menu bar options.
+/// Mac Settings: a native grouped form — account, appearance, menu bar, notifications, hidden tasks,
+/// security, server, sign out. (iPhone/iPad: `PhoneSettingsView`.)
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
+    @AppStorage(SharedKeys.appAppearance, store: AppGroup.defaults) private var appAppearance = AppearanceChoice.system.rawValue
+    @AppStorage(SharedKeys.widgetAppearance, store: AppGroup.defaults) private var widgetAppearance = AppearanceChoice.system.rawValue
+    @State private var name = ""
+    @State private var savedName = ""
+    @State private var nameStatus: String?
+    @State private var nameError: String?
+    @State private var savingName = false
+    @State private var reminderHours = Reminder.hours
+    @State private var showSeconds = AppGroup.defaults.bool(forKey: SharedKeys.menuBarShowSeconds)
+    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var restoring: String?
+    @State private var confirmSignOut = false
+    @State private var showPassword = false
+    @State private var showDelete = false
+
+    private var nameChanged: Bool {
+        let n = name.trimmingCharacters(in: .whitespaces)
+        return !n.isEmpty && n != savedName.trimmingCharacters(in: .whitespaces)
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                PageHeader("Settings", subtitle: "Manage your account")
-                AccountCard()
-                HiddenTasksCard()
-                AppearanceCard()
-                PreferencesCard()
-                SecurityCard()
-                AboutCard()
+        Form {
+            Section {
+                LabeledContent("Email", value: model.profile?.email ?? model.session?.email ?? "")
+                LabeledContent("Display name") {
+                    HStack(spacing: 8) {
+                        TextField("Display name", text: $name, prompt: Text("How others see you"))
+                            .labelsHidden()
+                            .multilineTextAlignment(.trailing)
+                            .onSubmit(saveName)
+                            .onChange(of: name) { _, v in
+                                if v.count > 40 { name = String(v.prefix(40)) }
+                                nameStatus = nil
+                            }
+                            .accessibilityIdentifier("displayName")
+                        if nameChanged || savingName {
+                            Button(savingName ? "Saving…" : "Save", action: saveName).disabled(savingName)
+                        }
+                    }
+                }
+            } header: {
+                Text("Account")
+            } footer: {
+                footer(nameError.map { Text($0).foregroundStyle(.red) }
+                       ?? Text(nameStatus ?? "Your display name is shown to your team while you track."))
             }
-            .padding(16)
-            .frame(maxWidth: 720)
-            .frame(maxWidth: .infinity)
+
+            Section("Appearance") {
+                Picker("App", selection: $appAppearance) {
+                    ForEach(AppearanceChoice.allCases) { Text($0.label).tag($0.rawValue) }
+                }
+                .accessibilityIdentifier("appearance-app")
+                Picker("Widgets", selection: $widgetAppearance) {
+                    ForEach(AppearanceChoice.allCases) { Text($0.label).tag($0.rawValue) }
+                }
+                .accessibilityIdentifier("appearance-widgets")
+            }
+
+            Section {
+                Toggle("Launch at login", isOn: $launchAtLogin)
+                Toggle("Show seconds in the menu bar", isOn: $showSeconds)
+                LabeledContent("Menu bar panel shortcut", value: "⌃⌥T")
+            } header: {
+                Text("General")
+            }
+
+            Section {
+                Picker("“Still tracking?” reminder", selection: $reminderHours) {
+                    Text("Off").tag(0)
+                    ForEach([1, 2, 3, 4, 6, 8, 10], id: \.self) { Text("After \($0) h").tag($0) }
+                }
+            } header: {
+                Text("Notifications")
+            } footer: {
+                footer(Text("Get a notification when a timer has been running this long."))
+            }
+
+            Section {
+                if !model.hiddenLoaded {
+                    ProgressView().controlSize(.small)
+                } else if model.hiddenTasks.isEmpty {
+                    Text("No hidden tasks").foregroundStyle(.secondary)
+                } else {
+                    ForEach(model.hiddenTasks) { t in
+                        LabeledContent {
+                            Button(restoring == t.id ? "Restoring…" : "Restore") {
+                                restoring = t.id
+                                Task { try? await model.restore(t.id); restoring = nil }
+                            }
+                            .disabled(restoring != nil)
+                        } label: {
+                            Text(t.name)
+                            Text(Fmt.durationWords(t.totalMs)).tabular()
+                        }
+                    }
+                }
+            } header: {
+                Text("Hidden tasks")
+            } footer: {
+                footer(Text("Hidden tasks keep their time. Restore one to show it in Timer again."))
+            }
+
+            if model.canChangePassword || model.canDeleteAccount {
+                Section("Security") {
+                    if model.canChangePassword {
+                        LabeledContent("Password") {
+                            Button("Change Password…") { showPassword = true }
+                        }
+                    }
+                    if model.canDeleteAccount {
+                        LabeledContent {
+                            Button("Delete Account…", role: .destructive) { showDelete = true }
+                        } label: {
+                            Text("Delete account")
+                            Text("Deletes your tasks, time entries and billing history for good.")
+                        }
+                    }
+                }
+            }
+
+            Section {
+                LabeledContent("Server") {
+                    Text(model.session?.server ?? model.serverString).font(.callout.monospaced()).textSelection(.enabled)
+                }
+                LabeledContent("Version", value: Self.version)
+            } header: {
+                Text("About")
+            } footer: {
+                footer(Text("To use another server, sign out and open “Advanced” on the sign-in screen."))
+            }
+
+            Section {
+                LabeledContent {
+                    Button("Sign Out…") { confirmSignOut = true }
+                        .accessibilityIdentifier("signOut")
+                } label: {
+                    Text("Signed in as \(model.session?.email ?? "")")
+                }
+            }
         }
-        .background(Theme.background)
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
+        .formStyle(.grouped)
+        .navigationTitle("Settings")
+        .navigationSubtitle(model.session?.email ?? "")
+        .confirmationDialog("Sign out of Trackify?", isPresented: $confirmSignOut) {
+            Button("Sign Out", role: .destructive) { Task { await model.signOut() } }
+        }
+        .sheet(isPresented: $showPassword) { ChangePasswordSheet() }
+        .sheet(isPresented: $showDelete) { DeleteAccountSheet() }
+        .onChange(of: appAppearance) { _, _ in AppearanceChoice.applyToMacApp() }
+        .onChange(of: widgetAppearance) { _, _ in WidgetCenter.shared.reloadAllTimelines() }
+        .onChange(of: showSeconds) { _, v in AppGroup.defaults.set(v, forKey: SharedKeys.menuBarShowSeconds) }
+        .onChange(of: launchAtLogin) { _, on in
+            do { if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() } }
+            catch { launchAtLogin = SMAppService.mainApp.status == .enabled }
+        }
+        .onChange(of: reminderHours) { _, h in
+            Reminder.hours = h
+            Task {
+                if h > 0 { _ = await Reminder.requestPermission() }
+                Reminder.schedule(model.running, model: model)
+            }
+        }
+        .onAppear { if let p = model.profile, savedName.isEmpty { name = p.displayName; savedName = p.displayName } }
+        .onChange(of: model.profile) { _, p in
+            if let p, !savingName, name == savedName { name = p.displayName; savedName = p.displayName }
+        }
         .task {
             await model.refreshProfile()
             await model.refreshHidden()
         }
     }
-}
 
-private struct CardTitle: View {
-    var icon: String
-    var title: String
-    var subtitle: String?
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Label(title, systemImage: icon).font(.cardTitle)
-            if let subtitle { Text(subtitle).font(.scaled(13)).foregroundStyle(Theme.mutedForeground) }
-        }
-    }
-}
-
-private struct AccountCard: View {
-    @Environment(AppModel.self) private var model
-    @State private var name = ""
-    @State private var saved = ""
-    @State private var status: Status = .idle
-    @State private var error: String?
-    @State private var confirmSignOut = false
-    enum Status { case idle, saving, saved }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            CardTitle(icon: "person", title: "Account", subtitle: "Your account information")
-            HStack(spacing: 12) {
-                Image(systemName: "envelope").foregroundStyle(Theme.mutedForeground)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Email").font(.scaled(13)).foregroundStyle(Theme.mutedForeground)
-                    Text(model.profile?.email ?? model.session?.email ?? "").font(.scaled(15, weight: .medium))
-                }
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.muted.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
-
-            VStack(alignment: .leading, spacing: 6) {
-                FieldLabel(text: "Display name")
-                TField(placeholder: "How others see you", text: $name)
-                    .onChange(of: name) { _, v in
-                        if v.count > 40 { name = String(v.prefix(40)) }
-                        status = .idle
-                    }
-                    .accessibilityIdentifier("displayName")
-                Text("Shown when you are tracking a task.").font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
-                HStack(spacing: 12) {
-                    Button(status == .saving ? "Saving..." : "Save name", action: save)
-                        .buttonStyle(.t(.primary))
-                        .disabled(name.trimmingCharacters(in: .whitespaces) == saved.trimmingCharacters(in: .whitespaces) || status == .saving || name.trimmingCharacters(in: .whitespaces).isEmpty)
-                    if status == .saved { Text("Saved").font(.scaled(14)).foregroundStyle(Theme.mutedForeground) }
-                    InlineError(text: error)
-                }
-            }
-
-            Button(role: .destructive) { confirmSignOut = true } label: { Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right") }
-                .buttonStyle(.t(.destructive))
-                .accessibilityIdentifier("signOut")
-        }
-        .card(padding: 20)
-        .onAppear { if let p = model.profile { name = p.displayName; saved = p.displayName } }
-        .onChange(of: model.profile) { _, p in
-            if let p, status != .saving, name == saved { name = p.displayName; saved = p.displayName }
-        }
-        .confirmationDialog("Sign out of Trackify?", isPresented: $confirmSignOut, titleVisibility: .visible) {
-            Button("Sign out", role: .destructive) { Task { await model.signOut() } }
-        }
+    private func footer(_ text: Text) -> some View {
+        text.font(.callout).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func save() {
-        status = .saving
-        error = nil
+    static var version: String {
+        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+        return "\(v) (\(b))"
+    }
+
+    private func saveName() {
+        guard nameChanged, !savingName else { return }
+        savingName = true
+        nameError = nil
         Task {
             do {
                 try await model.updateDisplayName(name)
-                saved = model.profile?.displayName ?? name
-                name = saved
-                status = .saved
-            } catch let e as APIError { status = .idle; error = e.message.isEmpty ? "Could not save name" : e.message }
-            catch { status = .idle; self.error = "Could not save name" }
+                savedName = model.profile?.displayName ?? name
+                name = savedName
+                nameStatus = "Saved."
+            } catch let e as APIError { nameError = e.message.isEmpty ? "Could not save name" : e.message }
+            catch { nameError = "Could not save name" }
+            savingName = false
         }
     }
 }
 
-private struct HiddenTasksCard: View {
+private struct ChangePasswordSheet: View {
     @Environment(AppModel.self) private var model
-    @State private var restoring: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            CardTitle(icon: "eye.slash", title: "Hidden Tasks", subtitle: "Tasks you've hidden from your dashboard")
-            if !model.hiddenLoaded {
-                Skeleton(height: 44)
-            } else if model.hiddenTasks.isEmpty {
-                Text("No hidden tasks").font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
-            } else {
-                ForEach(model.hiddenTasks) { t in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(t.name).font(.scaled(15, weight: .medium))
-                            Text(Fmt.durationWords(t.totalMs)).font(.scaled(13)).foregroundStyle(Theme.mutedForeground).tabular()
-                        }
-                        Spacer()
-                        Button {
-                            restoring = t.id
-                            Task { try? await model.restore(t.id); restoring = nil }
-                        } label: { Label(restoring == t.id ? "Restoring..." : "Restore", systemImage: "arrow.uturn.backward") }
-                            .buttonStyle(.t(.outline, .sm))
-                            .disabled(restoring != nil)
-                    }
-                    .padding(12)
-                    .background(Theme.muted.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
-                }
-            }
-        }
-        .card(padding: 20)
-    }
-}
-
-private struct AppearanceCard: View {
-    @AppStorage(SharedKeys.appAppearance, store: AppGroup.defaults) private var app = AppearanceChoice.system.rawValue
-    @AppStorage(SharedKeys.widgetAppearance, store: AppGroup.defaults) private var widgets = AppearanceChoice.system.rawValue
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            CardTitle(icon: "circle.lefthalf.filled", title: "Appearance", subtitle: "Follow the system, or pick light or dark.")
-            row("App", $app)
-            row("Widgets", $widgets)
-        }
-        .card(padding: 20)
-        .onChange(of: app) { _, _ in
-            #if os(macOS)
-            AppearanceChoice.applyToMacApp()
-            #endif
-        }
-        .onChange(of: widgets) { _, _ in WidgetCenter.shared.reloadAllTimelines() }
-    }
-
-    private func row(_ title: String, _ value: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.scaled(13, weight: .medium)).foregroundStyle(Theme.mutedForeground)
-            Picker(title, selection: value) {
-                ForEach(AppearanceChoice.allCases) { Text($0.label).tag($0.rawValue) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .accessibilityIdentifier("appearance-\(title.lowercased())")
-        }
-    }
-}
-
-private struct PreferencesCard: View {
-    @Environment(AppModel.self) private var model
-    @State private var reminderHours = Reminder.hours
-    #if os(macOS)
-    @State private var showSeconds = AppGroup.defaults.bool(forKey: SharedKeys.menuBarShowSeconds)
-    @State private var hideName = AppGroup.defaults.bool(forKey: SharedKeys.menuBarHideName)
-    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
-    #endif
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            CardTitle(icon: "slider.horizontal.3", title: "Preferences")
-            #if os(macOS)
-            Toggle("Launch at login", isOn: $launchAtLogin)
-                .onChange(of: launchAtLogin) { _, on in
-                    do { if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() } }
-                    catch { launchAtLogin = SMAppService.mainApp.status == .enabled }
-                }
-            Toggle("Show seconds in the menu bar", isOn: $showSeconds)
-                .onChange(of: showSeconds) { _, v in AppGroup.defaults.set(v, forKey: SharedKeys.menuBarShowSeconds) }
-            Toggle("Hide the task name in the menu bar", isOn: $hideName)
-                .onChange(of: hideName) { _, v in AppGroup.defaults.set(v, forKey: SharedKeys.menuBarHideName) }
-            Text("Toggle the menu-bar panel from anywhere with ⌃⌥T.").font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
-            Hairline()
-            #endif
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("“Still tracking?” reminder").font(.scaled(14))
-                    Text("Get a notification when a timer runs this long.").font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
-                }
-                Spacer()
-                Picker("Reminder", selection: $reminderHours) {
-                    Text("Off").tag(0)
-                    ForEach([1, 2, 3, 4, 6, 8, 10], id: \.self) { Text("After \($0) h").tag($0) }
-                }
-                .labelsHidden()
-                .fixedSize()
-                .onChange(of: reminderHours) { _, h in
-                    Reminder.hours = h
-                    Task {
-                        if h > 0 { _ = await Reminder.requestPermission() }
-                        Reminder.schedule(model.running, model: model)
-                    }
-                }
-            }
-        }
-        .toggleStyle(.switch)
-        .card(padding: 20)
-    }
-}
-
-private struct SecurityCard: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
     @State private var current = ""
     @State private var new = ""
     @State private var confirm = ""
-    @State private var pwStatus: String?
-    @State private var pwError: String?
+    @State private var error: String?
     @State private var busy = false
-    @State private var deletePassword = ""
-    @State private var showDelete = false
-    @State private var deleteError: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            CardTitle(icon: "lock", title: "Security")
-            if model.canChangePassword {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Change password").font(.scaled(14, weight: .semibold))
-                    TField(placeholder: "Current password", text: $current, secure: true)
-                    TField(placeholder: "New password (min. 6 characters)", text: $new, secure: true)
-                    TField(placeholder: "Confirm new password", text: $confirm, secure: true)
-                    HStack(spacing: 12) {
-                        Button(busy ? "Saving..." : "Change password", action: changePassword)
-                            .buttonStyle(.t(.outline))
-                            .disabled(busy || current.isEmpty || new.isEmpty)
-                        if let pwStatus { Text(pwStatus).font(.scaled(14)).foregroundStyle(Theme.mutedForeground) }
-                    }
-                    InlineError(text: pwError)
+        VStack(alignment: .leading, spacing: 0) {
+            Form {
+                Section {
+                    SecureField("Current password", text: $current)
+                } header: {
+                    Text("Change password").font(.headline)
+                }
+                Section {
+                    SecureField("New password", text: $new)
+                    SecureField("Confirm new password", text: $confirm)
+                } footer: {
+                    Text(error ?? "At least 6 characters.")
+                        .font(.callout)
+                        .foregroundStyle(error == nil ? Color.secondary : Color.red)
                 }
             }
-            if model.canDeleteAccount {
-                Hairline()
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Delete account").font(.scaled(14, weight: .semibold))
-                    Text("Permanently deletes your account, tasks, time entries and billing history. This can't be undone.")
-                        .font(.scaled(13)).foregroundStyle(Theme.mutedForeground)
-                    Button("Delete account…") { deletePassword = ""; deleteError = nil; showDelete = true }
-                        .buttonStyle(.t(.outline))
-                        .foregroundStyle(Theme.destructive)
-                }
+            .formStyle(.grouped)
+            .scrollDisabled(true)
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(busy ? "Saving…" : "Change Password", action: save)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(busy || current.isEmpty || new.isEmpty)
             }
+            .padding([.horizontal, .bottom], 20)
         }
-        .card(padding: 20)
-        .sheet(isPresented: $showDelete) {
-            SheetScaffold(title: "Delete your account?", onClose: { showDelete = false }) {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Enter your password to confirm. Everything in your Trackify account is deleted for good.")
-                        .font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
-                    TField(placeholder: "Password", text: $deletePassword, secure: true)
-                    InlineError(text: deleteError)
-                    HStack {
-                        Spacer()
-                        Button("Cancel") { showDelete = false }.buttonStyle(.t(.outline))
-                        Button("Delete account", action: deleteAccount).buttonStyle(.t(.destructive)).disabled(deletePassword.isEmpty)
-                    }
-                }
-            }
-            .trackifySheet()
-        }
+        .frame(width: 420)
     }
 
-    private func changePassword() {
-        pwError = nil; pwStatus = nil
-        guard new == confirm else { pwError = "Passwords do not match"; return }
-        guard new.count >= 6 else { pwError = "Password must be at least 6 characters"; return }
+    private func save() {
+        error = nil
+        guard new == confirm else { error = "Passwords do not match."; return }
+        guard new.count >= 6 else { error = "Password must be at least 6 characters."; return }
         busy = true
         Task {
             do {
                 try await model.changePassword(current: current, new: new)
-                pwStatus = "Password changed"
-                current = ""; new = ""; confirm = ""
-            } catch let e as APIError { pwError = e.status == 403 || e.status == 401 ? "Current password is incorrect" : e.message }
-            catch { pwError = error.localizedDescription }
+                dismiss()
+            } catch let e as APIError { error = e.status == 403 || e.status == 401 ? "Current password is incorrect." : e.message }
+            catch { self.error = error.localizedDescription }
             busy = false
         }
     }
-
-    private func deleteAccount() {
-        deleteError = nil
-        Task {
-            do { try await model.deleteAccount(password: deletePassword); showDelete = false }
-            catch let e as APIError { deleteError = e.status == 403 ? "Incorrect password" : e.message }
-            catch { deleteError = error.localizedDescription }
-        }
-    }
 }
 
-private struct AboutCard: View {
+private struct DeleteAccountSheet: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var password = ""
+    @State private var error: String?
+    @State private var busy = false
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            CardTitle(icon: "server.rack", title: "Server")
-            Text(model.session?.server ?? model.serverString).font(.mono(13)).textSelection(.enabled)
-            Text("To use another server, sign out and open “Advanced” on the sign-in screen.")
-                .font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
-            Hairline()
-            let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
-            let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
-            HStack(spacing: 8) {
-                AppGlyph(size: 22)
-                Text("Trackify \(v) (\(b))").font(.scaled(13)).foregroundStyle(Theme.mutedForeground)
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Delete your account?").font(.headline)
+            Text("Enter your password to confirm. Your account, tasks, time entries and billing history are deleted for good.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            SecureField("Password", text: $password)
+                .textFieldStyle(.roundedBorder)
+            if let error { Text(error).foregroundStyle(.red) }
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Delete Account", role: .destructive, action: delete)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(password.isEmpty || busy)
             }
         }
-        .card(padding: 20)
+        .padding(20)
+        .frame(width: 420)
+    }
+
+    private func delete() {
+        error = nil
+        busy = true
+        Task {
+            do { try await model.deleteAccount(password: password); dismiss() }
+            catch let e as APIError { error = e.status == 403 ? "Incorrect password." : e.message }
+            catch { self.error = error.localizedDescription }
+            busy = false
+        }
     }
 }
+#endif

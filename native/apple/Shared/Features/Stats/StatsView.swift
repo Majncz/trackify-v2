@@ -2,118 +2,19 @@ import SwiftUI
 import Charts
 import TrackifyKit
 
-/// `/stats` (WEB_AUDIT §1.5).
-struct StatsView: View {
-    @Environment(AppModel.self) private var model
-    @State private var rangeType: Analytics.StatsRange = .week
-    @State private var customFrom = DayCalc.current.startOfWeek(Date())
-    @State private var customTo = DayCalc.current.endOfWeek(Date())
-    @State private var groupSheet: GroupSheetMode?
-    @State private var width: CGFloat = 390
+/// Heavy stats aggregates, computed off the main actor and cached per data version / range / live tick.
+struct StatsComputed {
+    var range: Analytics.Range
+    var tasks: [TrackifyTask]
+    var summary: Analytics.StatsSummary
+    var rows: [Analytics.BreakdownRow]
 
-    @State private var computed: StatsComputed?
-    @State private var liveTick = 0
-
-    /// Heavy aggregates, computed off the main actor and cached per data version / range / live tick.
-    struct StatsComputed {
-        var range: Analytics.Range
-        var tasks: [TrackifyTask]
-        var summary: Analytics.StatsSummary
-        var rows: [Analytics.BreakdownRow]
-    }
-
-    private var computeKey: String {
-        "\(model.dataTick)|\(model.tasks.count)|\(rangeType.rawValue)|\(customFrom.timeIntervalSince1970)|\(customTo.timeIntervalSince1970)|\(model.running?.id ?? "-")|\(liveTick)"
-    }
-
-    var body: some View {
-        ScrollView {
-            content
-                .padding(.horizontal, width < 640 ? 12 : 24)
-                .padding(.vertical, 16)
-                .frame(maxWidth: 896)
-                .frame(maxWidth: .infinity)
-                .readWidth($width)
-        }
-        .background(Theme.background)
-        .refreshable { await model.refreshAll() }
-        .sheet(item: $groupSheet) { mode in GroupEditorSheet(mode: mode, range: range(now: Date())).trackifySheet() }
-        .task { if !model.groupsLoaded { await model.refreshGroups() } }
-        .task(id: computeKey) { await recompute() }
-        .task(id: model.running?.id) {
-            // Keep live totals fresh while a timer runs (cheap: computed off-main).
-            guard model.running != nil else { return }
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
-                liveTick += 1
-            }
-        }
-    }
-
-    private func range(now: Date) -> Analytics.Range {
-        Analytics.range(rangeType, customFrom: customFrom, customTo: customTo, now: now)
-    }
-
-    private func recompute() async {
-        let now = Date()
-        let r = range(now: now)
-        let tasks = model.liveTasks(now: now).filter { !$0.hidden }
-        let result = await Task.detached(priority: .userInitiated) { () -> StatsComputed in
+    static func compute(tasks: [TrackifyTask], range r: Analytics.Range, now: Date) async -> StatsComputed {
+        await Task.detached(priority: .userInitiated) { () -> StatsComputed in
             let summary = Analytics.statsSummary(tasks: tasks, range: r)
             let rows = summary.totalMs > 0 ? Analytics.breakdown(tasks: tasks, range: r, topIds: summary.topTasks.map(\.task.id), now: now) : []
             return StatsComputed(range: r, tasks: tasks, summary: summary, rows: rows)
         }.value
-        computed = result
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            PageHeader("Stats", subtitle: "Analyse your tracked time")
-            rangeControls(label: computed?.range.label ?? range(now: Date()).label)
-            if !model.tasksLoaded || computed == nil {
-                HStack(spacing: 12) { Skeleton(height: 84); Skeleton(height: 84) }
-                Skeleton(height: 240)
-            } else if let c = computed {
-                HStack(alignment: .top, spacing: 12) {
-                    headline("Total Tracked", Fmt.fmtMs(c.summary.totalMs), " ")
-                    headline("Daily Average", Fmt.fmtMs(c.summary.dailyAverageMs), "per active day")
-                }
-                .fixedSize(horizontal: false, vertical: true)
-                if c.summary.totalMs > 0 {
-                    BreakdownChartCard(rows: c.rows, top: c.summary.topTasks)
-                    TopTasksCard(top: c.summary.topTasks, total: c.summary.totalMs)
-                } else {
-                    EmptyState(icon: "chart.bar", text: "No data for this period").card()
-                }
-                SavedGroupsCard(onCreate: { groupSheet = .create }, onEdit: { groupSheet = .edit($0) })
-            }
-        }
-    }
-
-    private func rangeControls(label: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Segmented(items: Analytics.StatsRange.allCases.map { ($0, $0.label) }, selection: $rangeType)
-                .accessibilityIdentifier("statsRange")
-            if rangeType == .custom {
-                HStack(spacing: 12) {
-                    DatePicker("From", selection: $customFrom, displayedComponents: .date)
-                    DatePicker("To", selection: $customTo, in: customFrom..., displayedComponents: .date)
-                }
-                .font(.scaled(14))
-            }
-            Text(label).font(.scaled(13)).foregroundStyle(Theme.mutedForeground)
-        }
-    }
-
-    private func headline(_ title: String, _ value: String, _ caption: String?) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.scaled(14, weight: .medium)).foregroundStyle(Theme.mutedForeground)
-            Text(value).font(.scaled(26, weight: .bold)).tabular().lineLimit(1).minimumScaleFactor(0.7)
-            if let caption { Text(caption).font(.scaled(12)).foregroundStyle(Theme.mutedForeground) }
-        }
-        .frame(maxHeight: .infinity, alignment: .topLeading)
-        .card()
     }
 }
 
@@ -204,37 +105,6 @@ struct BreakdownDetail: View {
     }
 }
 
-// MARK: - Top tasks
-
-struct TopTasksCard: View {
-    let top: [Analytics.TaskTotal]
-    let total: Int64
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Top tasks").font(.scaled(14, weight: .medium))
-            ForEach(Array(top.enumerated()), id: \.element.id) { i, t in
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text("\(i + 1)").font(.scaled(13, weight: .semibold)).foregroundStyle(Theme.mutedForeground).frame(width: 16, alignment: .leading)
-                        Text(t.task.name).font(.scaled(14, weight: .medium)).lineLimit(1)
-                        Spacer()
-                        Text(Fmt.fmtMs(t.ms)).font(.scaled(14)).tabular()
-                    }
-                    GeometryReader { g in
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 3).fill(Theme.muted)
-                            RoundedRectangle(cornerRadius: 3).fill(Color(hex: Accent.taskChartPalette[i % 6], opacity: 0.88))
-                                .frame(width: g.size.width * CGFloat(total > 0 ? Double(t.ms) / Double(total) : 0))
-                        }
-                    }
-                    .frame(height: 6)
-                }
-            }
-        }
-        .card()
-    }
-}
-
 // MARK: - Saved groups
 
 enum GroupSheetMode: Identifiable, Hashable {
@@ -243,119 +113,312 @@ enum GroupSheetMode: Identifiable, Hashable {
     var id: String { if case .edit(let g) = self { return g.id }; return "create" }
 }
 
-struct SavedGroupsCard: View {
+// MARK: - Share row
+
+/// Name · value, with a thin proportion bar underneath (top tasks, groups).
+struct ShareRow: View {
+    var title: String
+    var value: String
+    var hex: String
+    var fraction: Double
+    var subtitle: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Circle().fill(Color(hex: hex)).frame(width: 8, height: 8)
+                Text(title).lineLimit(1)
+                if let subtitle { Text(subtitle).font(.footnote).foregroundStyle(Theme.mutedForeground) }
+                Spacer()
+                Text(value).tabular().foregroundStyle(Theme.mutedForeground)
+            }
+            GeometryReader { g in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Theme.muted)
+                    Capsule().fill(Color(hex: hex, opacity: 0.85)).frame(width: max(3, g.size.width * CGFloat(min(1, fraction))))
+                }
+            }
+            .frame(height: 4)
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+#if os(macOS)
+// MARK: - Mac Stats
+
+/// Range in the toolbar → totals → chart beside top tasks → activity beside groups (stacked when narrow).
+struct MacStatsView: View {
     @Environment(AppModel.self) private var model
-    var onCreate: () -> Void
+    @State private var rangeType: Analytics.StatsRange = .week
+    @State private var customFrom = DayCalc.current.startOfWeek(Date())
+    @State private var customTo = DayCalc.current.endOfWeek(Date())
+    @State private var groupSheet: GroupSheetMode?
+    @State private var computed: StatsComputed?
+    @State private var liveTick = 0
+    @State private var width: CGFloat = 900
+
+    private var computeKey: String {
+        "\(model.dataTick)|\(model.tasks.count)|\(rangeType.rawValue)|\(customFrom.timeIntervalSince1970)|\(customTo.timeIntervalSince1970)|\(model.running?.id ?? "-")|\(liveTick)"
+    }
+
+    private var wide: Bool { width >= 820 }
+    private let sideWidth: CGFloat = 340
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                if rangeType == .custom {
+                    HStack(spacing: 16) {
+                        DatePicker("From", selection: $customFrom, displayedComponents: .date)
+                        DatePicker("To", selection: $customTo, in: customFrom..., displayedComponents: .date)
+                        Spacer()
+                    }
+                    .datePickerStyle(.compact)
+                    .fixedSize()
+                }
+                totals
+                if wide {
+                    HStack(alignment: .top, spacing: 16) {
+                        chartBox
+                        topTasksBox.frame(width: sideWidth)
+                    }
+                    HStack(alignment: .top, spacing: 16) {
+                        activityBox
+                        groupsBox.frame(width: sideWidth)
+                    }
+                } else {
+                    chartBox
+                    topTasksBox
+                    groupsBox
+                    activityBox
+                }
+            }
+            .padding(20)
+            .frame(maxWidth: 1280, alignment: .leading)
+            .frame(maxWidth: .infinity)
+            .readWidth($width)
+        }
+        .navigationTitle("Stats")
+        .navigationSubtitle(computed?.range.label ?? "")
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Picker("Range", selection: $rangeType) {
+                    ForEach([Analytics.StatsRange.today, .week, .month, .alltime, .custom], id: \.self) { r in
+                        Text(r == .alltime ? "All" : r.label).tag(r)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .accessibilityIdentifier("statsRange")
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button { groupSheet = .create } label: { Label("New Group", systemImage: "folder.badge.plus") }
+                    .help("New group")
+                    .accessibilityIdentifier("createGroup")
+            }
+        }
+        .sheet(item: $groupSheet) { mode in GroupEditorSheet(mode: mode, range: range(now: Date())).trackifySheet() }
+        .task { if !model.groupsLoaded { await model.refreshGroups() } }
+        .task { if !model.hiddenLoaded { await model.refreshHidden() } }
+        .task(id: computeKey) { await recompute() }
+        .task(id: model.running?.id) {
+            guard model.running != nil else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                liveTick += 1
+            }
+        }
+    }
+
+    // MARK: Totals
+
+    private var totals: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 40) {
+            stat("Total", computed.map { Fmt.fmtMs($0.summary.totalMs) })
+            stat("Daily average", computed.map { Fmt.fmtMs($0.summary.dailyAverageMs) })
+            Spacer()
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func stat(_ title: String, _ value: String?) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.callout).foregroundStyle(.secondary)
+            Text(value ?? "—").font(.system(size: 26, weight: .semibold)).tabular()
+        }
+    }
+
+    // MARK: Boxes
+
+    private var chartBox: some View {
+        GroupBox {
+            Group {
+                if let c = computed, c.summary.totalMs > 0 {
+                    BreakdownChartCard(rows: c.rows, top: c.summary.topTasks)
+                } else if computed != nil {
+                    empty("No time tracked in this period")
+                } else {
+                    ProgressView().frame(maxWidth: .infinity, minHeight: 240)
+                }
+            }
+            .padding(8)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var topTasksBox: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 4) {
+                boxTitle("Top tasks")
+                if let c = computed, c.summary.totalMs > 0 {
+                    ForEach(Array(c.summary.topTasks.enumerated()), id: \.element.id) { i, t in
+                        NavigationLink(value: Route.task(t.task.id)) {
+                            ShareRow(title: t.task.name, value: Fmt.fmtMs(t.ms), hex: Accent.taskChartPalette[i % 6],
+                                     fraction: Double(t.ms) / Double(max(c.summary.totalMs, 1)))
+                                .padding(.vertical, 4)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Show details")
+                    }
+                } else {
+                    empty("Nothing yet")
+                }
+            }
+            .padding(8)
+        }
+    }
+
+    private var activityBox: some View {
+        GroupBox {
+            TimeSpentCard().padding(8)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var groupsBox: some View {
+        GroupBox {
+            MacGroupsList(onEdit: { groupSheet = .edit($0) }, onCreate: { groupSheet = .create })
+                .padding(8)
+        }
+    }
+
+    private func boxTitle(_ text: String) -> some View {
+        Text(text).font(.headline).padding(.bottom, 6)
+    }
+
+    private func empty(_ text: String) -> some View {
+        Text(text).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 80)
+    }
+
+    private func range(now: Date) -> Analytics.Range {
+        Analytics.range(rangeType, customFrom: customFrom, customTo: customTo, now: now)
+    }
+
+    private func recompute() async {
+        let now = Date()
+        computed = await StatsComputed.compute(tasks: model.liveTasks(now: now).filter { !$0.hidden }, range: range(now: now), now: now)
+    }
+}
+
+/// Saved groups with all-time totals. Click a group to show its tasks; right-click to edit, copy or delete.
+struct MacGroupsList: View {
+    @Environment(AppModel.self) private var model
     var onEdit: (TaskGroup) -> Void
+    var onCreate: () -> Void
+    @State private var expanded: Set<String> = []
+    @State private var deleting: TaskGroup?
     @State private var error: String?
 
     var body: some View {
         let data = Analytics.groupTotals(groups: model.groups, tasks: model.tasks + model.hiddenTasks.map { var t = $0; t.hidden = true; return t })
-        let withTime = data.filter { $0.ms > 0 }
-        let maxMs = withTime.map(\.ms).max() ?? 0
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("Saved groups").font(.cardTitle)
-                    Spacer()
-                    if data.count >= 2 {
-                        CopyButton(text: { data.map(Analytics.groupCopyText).joined(separator: "\n\n") }, label: "Copy all", showLabel: true)
-                    }
+        let maxMs = max(data.map(\.ms).max() ?? 0, 1)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Groups").font(.headline)
+                Text("all time").foregroundStyle(.secondary)
+                Spacer()
+                if data.count >= 2 {
+                    Button("Copy All") { Clipboard.copy(data.map(Analytics.groupCopyText).joined(separator: "\n\n")) }
+                        .buttonStyle(.borderless)
+                        .controlSize(.small)
                 }
-                if withTime.count >= 2 && maxMs > 0 {
-                    VStack(spacing: 8) {
-                        ForEach(withTime.sorted { $0.ms > $1.ms }) { g in
-                            HStack(spacing: 10) {
-                                Text(g.group.name).font(.scaled(13, weight: .medium)).lineLimit(1).frame(width: 110, alignment: .leading)
-                                GeometryReader { geo in
-                                    RoundedRectangle(cornerRadius: 3).fill(Color(hex: g.group.accentHex, opacity: 0.85))
-                                        .frame(width: max(4, geo.size.width * CGFloat(Double(g.ms) / Double(maxMs))))
+            }
+            .padding(.bottom, 6)
+            if !model.groupsLoaded {
+                ProgressView().frame(maxWidth: .infinity, minHeight: 60)
+            } else if data.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Group tasks to see their combined time.").foregroundStyle(.secondary)
+                    Button("New Group…", action: onCreate)
+                }
+            } else {
+                ForEach(data) { g in
+                    let open = expanded.contains(g.id)
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(.secondary)
+                                .rotationEffect(.degrees(open ? 90 : 0))
+                                .frame(width: 10)
+                            ShareRow(title: g.group.name, value: Fmt.fmtMs(g.ms), hex: g.group.accentHex,
+                                     fraction: Double(g.ms) / Double(maxMs),
+                                     subtitle: "\(g.group.taskIds.count) task\(g.group.taskIds.count == 1 ? "" : "s")")
+                        }
+                        .padding(.vertical, 4)
+                        .contentShape(Rectangle())
+                        .onTapGesture { if open { expanded.remove(g.id) } else { expanded.insert(g.id) } }
+                        if open {
+                            VStack(alignment: .leading, spacing: 4) {
+                                if g.members.isEmpty && g.orphanIds.isEmpty {
+                                    Text("No tasks in this group").foregroundStyle(.secondary)
                                 }
-                                .frame(height: 10)
-                                Text(Fmt.fmtMs(g.ms)).font(.scaled(13, weight: .medium)).tabular().frame(width: 72, alignment: .trailing)
+                                ForEach(g.members) { m in
+                                    HStack {
+                                        Text(m.task.name + (m.task.hidden ? " (hidden)" : "")).lineLimit(1)
+                                        Spacer()
+                                        Text(Fmt.fmtMs(m.ms)).tabular().foregroundStyle(.secondary)
+                                    }
+                                }
+                                ForEach(g.orphanIds, id: \.self) { id in
+                                    Text("Removed · \(id.prefix(8))…").foregroundStyle(.orange)
+                                }
+                                HStack(spacing: 12) {
+                                    Button("Edit…") { onEdit(g.group) }
+                                    Button("Copy") { Clipboard.copy(Analytics.groupCopyText(g)) }
+                                    Button("Delete…", role: .destructive) { deleting = g.group }
+                                }
+                                .buttonStyle(.link)
+                                .padding(.top, 2)
                             }
+                            .font(.callout)
+                            .padding(.leading, 16)
+                            .padding(.bottom, 6)
                         }
                     }
-                    .padding(.bottom, 4)
-                }
-                if !model.groupsLoaded {
-                    Skeleton(height: 60)
-                } else if data.isEmpty {
-                    Text("No saved groups yet.").font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
-                } else {
-                    VStack(spacing: 0) {
-                        HStack {
-                            Text("Group").frame(maxWidth: .infinity, alignment: .leading)
-                            Text("Total").frame(width: 72, alignment: .trailing)
-                            Color.clear.frame(width: 100)
-                        }
-                        .font(.scaled(12, weight: .medium)).foregroundStyle(Theme.mutedForeground)
-                        .padding(.vertical, 8)
-                        Hairline()
-                        ForEach(data) { g in
-                            groupRow(g)
-                            Hairline()
-                        }
+                    .contextMenu {
+                        Button("Edit…") { onEdit(g.group) }
+                        Button("Copy") { Clipboard.copy(Analytics.groupCopyText(g)) }
+                        Divider()
+                        Button("Delete…", role: .destructive) { deleting = g.group }
                     }
                 }
-                InlineError(text: error)
             }
-            .card()
-            Button(action: onCreate) { Label("Create a group from tasks", systemImage: "plus") }
-                .buttonStyle(.t(.outline))
-                .accessibilityIdentifier("createGroup")
+            if let error { Text(error).font(.callout).foregroundStyle(.red) }
         }
-        .task { if !model.hiddenLoaded { await model.refreshHidden() } }
-    }
-
-    private func groupRow(_ g: Analytics.GroupTotals) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top) {
-                HStack(spacing: 8) {
-                    Circle().fill(Color(hex: g.group.accentHex)).frame(width: 9, height: 9)
-                    Text(g.group.name).font(.scaled(14, weight: .semibold)).lineLimit(2)
-                    Text("\(g.group.taskIds.count)").font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
+        .confirmationDialog("Delete “\(deleting?.name ?? "")”?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+            Button("Delete Group", role: .destructive) {
+                guard let g = deleting else { return }
+                Task {
+                    do { try await model.deleteGroup(g.id) } catch let e as APIError { error = e.message } catch {}
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Text(Fmt.fmtMs(g.ms)).font(.scaled(14, weight: .semibold)).tabular().frame(width: 72, alignment: .trailing)
-                HStack(spacing: 0) {
-                    CopyButton(text: { Analytics.groupCopyText(g) })
-                    Button { onEdit(g.group) } label: { Image(systemName: "pencil").frame(width: 32, height: 32).contentShape(Rectangle()) }
-                        .buttonStyle(.plain).foregroundStyle(Theme.mutedForeground).accessibilityLabel("Edit")
-                    Button {
-                        Task { do { try await model.deleteGroup(g.group.id) } catch let e as APIError { error = e.message } catch {} }
-                    } label: { Image(systemName: "trash").frame(width: 32, height: 32).contentShape(Rectangle()) }
-                        .buttonStyle(.plain).foregroundStyle(Theme.mutedForeground).accessibilityLabel("Delete")
-                }
-                .frame(width: 100, alignment: .trailing)
             }
-            if g.group.taskIds.isEmpty {
-                Text("—").foregroundStyle(Theme.mutedForeground)
-            }
-            ForEach(Array(g.members.enumerated()), id: \.element.id) { i, m in
-                HStack(spacing: 8) {
-                    (Text(m.task.name) + Text(m.task.hidden ? " (hidden)" : "").foregroundColor(Theme.mutedForeground))
-                        .font(.scaled(13, weight: .medium)).lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 2).fill(Theme.muted)
-                            RoundedRectangle(cornerRadius: 2).fill(Color(hex: Accent.taskChartPalette[i % 6]))
-                                .frame(width: geo.size.width * CGFloat(g.ms > 0 ? Double(m.ms) / Double(g.ms) : 0))
-                        }
-                    }
-                    .frame(width: 70, height: 5)
-                    Text(Fmt.fmtMs(m.ms)).font(.scaled(12)).tabular().foregroundStyle(Theme.mutedForeground).frame(width: 68, alignment: .trailing)
-                }
-                .padding(.leading, 17)
-            }
-            ForEach(g.orphanIds, id: \.self) { id in
-                Text("Removed · \(id.prefix(8))…").font(.scaled(12)).foregroundStyle(Color(light: 0xB45309, dark: 0xFBBF24)).padding(.leading, 17)
-            }
-            if g.ms == 0 {
-                Text("No tracked time").font(.scaled(11)).foregroundStyle(Theme.mutedForeground).padding(.leading, 17)
-            }
+        } message: {
+            Text("Its tasks and their time stay.")
         }
-        .padding(.vertical, 10)
     }
 }
+#endif

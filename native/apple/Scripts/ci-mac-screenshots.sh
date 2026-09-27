@@ -72,16 +72,26 @@ python3 -c "print(f'macOS idle CPU over 30 s (menu bar only, timer running): {($
 launch panel-dark -TrackifyShowPanelWindow YES -TrackifyAppearance dark
 capture_window panel-dark
 
-for screen in home stats visualizations billing chat settings; do
-  launch "dash-$screen" -TrackifyOpenDashboard YES -TrackifyScreen "$screen" -TrackifyWindowSize 1200x820
+# Dashboard window: every sidebar section, light + dark, at a large and a small window size.
+for screen in home stats team billing chat settings; do
+  launch "dash-$screen" -TrackifyOpenDashboard YES -TrackifyScreen "$screen" -TrackifyWindowSize 1400x900
   capture_window "dashboard-$screen"
+  launch "dash-$screen-dark" -TrackifyOpenDashboard YES -TrackifyScreen "$screen" -TrackifyWindowSize 1400x900 -TrackifyAppearance dark
+  capture_window "dashboard-$screen-dark"
 done
-launch dash-small -TrackifyOpenDashboard YES -TrackifyScreen home -TrackifyWindowSize 900x600
-capture_window dashboard-small
-launch dash-dark -TrackifyOpenDashboard YES -TrackifyScreen home -TrackifyWindowSize 1200x820 -TrackifyAppearance dark
-capture_window dashboard-home-dark
-launch dash-stats-dark -TrackifyOpenDashboard YES -TrackifyScreen stats -TrackifyWindowSize 1200x820 -TrackifyAppearance dark
-capture_window dashboard-stats-dark
+for screen in home stats team settings; do
+  launch "dash-$screen-small" -TrackifyOpenDashboard YES -TrackifyScreen "$screen" -TrackifyWindowSize 900x600
+  capture_window "dashboard-$screen-small"
+done
+launch dash-search -TrackifyOpenDashboard YES -TrackifyScreen home -TrackifyWindowSize 1100x720 -TrackifyTimerQuery "Code"
+capture_window dashboard-home-search
+launch dash-task -TrackifyOpenDashboard YES -TrackifyScreen home -TrackifyWindowSize 1100x720 -TrackifyOpenTaskNamed "Learning Swift"
+capture_window dashboard-task-detail
+launch dash-task-dark -TrackifyOpenDashboard YES -TrackifyScreen home -TrackifyWindowSize 1100x720 -TrackifyOpenTaskNamed "Learning Swift" -TrackifyAppearance dark
+capture_window dashboard-task-detail-dark
+
+# Desktop widgets (rendered by the app: light, dark, desktop-tinted look)
+"$BIN" -TrackifyRenderWidgets "$SHOTS" > "$OUT/logs/mac-widgets.log" 2>&1
 
 # Long task name in the menu bar (native account)
 NATIVE=$(token native@trackify.test trackify-native)

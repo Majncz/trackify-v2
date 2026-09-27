@@ -362,11 +362,7 @@ struct Segmented<T: Hashable>: View {
             ForEach(items, id: \.0) { item in
                 let on = item.0 == selection
                 Button {
-                    #if os(iOS)
-                    selection = item.0   // instant: no cross-fade between categories on phones
-                    #else
-                    withAnimation(.easeOut(duration: 0.15)) { selection = item.0 }
-                    #endif
+                    selection = item.0   // instant: no cross-fade between categories
                 } label: {
                     Text(item.1)
                         .font(.scaled(compact ? 12 : 13, weight: .medium))

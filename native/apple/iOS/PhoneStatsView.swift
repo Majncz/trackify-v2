@@ -8,7 +8,7 @@ struct PhoneStatsView: View {
     @State private var customFrom = DayCalc.current.startOfWeek(Date())
     @State private var customTo = DayCalc.current.endOfWeek(Date())
     @State private var groupSheet: GroupSheetMode?
-    @State private var computed: StatsView.StatsComputed?
+    @State private var computed: StatsComputed?
     @State private var liveTick = 0
 
     private var computeKey: String {
@@ -154,41 +154,11 @@ struct PhoneStatsView: View {
         let now = Date()
         let r = range(now: now)
         let tasks = model.liveTasks(now: now).filter { !$0.hidden }
-        computed = await Task.detached(priority: .userInitiated) { () -> StatsView.StatsComputed in
+        computed = await Task.detached(priority: .userInitiated) { () -> StatsComputed in
             let summary = Analytics.statsSummary(tasks: tasks, range: r)
             let rows = summary.totalMs > 0 ? Analytics.breakdown(tasks: tasks, range: r, topIds: summary.topTasks.map(\.task.id), now: now) : []
-            return StatsView.StatsComputed(range: r, tasks: tasks, summary: summary, rows: rows)
+            return StatsComputed(range: r, tasks: tasks, summary: summary, rows: rows)
         }.value
-    }
-}
-
-/// Name · value, with a thin proportion bar underneath (top tasks, groups).
-struct ShareRow: View {
-    var title: String
-    var value: String
-    var hex: String
-    var fraction: Double
-    var subtitle: String? = nil
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Circle().fill(Color(hex: hex)).frame(width: 8, height: 8)
-                Text(title).lineLimit(1)
-                if let subtitle { Text(subtitle).font(.footnote).foregroundStyle(Theme.mutedForeground) }
-                Spacer()
-                Text(value).tabular().foregroundStyle(Theme.mutedForeground)
-            }
-            GeometryReader { g in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Theme.muted)
-                    Capsule().fill(Color(hex: hex, opacity: 0.85)).frame(width: max(3, g.size.width * CGFloat(min(1, fraction))))
-                }
-            }
-            .frame(height: 4)
-        }
-        .padding(.vertical, 2)
-        .accessibilityElement(children: .combine)
     }
 }
 

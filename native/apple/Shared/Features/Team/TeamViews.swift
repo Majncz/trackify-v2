@@ -77,7 +77,16 @@ struct RaceSection: View {
                     Text("Play the hours back and watch the team race").font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
                 }
             }
+            #if os(macOS)
+            Picker("Range", selection: $preset) {
+                ForEach(Race.Preset.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            #else
             ChipRow(items: Race.Preset.allCases.map { ($0, $0.label) }, selection: $preset)
+            #endif
             if preset == .custom {
                 HStack(spacing: 12) {
                     DatePicker("From", selection: $customFrom, in: ...customTo, displayedComponents: .date)
@@ -99,16 +108,32 @@ struct RaceSection: View {
                 Button(action: togglePlay) {
                     Label(playing ? "Pause" : (playhead >= 1 ? "Play again" : "Play"), systemImage: playing ? "pause.fill" : "play.fill")
                 }
+                #if os(macOS)
+                .buttonStyle(.borderedProminent)
+                #else
                 .buttonStyle(.t(.primary))
+                #endif
                 .fixedSize()
                 .disabled(data?.users.isEmpty ?? true)
                 .accessibilityIdentifier("racePlay")
                 Button { restart() } label: { Image(systemName: "arrow.counterclockwise") }
+                    #if os(macOS)
+                    .buttonStyle(.bordered)
+                    #else
                     .buttonStyle(.t(.outline, .icon))
+                    #endif
                     .accessibilityLabel("Restart")
                 Text("\(Fmt.playClock(Int64(playhead * Double(durationMs)))) / \(Fmt.playClock(durationMs))")
                     .font(.mono(13)).foregroundStyle(Theme.mutedForeground)
                 Spacer(minLength: 0)
+                #if os(macOS)
+                Picker("Length", selection: $durationMs) {
+                    ForEach(Race.speeds, id: \.ms) { s in Text(s.label).tag(s.ms) }
+                }
+                .labelsHidden()
+                .fixedSize()
+                .help("Playback length")
+                #else
                 Menu {
                     ForEach(Race.speeds, id: \.ms) { s in
                         Button { durationMs = s.ms } label: {
@@ -127,10 +152,13 @@ struct RaceSection: View {
                 .menuStyle(.button)
                 .buttonStyle(.plain)
                 .accessibilityLabel("Playback length")
+                #endif
             }
             Slider(value: Binding(get: { playhead }, set: { playhead = $0; pause() }), in: 0...1)
                 .accessibilityLabel("Scrub visualization")
+                #if os(iOS)
                 .tint(Theme.foreground)
+                #endif
         }
     }
 
@@ -282,3 +310,57 @@ struct BarRaceStage: View {
         .animation(.linear(duration: 0.05), value: row.ms)
     }
 }
+
+#if os(macOS)
+/// Mac Team: the leaderboard beside the bar-race player (stacked when narrow).
+struct MacTeamView: View {
+    @Environment(AppModel.self) private var model
+    @State private var width: CGFloat = 900
+
+    var body: some View {
+        ScrollView {
+            Group {
+                if width >= 900 {
+                    HStack(alignment: .top, spacing: 20) {
+                        leaderboard.frame(width: min(440, width * 0.4))
+                        race
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 24) {
+                        leaderboard
+                        race
+                    }
+                }
+            }
+            .padding(20)
+            .frame(maxWidth: 1400, alignment: .topLeading)
+            .frame(maxWidth: .infinity)
+            .readWidth($width)
+        }
+        .navigationTitle("Team")
+        .navigationSubtitle("Leaderboard and race")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { Task { await model.refreshAll() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                    .keyboardShortcut("r", modifiers: .command)
+                    .help("Refresh (⌘R)")
+            }
+        }
+    }
+
+    private var leaderboard: some View {
+        GroupBox { LeaderboardCard().padding(8) }
+    }
+
+    private var race: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Race").font(.headline)
+                Text("Play the team’s hours back").font(.callout).foregroundStyle(.secondary)
+            }
+            RaceSection(showTitle: false)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+#endif

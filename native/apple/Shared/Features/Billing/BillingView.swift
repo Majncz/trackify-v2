@@ -5,11 +5,9 @@ import TrackifyKit
 
 struct BillingView: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var store = BillingStore()
     @State private var tab: BillingTab = BillingView.initialTab()
-    @State private var slideForward = true
     @State private var width: CGFloat = 390
     @State private var showMarkPaid = false
     @State private var markPaidRows: [BillingSessionRow] = []
@@ -28,18 +26,22 @@ struct BillingView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                #if os(iOS)
                 PageHeader("Billing", subtitle: "Rates on tasks, billable sessions, and marking them paid—same chart style as Stats where it helps.")
+                #endif
                 BillingSummaryBar(summary: store.summary, failed: store.summaryFailed, wide: wide)
                 if store.billingTasks != nil && !store.hasEnrolled {
                     BillingSetupCard { go(.rates) }
                 }
-                #if os(macOS)
-                BillingGuide { go(.rates) }
-                #endif
                 tabsSection
             }
+            #if os(macOS)
+            .padding(20)
+            .frame(maxWidth: 1100)
+            #else
             .padding(16)
             .frame(maxWidth: 896)
+            #endif
             .frame(maxWidth: .infinity)
             .readWidth($width)
         }
@@ -73,6 +75,29 @@ struct BillingView: View {
             }
             .trackifySheet()
         }
+        #else
+        .navigationTitle("Billing")
+        .navigationSubtitle(tab.label)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Picker("Section", selection: Binding(get: { tab }, set: { go($0) })) {
+                    ForEach(BillingTab.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .accessibilityIdentifier("billingTabs")
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button { showGuide.toggle() } label: { Label("How Billing Works", systemImage: "info.circle") }
+                    .help("How billing works")
+                    .popover(isPresented: $showGuide, arrowEdge: .bottom) {
+                        ScrollView {
+                            BillingGuide(onOpenTasksTab: { showGuide = false; go(.rates) }, onDemand: true).padding(16)
+                        }
+                        .frame(width: 440, height: 380)
+                    }
+            }
+        }
         #endif
         .sheet(isPresented: $showMarkPaid) {
             MarkPaidSheet(sessions: markPaidRows) {
@@ -92,18 +117,14 @@ struct BillingView: View {
 
     private var tabsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
+            #if os(iOS)
             Segmented(items: BillingTab.allCases.map { ($0, $0.label) },
                       selection: Binding(get: { tab }, set: { go($0) }))
                 .accessibilityIdentifier("billingTabs")
-            ZStack(alignment: .top) {
-                tabContent(tab)
-                    .id(tab)
-                    #if os(macOS)
-                    .transition(slideTransition)
-                    #endif
-            }
-            .frame(maxWidth: .infinity, alignment: .top)
-            .clipped()
+            #endif
+            tabContent(tab)
+                .id(tab)
+                .frame(maxWidth: .infinity, alignment: .top)
         }
     }
 
@@ -121,28 +142,10 @@ struct BillingView: View {
         }
     }
 
-    private var slideTransition: AnyTransition {
-        .asymmetric(insertion: .move(edge: slideForward ? .trailing : .leading),
-                    removal: .move(edge: slideForward ? .leading : .trailing))
-    }
-
-    /// Slide the panels like the web carousel (500 ms, cubic-bezier(0.22,1,0.36,1)).
+    /// Switch instantly (no carousel slide).
     private func go(_ next: BillingTab) {
         guard next != tab else { return }
-        slideForward = next.index > tab.index
-        #if os(iOS)
-        tab = next   // phones: switch instantly, no carousel slide
-        return
-        #else
-        if reduceMotion {
-            tab = next
-            return
-        }
-        // Apply the direction first so the outgoing panel picks up the right removal edge.
-        DispatchQueue.main.async {
-            withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.5)) { tab = next }
-        }
-        #endif
+        tab = next
     }
 }
 

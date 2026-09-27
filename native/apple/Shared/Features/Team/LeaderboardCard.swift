@@ -78,6 +78,35 @@ struct LeaderboardCard: View {
         }
     }
 
+    #if os(macOS)
+    private var controls: some View {
+        HStack(spacing: 6) {
+            Button { step(-1) } label: { Image(systemName: "chevron.left") }
+                .buttonStyle(.borderless)
+                .help("Previous \(Leaderboard.noun(range))")
+                .accessibilityLabel("Previous \(Leaderboard.noun(range))")
+            Picker("Range", selection: $range) {
+                ForEach(LeaderboardRange.allCases, id: \.self) { r in Text(r.label).tag(r) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            Button { step(1) } label: { Image(systemName: "chevron.right") }
+                .buttonStyle(.borderless)
+                .disabled(isCurrent)
+                .help("Next \(Leaderboard.noun(range))")
+                .accessibilityLabel("Next \(Leaderboard.noun(range))")
+            Button {
+                pickedDate = calc.date(fromKey: day) ?? Date()
+                pickerOpen = true
+            } label: { Image(systemName: "calendar") }
+                .buttonStyle(.borderless)
+                .help(Leaderboard.periodLabel(range, day: day, isCurrent: isCurrent))
+                .accessibilityLabel(Leaderboard.periodLabel(range, day: day, isCurrent: isCurrent))
+                .popover(isPresented: $pickerOpen) { datePicker }
+        }
+    }
+    #else
     private var controls: some View {
         HStack(spacing: 4) {
             Button { step(-1) } label: { Image(systemName: "chevron.left").frame(width: 32, height: 32).contentShape(Rectangle()) }
@@ -121,6 +150,7 @@ struct LeaderboardCard: View {
         }
         .foregroundStyle(Theme.foreground)
     }
+    #endif
 
     private var datePicker: some View {
         VStack(alignment: .leading, spacing: 8) {

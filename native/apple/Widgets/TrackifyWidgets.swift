@@ -62,9 +62,15 @@ struct TimerWidget: Widget {
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: TimerProvider()) { entry in
+            #if os(macOS)
+            TimerWidgetView(entry: entry)
+                .containerBackground(.background, for: .widget)
+                .forcedColorScheme(AppearanceChoice.widgets.colorScheme)
+            #else
             TimerWidgetView(entry: entry)
                 .containerBackground(for: .widget) { Theme.card }
                 .forcedColorScheme(AppearanceChoice.widgets.colorScheme)
+            #endif
         }
         .configurationDisplayName("Trackify")
         .description("See what's running and start or stop tasks with one tap.")
@@ -86,6 +92,9 @@ struct TimerWidgetView: View {
 
     var body: some View {
         let s = entry.snapshot
+        #if os(macOS)
+        if !s.signedIn { MacSignedOutWidget() } else { MacWidgetFamilyView(s: s, now: entry.date) }
+        #else
         if !s.signedIn {
             SignedOutWidget(compact: family != .systemLarge)
         } else {
@@ -101,6 +110,7 @@ struct TimerWidgetView: View {
             default: SmallWidget(s: s, now: entry.date)
             }
         }
+        #endif
     }
 }
 

@@ -10,14 +10,42 @@ struct ChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            #if os(iOS)
             ChatTabStrip(session: session)
             Hairline()
+            #endif
             ChatMessageList(session: session, onExample: { text in send(text) })
             Hairline()
             ChatInputBar(text: $input, streaming: session.isStreaming, onSend: sendInput, onStop: { session.stop() })
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.background)
+        #if os(macOS)
+        .navigationSubtitle(session.conversations.first { $0.id == session.currentId }?.tabTitle ?? "New conversation")
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Menu {
+                    ForEach(session.conversations) { c in
+                        Button { session.select(c.id) } label: {
+                            if c.id == session.currentId { Label(c.tabTitle, systemImage: "checkmark") } else { Text(c.tabTitle) }
+                        }
+                    }
+                    if let id = session.currentId {
+                        Divider()
+                        Button("Delete This Conversation", role: .destructive) { Task { await session.deleteConversation(id) } }
+                    }
+                } label: {
+                    Label("Conversations", systemImage: "clock.arrow.circlepath")
+                }
+                .help("Conversations")
+                .disabled(session.conversations.isEmpty)
+                Button { Task { await session.newConversation() } } label: { Label("New Chat", systemImage: "square.and.pencil") }
+                    .keyboardShortcut("n", modifiers: .command)
+                    .help("New chat (⌘N)")
+                    .accessibilityLabel("New chat")
+            }
+        }
+        #endif
         .task {
             session.attach(model)
             await session.loadConversations()

@@ -25,7 +25,9 @@ struct RootView<SignedIn: View>: View {
             }
         }
         .animation(.easeOut(duration: 0.2), value: model.phase)
+        #if os(iOS)
         .tint(Theme.foreground)
+        #endif
         .id(typeSize)   // fonts are sized from Dynamic Type at build time — rebuild when it changes
         .preferredColorScheme(AppearanceChoice(rawValue: appearance)?.colorScheme)
     }

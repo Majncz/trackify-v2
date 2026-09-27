@@ -14,8 +14,10 @@ struct CachedData: Codable {
 
 enum DataCache {
     private static var directory: URL {
-        let base = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppGroup.id)
+        let group = AppGroup.isAvailable ? FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppGroup.id) : nil
+        let base = group
             ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent(Bundle.main.bundleIdentifier ?? "Trackify", isDirectory: true)
         let dir = base.appendingPathComponent("TrackifyCache", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir

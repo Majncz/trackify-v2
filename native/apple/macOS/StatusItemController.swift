@@ -54,25 +54,20 @@ final class StatusItemController: NSObject, NSWindowDelegate {
     func updateLabel() {
         defer { scheduleNextTick() }
         guard let b = item.button else { return }
-        let d = AppGroup.defaults
         if let r = model.running {
-            let showSeconds = d.bool(forKey: SharedKeys.menuBarShowSeconds)
-            let hideName = d.bool(forKey: SharedKeys.menuBarHideName)
+            let showSeconds = AppGroup.defaults.bool(forKey: SharedKeys.menuBarShowSeconds)
             let elapsed = max(0, Date().ms - r.startTime)
-            let time = showSeconds ? Fmt.duration(elapsed) : Fmt.hoursMinutes(elapsed)
-            var name = model.task(r.taskId)?.name ?? SnapshotStore.shared.load().running?.taskName ?? ""
-            if name.count > 18 { name = String(name.prefix(17)) + "…" }
-            let title = hideName || name.isEmpty ? " \(time)" : " \(name)  \(time)"
-            if title != lastTitle || b.image?.isTemplate != false {
-                b.image = Self.dot(color: r.pending ? NSColor(rgb: 0xF59E0B) : NSColor(rgb: 0x22C55E))
-                let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
-                b.attributedTitle = NSAttributedString(string: title, attributes: [.font: font])
-                lastTitle = title
+            let label = Self.label(elapsed: elapsed, showSeconds: showSeconds, pending: r.pending)
+            if label.string != lastTitle || b.image !== Self.glyph {
+                b.image = Self.glyph
+                b.attributedTitle = label
+                lastTitle = label.string
             }
+            let name = model.task(r.taskId)?.name ?? SnapshotStore.shared.load().running?.taskName ?? ""
             b.setAccessibilityValue("Tracking \(name), \(Fmt.durationWords(elapsed))")
         } else {
-            if lastTitle != "" || b.image?.isTemplate != true {
-                b.image = Self.idleGlyph
+            if lastTitle != "" || b.image !== Self.glyph {
+                b.image = Self.glyph
                 b.attributedTitle = NSAttributedString(string: "")
                 lastTitle = ""
             }
@@ -80,35 +75,78 @@ final class StatusItemController: NSObject, NSWindowDelegate {
         }
     }
 
-    static func dot(color: NSColor) -> NSImage {
-        let img = NSImage(size: NSSize(width: 10, height: 16), flipped: false) { rect in
-            color.setFill()
-            NSBezierPath(ovalIn: NSRect(x: 1, y: 4, width: 8, height: 8)).fill()
-            return true
-        }
-        img.isTemplate = false
-        return img
+    /// Running label: a small green (amber while syncing) dot + elapsed `h:mm` (or `h:mm:ss`). The task name only
+    /// appears in the panel, so the item stays a compact bubble.
+    static func label(elapsed: Int64, showSeconds: Bool, pending: Bool) -> NSAttributedString {
+        let secs = Int(elapsed / 1000)
+        let time = showSeconds ? String(format: "%d:%02d:%02d", secs / 3600, secs / 60 % 60, secs % 60) : Fmt.hoursMinutes(elapsed)
+        let s = NSMutableAttributedString()
+        s.append(NSAttributedString(string: " ●", attributes: [
+            .font: NSFont.systemFont(ofSize: 8),
+            .foregroundColor: pending ? NSColor(rgb: 0xF59E0B) : NSColor(rgb: 0x22C55E),
+            .baselineOffset: 2,
+        ]))
+        s.append(NSAttributedString(string: " " + time, attributes: [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular),
+        ]))
+        return s
     }
 
-    /// Template glyph: rounded square outline with a "T" and the dot.
-    static let idleGlyph: NSImage = {
-        let img = NSImage(size: NSSize(width: 18, height: 16), flipped: false) { _ in
-            NSColor.black.setStroke()
+    /// Template "T" glyph: a rounded square with the T cut out (reads at 16–18 pt, follows the menu bar tint).
+    static let glyph: NSImage = {
+        let img = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { _ in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
             NSColor.black.setFill()
-            let box = NSBezierPath(roundedRect: NSRect(x: 1.5, y: 1.5, width: 14, height: 13), xRadius: 3.5, yRadius: 3.5)
-            box.lineWidth = 1.4
-            box.stroke()
-            let t = NSBezierPath()
-            t.lineWidth = 1.8
-            t.move(to: NSPoint(x: 5, y: 11)); t.line(to: NSPoint(x: 11, y: 11))
-            t.move(to: NSPoint(x: 8, y: 11)); t.line(to: NSPoint(x: 8, y: 4.5))
-            t.stroke()
-            NSBezierPath(ovalIn: NSRect(x: 11, y: 3.5, width: 3, height: 3)).fill()
+            NSBezierPath(roundedRect: NSRect(x: 1, y: 1, width: 14, height: 14), xRadius: 4, yRadius: 4).fill()
+            ctx.setBlendMode(.clear)
+            NSBezierPath(roundedRect: NSRect(x: 4, y: 9.6, width: 8, height: 2.2), xRadius: 0.6, yRadius: 0.6).fill()
+            NSBezierPath(roundedRect: NSRect(x: 6.9, y: 3.6, width: 2.2, height: 7), xRadius: 0.6, yRadius: 0.6).fill()
             return true
         }
         img.isTemplate = true
+        img.accessibilityDescription = "Trackify"
         return img
     }()
+
+    #if DEBUG
+    /// Test hook `-TrackifyRenderMenuBar <dir>`: the status item (running / running with seconds / idle) on a
+    /// light and a dark menu-bar strip, drawn off-screen by AppKit.
+    static func renderPreviews(to dir: String) {
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let cases: [(String, NSAttributedString?)] = [
+            ("running", label(elapsed: 30 * 60_000, showSeconds: false, pending: false)),
+            ("running-long", label(elapsed: (2 * 60 + 47) * 60_000, showSeconds: false, pending: false)),
+            ("running-seconds", label(elapsed: 30 * 60_000 + 12_000, showSeconds: true, pending: false)),
+            ("syncing", label(elapsed: 5 * 60_000, showSeconds: false, pending: true)),
+            ("idle", nil),
+        ]
+        for dark in [false, true] {
+            for (name, title) in cases {
+                let bar = NSView(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
+                bar.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                bar.wantsLayer = true
+                bar.layer?.backgroundColor = (dark ? NSColor(white: 0.16, alpha: 1) : NSColor(white: 0.93, alpha: 1)).cgColor
+                let b = NSButton(frame: .zero)
+                b.isBordered = false
+                b.image = glyph
+                b.imagePosition = .imageLeading
+                b.attributedTitle = title ?? NSAttributedString(string: "")
+                if title == nil { b.imagePosition = .imageOnly }
+                b.contentTintColor = dark ? .white : .black
+                b.sizeToFit()
+                b.frame.origin = NSPoint(x: 220 - b.frame.width - 16, y: (24 - b.frame.height) / 2)
+                bar.addSubview(b)
+                guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 440, pixelsHigh: 48, bitsPerSample: 8,
+                                                 samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                                                 bytesPerRow: 0, bitsPerPixel: 0) else { continue }
+                rep.size = bar.bounds.size
+                bar.cacheDisplay(in: bar.bounds, to: rep)
+                try? rep.representation(using: .png, properties: [:])?
+                    .write(to: URL(fileURLWithPath: dir).appendingPathComponent("mac-menubar-\(name)-\(dark ? "dark" : "light").png"))
+            }
+        }
+    }
+    #endif
 
     // MARK: Panel
 

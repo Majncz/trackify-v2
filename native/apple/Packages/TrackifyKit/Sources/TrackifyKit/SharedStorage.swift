@@ -5,11 +5,47 @@ import Security
 
 /// App Group shared between the apps, widgets and intents.
 public enum AppGroup {
-    public static let id = "group.co.bitterlemon.trackify"
+    /// Local dev runs pass `-TrackifyAppGroup <id>` (or env `TRACKIFY_APP_GROUP`) so a debug build never touches
+    /// the shared prefs / session of an installed Trackify on the same Mac.
+    public static let id: String = {
+        let override = UserDefaults.standard.string(forKey: "TrackifyAppGroup")
+            ?? ProcessInfo.processInfo.environment["TRACKIFY_APP_GROUP"]
+        if let override, !override.isEmpty { return override }
+        return "group.co.bitterlemon.trackify"
+    }()
+
+    /// Whether the shared group container may be used. On macOS a build that isn't signed with a real team
+    /// (ad-hoc / local builds) has no app-group entitlement; touching `group.…` storage there makes macOS 15
+    /// ask "Trackify would like to access data from other apps", so such builds keep everything app-local.
+    public static let isAvailable: Bool = {
+        #if os(macOS)
+        return signingTeamIdentifier() != nil
+        #else
+        return true
+        #endif
+    }()
 
     public static let defaults: UserDefaults = {
-        UserDefaults(suiteName: id) ?? .standard
+        isAvailable ? (UserDefaults(suiteName: id) ?? .standard) : .standard
     }()
+
+    /// Keychain access group, when the group is usable.
+    public static var keychainGroup: String? { isAvailable ? id : nil }
+
+    #if os(macOS)
+    /// Team identifier of the running code's signature (nil for ad-hoc / unsigned builds).
+    static func signingTeamIdentifier() -> String? {
+        var code: SecCode?
+        guard SecCodeCopySelf([], &code) == errSecSuccess, let code else { return nil }
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode else { return nil }
+        var info: CFDictionary?
+        guard SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
+              let dict = info as? [String: Any],
+              let team = dict[kSecCodeInfoTeamIdentifier as String] as? String, !team.isEmpty else { return nil }
+        return team
+    }
+    #endif
 
     /// Darwin notification posted by extensions after they change the shared timer state.
     public static let timerChangedNotification = "co.bitterlemon.trackify.timer-changed"
@@ -38,7 +74,7 @@ public final class CredentialStore: @unchecked Sendable {
     let defaults: UserDefaults
     let accessGroup: String?
 
-    public init(defaults: UserDefaults = AppGroup.defaults, accessGroup: String? = AppGroup.id) {
+    public init(defaults: UserDefaults = AppGroup.defaults, accessGroup: String? = AppGroup.keychainGroup) {
         self.defaults = defaults
         self.accessGroup = accessGroup
     }
