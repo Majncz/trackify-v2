@@ -161,12 +161,18 @@ class AppGraph(private val context: Context) {
     fun syncSurfaces() {
         val s = session.session.value
         val ui = engine.ui.value
-        val snap = WidgetSnapshot.build(s != null, session.server.value, s?.userId, ui.running, ui.pending, repo.tasks.value)
+        val snap = WidgetSnapshot.build(s != null, session.server.value, s?.userId, ui.running, ui.pending, repo.tasks.value, session.widgetTheme.value)
         WidgetSnapshot.write(context, snap)
         notifier.update(snap)
         WidgetUpdater.updateAll(context)
         WidgetUpdater.requestTileUpdate(context)
         Shortcuts.update(context, snap)
+    }
+
+    /** syncSurfaces + wait for the widget redraw (background taps: the process may freeze right after). */
+    suspend fun syncSurfacesNow() {
+        syncSurfaces()
+        WidgetUpdater.updateAllNow(context)
     }
 
     suspend fun signIn(email: String, password: String): Result<Unit> = runCatching {

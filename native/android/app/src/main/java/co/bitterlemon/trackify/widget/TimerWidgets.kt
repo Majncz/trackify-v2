@@ -38,6 +38,7 @@ import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
+import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -55,16 +56,51 @@ import co.bitterlemon.trackify.MainActivity
 import co.bitterlemon.trackify.R
 import co.bitterlemon.trackify.util.Format
 
-// ---- palette (NATIVE_SPEC §4) ----
-private val Bg = ColorProvider(day = Color(0xFFFFFFFF), night = Color(0xFF111111))
-private val Fg = ColorProvider(day = Color(0xFF0A0A0A), night = Color(0xFFFAFAFA))
-private val Muted = ColorProvider(day = Color(0xFF737373), night = Color(0xFFA3A3A3))
-private val MutedBg = ColorProvider(day = Color(0xFFF5F5F5), night = Color(0xFF262626))
-private val Primary = ColorProvider(day = Color(0xFF171717), night = Color(0xFFFAFAFA))
-private val OnPrimary = ColorProvider(day = Color(0xFFFAFAFA), night = Color(0xFF171717))
+// ---- palette (NATIVE_SPEC §4), chosen per the widget theme setting ----
+private class Pal(
+    val bg: androidx.glance.unit.ColorProvider,
+    val fg: androidx.glance.unit.ColorProvider,
+    val muted: androidx.glance.unit.ColorProvider,
+    val mutedBg: androidx.glance.unit.ColorProvider,
+    val primary: androidx.glance.unit.ColorProvider,
+    val onPrimary: androidx.glance.unit.ColorProvider,
+    val liveBg: androidx.glance.unit.ColorProvider,
+)
+
+private fun pal(light: Long, dark: Long, theme: String): androidx.glance.unit.ColorProvider = when (theme) {
+    "light" -> FixedColor(Color(light))
+    "dark" -> FixedColor(Color(dark))
+    else -> ColorProvider(day = Color(light), night = Color(dark))
+}
+
+private fun palette(theme: String) = Pal(
+    bg = pal(0xFFFFFFFF, 0xFF111111, theme),
+    fg = pal(0xFF0A0A0A, 0xFFFAFAFA, theme),
+    muted = pal(0xFF737373, 0xFFA3A3A3, theme),
+    mutedBg = pal(0xFFF5F5F5, 0xFF262626, theme),
+    primary = pal(0xFF171717, 0xFFFAFAFA, theme),
+    onPrimary = pal(0xFFFAFAFA, 0xFF171717, theme),
+    liveBg = pal(0x1A10B981, 0x2610B981, theme),
+)
+
+private val LocalPal = androidx.compose.runtime.staticCompositionLocalOf { palette("system") }
+private val Bg @Composable get() = LocalPal.current.bg
+private val Fg @Composable get() = LocalPal.current.fg
+private val Muted @Composable get() = LocalPal.current.muted
+private val MutedBg @Composable get() = LocalPal.current.mutedBg
+private val Primary @Composable get() = LocalPal.current.primary
+private val OnPrimary @Composable get() = LocalPal.current.onPrimary
+private val LiveBg @Composable get() = LocalPal.current.liveBg
 private val Destructive = FixedColor(Color(0xFFEF4444))
 private val White = FixedColor(Color(0xFFFAFAFA))
-private val LiveBg = ColorProvider(day = Color(0x1A10B981), night = Color(0x2610B981))
+
+@Composable
+private fun Themed(snap: WidgetSnapshotData, content: @Composable () -> Unit) {
+    val chrono = when (snap.theme) { "light" -> 0xFF0A0A0A.toInt(); "dark" -> 0xFFFAFAFA.toInt(); else -> null }
+    androidx.compose.runtime.CompositionLocalProvider(LocalPal provides palette(snap.theme), LocalChronoColor provides chrono) {
+        GlanceTheme { content() }
+    }
+}
 
 private val TaskKey = ActionParameters.Key<String>("taskId")
 
@@ -80,6 +116,7 @@ class StartTaskAction : ActionCallback {
         if (g.session.session.value != null) {
             g.engine.start(id)
             kotlinx.coroutines.withTimeoutOrNull(8_000) { g.engine.drain(8_000) }
+            g.syncSurfacesNow()
         }
     }
 }
@@ -90,9 +127,13 @@ class StopAction : ActionCallback {
         if (g.session.session.value != null) {
             g.engine.stop()
             kotlinx.coroutines.withTimeoutOrNull(8_000) { g.engine.drain(8_000) }
+            g.syncSurfacesNow()
         }
     }
 }
+
+/** Chronometer text colour for a forced widget theme (null = the layout's day/night colour). */
+private val LocalChronoColor = androidx.compose.runtime.staticCompositionLocalOf<Int?> { null }
 
 @Composable
 private fun Chrono(startTime: Long, sizeLayout: Int, height: Int = 36) {
@@ -100,6 +141,7 @@ private fun Chrono(startTime: Long, sizeLayout: Int, height: Int = 36) {
     val rv = RemoteViews(ctx.packageName, sizeLayout)
     val base = SystemClock.elapsedRealtime() - (System.currentTimeMillis() - startTime)
     rv.setChronometer(R.id.chrono, base, null, true)
+    LocalChronoColor.current?.let { rv.setTextColor(R.id.chrono, it) }
     AndroidRemoteViews(rv, modifier = GlanceModifier.height(height.dp))
 }
 
@@ -142,7 +184,8 @@ class SmallTimerWidget : GlanceAppWidget() {
         val flow = WidgetSnapshot.flow(context)
         provideContent {
             val snap by flow.collectAsState()
-            GlanceTheme { SmallContent(context, snap ?: WidgetSnapshot.read(context)) }
+            val data = snap ?: WidgetSnapshot.read(context)
+            Themed(data) { SmallContent(context, data) }
         }
     }
 }
@@ -151,22 +194,25 @@ class SmallTimerWidget : GlanceAppWidget() {
 private fun SmallContent(context: Context, snap: WidgetSnapshotData) {
     val r = snap.running
     val now = System.currentTimeMillis()
-    Column(
-        GlanceModifier.fillMaxSize().cornerRadius(20.dp).background(Bg).padding(14.dp).clickable(openApp(context)),
-    ) {
-        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    val size = LocalSize.current
+    Column(GlanceModifier.fillMaxSize().cornerRadius(20.dp).background(Bg).padding(12.dp)) {
+        Row(GlanceModifier.fillMaxWidth().clickable(openApp(context)), verticalAlignment = Alignment.CenterVertically) {
             Wordmark()
             Spacer(GlanceModifier.defaultWeight())
-            if (r != null) Dot(Color(0xFF22C55E), 7)
+            if (snap.signedIn && r == null) {
+                val today = snap.todayTotalLive(now)
+                if (today > 0) Text(Format.durationWords(today), style = TextStyle(color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Medium))
+            } else if (r != null) {
+                Dot(Color(0xFF22C55E), 7)
+            }
         }
-        Spacer(GlanceModifier.defaultWeight())
+        Spacer(GlanceModifier.height(8.dp))
         if (!snap.signedIn) {
-            Text("Sign in to start tracking", style = TextStyle(color = Muted, fontSize = 13.sp))
-            Spacer(GlanceModifier.defaultWeight())
+            Text("Sign in to start tracking", style = TextStyle(color = Muted, fontSize = 13.sp), modifier = GlanceModifier.clickable(openApp(context)))
             return@Column
         }
         if (r != null) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.clickable(openApp(context))) {
                 Dot(hex(r.accentHex))
                 Spacer(GlanceModifier.width(6.dp))
                 Text(r.taskName, style = TextStyle(color = Fg, fontSize = 14.sp, fontWeight = FontWeight.Medium), maxLines = 1)
@@ -174,21 +220,54 @@ private fun SmallContent(context: Context, snap: WidgetSnapshotData) {
             Chrono(r.startTime, R.layout.widget_chrono_small)
             Spacer(GlanceModifier.height(6.dp))
             Pill("Stop", Destructive, White, R.drawable.ic_stop, GlanceModifier.fillMaxWidth().clickable(actionRunCallback<StopAction>()))
+            // Room left: one-tap switch to the next tasks.
+            if (size.height >= 200.dp) {
+                Spacer(GlanceModifier.height(8.dp))
+                TaskGrid(snap.tasks.filter { it.id != r.taskId }.take(2), columns = 2, modifier = GlanceModifier.fillMaxWidth().defaultWeight())
+            }
         } else {
-            val last = snap.tasks.firstOrNull { it.id == snap.lastTaskId } ?: snap.tasks.firstOrNull()
-            val today = snap.todayTotalLive(now)
-            Text("Not tracking", style = TextStyle(color = Muted, fontSize = 12.sp))
-            Text(
-                if (today > 0) "Today ${Format.durationWords(today)}" else "Nothing yet today",
-                style = TextStyle(color = Fg, fontSize = if (today > 0) 18.sp else 15.sp, fontWeight = FontWeight.Bold),
-                maxLines = 1,
-            )
-            Spacer(GlanceModifier.height(8.dp))
-            if (last != null) {
-                Pill(
-                    last.name, Primary, OnPrimary, R.drawable.ic_play,
-                    GlanceModifier.fillMaxWidth().clickable(actionRunCallback<StartTaskAction>(actionParametersOf(TaskKey to last.id))),
-                )
+            // Idle: your top tasks, one tap to start.
+            val rows = if (size.height < 150.dp) 1 else if (size.height < 260.dp) 2 else 3
+            val cols = if (size.width < 200.dp) 2 else 3
+            val tasks = snap.tasks.take(rows * cols)
+            if (tasks.isEmpty()) {
+                Text("Create a task in the app to start tracking", style = TextStyle(color = Muted, fontSize = 12.sp), modifier = GlanceModifier.clickable(openApp(context)))
+            } else {
+                TaskGrid(tasks, cols, GlanceModifier.fillMaxWidth().defaultWeight())
+            }
+        }
+    }
+}
+
+/** Grid of start buttons (accent dot + name, up to two lines). */
+@Composable
+private fun TaskGrid(tasks: List<SnapshotTask>, columns: Int, modifier: GlanceModifier) {
+    Column(modifier) {
+        tasks.chunked(columns).forEachIndexed { i, row ->
+            if (i > 0) Spacer(GlanceModifier.height(6.dp))
+            Row(GlanceModifier.fillMaxWidth().defaultWeight()) {
+                row.forEachIndexed { j, t ->
+                    if (j > 0) Spacer(GlanceModifier.width(6.dp))
+                    Column(
+                        GlanceModifier.defaultWeight().fillMaxHeight().cornerRadius(12.dp).background(MutedBg)
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                            .clickable(actionRunCallback<StartTaskAction>(actionParametersOf(TaskKey to t.id))),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Dot(hex(t.accentHex), 7)
+                            Spacer(GlanceModifier.defaultWeight())
+                            Image(ImageProvider(R.drawable.ic_play), contentDescription = "Start ${t.name}", modifier = GlanceModifier.size(11.dp), colorFilter = androidx.glance.ColorFilter.tint(Muted))
+                        }
+                        Spacer(GlanceModifier.height(3.dp))
+                        Text(t.name, style = TextStyle(color = Fg, fontSize = 12.sp, fontWeight = FontWeight.Medium), maxLines = 2)
+                    }
+                }
+                // Keep cells equal width on a short last row.
+                repeat(columns - row.size) {
+                    Spacer(GlanceModifier.width(6.dp))
+                    Spacer(GlanceModifier.defaultWeight())
+                }
             }
         }
     }
@@ -207,7 +286,8 @@ class LargeTimerWidget : GlanceAppWidget() {
         val flow = WidgetSnapshot.flow(context)
         provideContent {
             val snap by flow.collectAsState()
-            GlanceTheme { LargeContent(context, snap ?: WidgetSnapshot.read(context)) }
+            val data = snap ?: WidgetSnapshot.read(context)
+            Themed(data) { LargeContent(context, data) }
         }
     }
 }
@@ -263,14 +343,15 @@ private fun LargeContent(context: Context, snap: WidgetSnapshotData) {
             }
         }
         Spacer(GlanceModifier.height(8.dp))
-        val tasks = snap.tasks.filter { it.id != r?.taskId }.take(if (size.height < 250.dp) 3 else 8)
+        val tasks = snap.tasks.filter { it.id != r?.taskId }
         if (tasks.isEmpty()) {
             Text("No tasks yet", style = TextStyle(color = Muted, fontSize = 13.sp))
         }
         LazyColumn(GlanceModifier.fillMaxWidth().defaultWeight()) {
             items(tasks, itemId = { it.id.hashCode().toLong() }) { t ->
                 Row(
-                    GlanceModifier.fillMaxWidth().padding(vertical = 6.dp)
+                    // End padding keeps the ▶ clear of the list's scroll bar.
+                    GlanceModifier.fillMaxWidth().padding(start = 0.dp, top = 6.dp, end = 12.dp, bottom = 6.dp)
                         .clickable(actionRunCallback<StartTaskAction>(actionParametersOf(TaskKey to t.id))),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

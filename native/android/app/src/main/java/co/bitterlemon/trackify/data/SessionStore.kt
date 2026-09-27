@@ -25,6 +25,7 @@ class SessionStore(private val context: Context) {
         private val K_EMAIL = stringPreferencesKey("email")
         private val K_LAST_EMAIL = stringPreferencesKey("last_email")
         private val K_THEME = stringPreferencesKey("theme")
+        private val K_WIDGET_THEME = stringPreferencesKey("widget_theme")
 
         fun normalizeServer(raw: String): String {
             var s = raw.trim().trimEnd('/')
@@ -47,11 +48,16 @@ class SessionStore(private val context: Context) {
     private val _theme = MutableStateFlow("system")
     val theme: StateFlow<String> = _theme.asStateFlow()
 
+    /** Home-screen widgets: "system" | "light" | "dark" */
+    private val _widgetTheme = MutableStateFlow("system")
+    val widgetTheme: StateFlow<String> = _widgetTheme.asStateFlow()
+
     fun loadBlocking() = runBlocking {
         val p: Preferences = context.prefs.data.first()
         _server.value = p[K_SERVER] ?: DEFAULT_SERVER
         _lastEmail.value = p[K_LAST_EMAIL] ?: ""
         _theme.value = p[K_THEME] ?: "system"
+        _widgetTheme.value = p[K_WIDGET_THEME] ?: "system"
         val token = p[K_TOKEN]?.let { SecureBox.decrypt(it) }
         val user = p[K_USER]
         val email = p[K_EMAIL]
@@ -95,5 +101,10 @@ class SessionStore(private val context: Context) {
     suspend fun setTheme(value: String) {
         _theme.value = value
         context.prefs.edit { it[K_THEME] = value }
+    }
+
+    suspend fun setWidgetTheme(value: String) {
+        _widgetTheme.value = value
+        context.prefs.edit { it[K_WIDGET_THEME] = value }
     }
 }

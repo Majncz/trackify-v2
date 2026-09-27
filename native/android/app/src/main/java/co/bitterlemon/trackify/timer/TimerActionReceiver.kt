@@ -37,6 +37,7 @@ class TimerActionReceiver : BroadcastReceiver() {
         graph.scope.launch {
             try {
                 kotlinx.coroutines.withTimeoutOrNull(8_000) { graph.engine.drain(8_000) }
+                graph.syncSurfacesNow()
             } finally {
                 pending.finish()
             }

@@ -19,6 +19,7 @@ class TimerSyncWorker(context: Context, params: WorkerParameters) : CoroutineWor
         if (graph.session.session.value == null) return Result.success()
         val empty = graph.engine.drain(45_000)
         if (empty) graph.repo.refreshCore()
+        graph.syncSurfacesNow()
         return if (empty) Result.success() else Result.retry()
     }
 

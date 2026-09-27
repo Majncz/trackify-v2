@@ -88,6 +88,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     val profile by graph.repo.profile.collectAsState()
     val server by graph.session.server.collectAsState()
     val theme by graph.session.theme.collectAsState()
+    val widgetTheme by graph.session.widgetTheme.collectAsState()
     var hidden by remember { mutableStateOf<List<Task>?>(null) }
     var hiddenTick by remember { mutableStateOf(0) }
     var restoring by remember { mutableStateOf<String?>(null) }
@@ -173,7 +174,15 @@ fun SettingsScreen(onBack: () -> Unit) {
         item {
             TCard(Modifier.widthIn(max = 896.dp).fillMaxWidth()) {
                 CardTitle(Icons.Outlined.DarkMode, "Appearance", "Follow the system, or pick a theme for Trackify.")
+                Text("App", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = T.c.mutedForeground)
                 Segmented(listOf("system" to "System", "light" to "Light", "dark" to "Dark"), theme, { v -> scope.launch { graph.session.setTheme(v) } }, Modifier.fillMaxWidth())
+                Spacer(Modifier.height(12.dp))
+                Text("Home-screen widgets", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = T.c.mutedForeground)
+                Segmented(
+                    listOf("system" to "System", "light" to "Light", "dark" to "Dark"), widgetTheme,
+                    { v -> scope.launch { graph.session.setWidgetTheme(v); graph.syncSurfacesNow() } },
+                    Modifier.fillMaxWidth(),
+                )
             }
         }
         item {
@@ -193,7 +202,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             TCard(Modifier.widthIn(max = 896.dp).fillMaxWidth()) {
                 CardTitle(Icons.Outlined.Widgets, "Widgets & Quick Settings", "Start and stop without opening the app.")
                 androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TButton("Add timer widget", { pinWidget(context, co.bitterlemon.trackify.widget.SmallTimerWidgetReceiver::class.java) }, variant = BtnVariant.Outline, size = BtnSize.Sm)
+                    TButton("Add quick-start widget", { pinWidget(context, co.bitterlemon.trackify.widget.SmallTimerWidgetReceiver::class.java) }, variant = BtnVariant.Outline, size = BtnSize.Sm)
                     TButton("Add tasks widget", { pinWidget(context, co.bitterlemon.trackify.widget.LargeTimerWidgetReceiver::class.java) }, variant = BtnVariant.Outline, size = BtnSize.Sm)
                     if (android.os.Build.VERSION.SDK_INT >= 33) {
                         TButton("Add Quick Settings tile", { requestTile(context) }, variant = BtnVariant.Outline, size = BtnSize.Sm)

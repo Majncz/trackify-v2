@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Trackify</string>
-    <string name="widget_small_label">Trackify timer</string>
-    <string name="widget_small_desc">Running timer with Start / Stop</string>
+    <string name="widget_small_label">Trackify quick start</string>
+    <string name="widget_small_desc">Your top tasks one tap away, or the running timer with Stop</string>
     <string name="widget_large_label">Trackify tasks</string>
     <string name="widget_large_desc">Running timer and your tasks, one tap to start</string>
     <string name="tile_label">Trackify</string>

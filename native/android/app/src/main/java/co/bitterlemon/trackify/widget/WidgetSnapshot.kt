@@ -29,6 +29,8 @@ data class WidgetSnapshotData(
     val lastTaskId: String? = null,
     /** Local calendar day the today numbers belong to. */
     val day: String = "",
+    /** Widget appearance: "system" | "light" | "dark". */
+    val theme: String = "system",
 ) {
     fun todayTotalLive(now: Long): Long {
         val r = running ?: return todayTotalMs
@@ -47,7 +49,7 @@ object WidgetSnapshot {
         return _flow
     }
 
-    fun build(signedIn: Boolean, server: String, userId: String?, running: Running?, pending: Boolean, tasks: List<Task>?): WidgetSnapshotData {
+    fun build(signedIn: Boolean, server: String, userId: String?, running: Running?, pending: Boolean, tasks: List<Task>?, theme: String = "system"): WidgetSnapshotData {
         val list = tasks ?: emptyList()
         val today = Time.today()
         val dayStart = Time.startOfDay(today)
@@ -64,7 +66,8 @@ object WidgetSnapshot {
                 SnapshotRunning(it.taskId, runTask?.name ?: "Task", runTask?.accent ?: "#22c55e", it.startTime, pending)
             },
             todayTotalMs = list.sumOf { todayOf(it) },
-            tasks = sorted.take(8).map { t ->
+            theme = theme,
+            tasks = sorted.take(12).map { t ->
                 SnapshotTask(t.id, t.name, t.accent, todayOf(t), t.events.sumOf { (it.toMs - it.fromMs).coerceAtLeast(0) })
             },
             lastTaskId = TaskSort.lastUsed(list)?.id ?: sorted.firstOrNull()?.id,

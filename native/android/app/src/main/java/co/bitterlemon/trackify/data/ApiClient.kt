@@ -135,16 +135,19 @@ class ApiClient(
     // ---------------- Auth ----------------
     suspend fun login(email: String, password: String, deviceName: String) =
         call("POST", "/api/auth/token", TokenResponse.serializer(), obj {
-            put("email", email); put("password", password); put("deviceName", deviceName)
+            put("email", normEmail(email)); put("password", password); put("deviceName", deviceName)
         }, auth = false)
 
     suspend fun logout() = raw("DELETE", "/api/auth/token")
 
     suspend fun register(email: String, password: String) =
-        raw("POST", "/api/auth/register", obj { put("email", email); put("password", password) }, auth = false)
+        raw("POST", "/api/auth/register", obj { put("email", normEmail(email)); put("password", password) }, auth = false)
 
     suspend fun forgotPassword(email: String) =
-        raw("POST", "/api/auth/forgot-password", obj { put("email", email) }, auth = false)
+        raw("POST", "/api/auth/forgot-password", obj { put("email", normEmail(email)) }, auth = false)
+
+    /** Emails are case-insensitive; stored lower-case. */
+    private fun normEmail(email: String) = email.trim().lowercase()
 
     // ---------------- Tasks / events ----------------
     suspend fun tasks(hidden: Boolean = false) =

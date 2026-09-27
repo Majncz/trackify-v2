@@ -23,7 +23,7 @@ class TimerRefreshWorker(context: Context, params: WorkerParameters) : Coroutine
         }
         graph.engine.refreshTruth()
         graph.repo.refreshTasks()
-        graph.syncSurfaces()
+        graph.syncSurfacesNow()
         if (graph.engine.persisted.value.running == null) cancel(applicationContext)
         return Result.success()
     }
