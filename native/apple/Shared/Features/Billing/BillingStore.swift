@@ -80,7 +80,7 @@ final class BillingStore {
     var selected: Set<String> = []
 
     private var sessionsToken = 0
-    private var lastTick: Int?
+    private var loadedTick: Int?
     private var lastSessionsKey: BillingSessionsKey?
     private var requestedKey: BillingSessionsKey?
 
@@ -183,11 +183,11 @@ final class BillingStore {
 
     // MARK: Loading
 
-    /// Appearing or a data tick (socket / refresh) reloads everything.
+    /// Appearing or a data tick (socket / refresh) reloads everything, once per tick for all Billing screens.
     func load(tick: Int, api: APIClient) async {
-        guard lastTick != tick || lastSessionsKey == nil else { return }
+        guard loadedTick != tick else { return }
+        loadedTick = tick
         await loadAll(api, skeleton: lastSessionsKey == nil)
-        if !Task.isCancelled { lastTick = tick }
     }
 
     /// A filter change reloads only the ledger.

@@ -28,6 +28,7 @@ struct BillingRatesView: View {
 
     var body: some View {
         platformBody
+            .task(id: model.dataTick) { await store.load(tick: model.dataTick, api: model.api) }
             .overlay {
                 if !ready {
                     if let err = store.billingTasksError {

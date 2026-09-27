@@ -17,6 +17,7 @@ struct BillingPaymentsView: View {
     var body: some View {
         platformBody
             .overlay { stateView }
+            .task(id: model.dataTick) { await store.load(tick: model.dataTick, api: model.api) }
             .confirmationDialog("Reopen payment?",
                                 isPresented: Binding(get: { pendingReopen != nil }, set: { if !$0 { pendingReopen = nil } }),
                                 titleVisibility: .visible, presenting: pendingReopen) { p in

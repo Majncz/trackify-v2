@@ -29,6 +29,7 @@ struct BillingSessionsView: View {
     var body: some View {
         platformBody
             .task(id: store.sessionsKey) { await store.filtersChanged(model.api) }
+            .task(id: model.dataTick) { await store.load(tick: model.dataTick, api: model.api) }
             .sheet(item: $markPaid) { batch in
                 MarkPaidSheet(sessions: batch.rows) {
                     #if os(iOS)
