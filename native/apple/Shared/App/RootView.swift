@@ -5,6 +5,7 @@ import TrackifyKit
 struct RootView<SignedIn: View>: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dynamicTypeSize) private var typeSize
+    @AppStorage(SharedKeys.appAppearance, store: AppGroup.defaults) private var appearance = AppearanceChoice.system.rawValue
     @ViewBuilder var signedIn: () -> SignedIn
 
     var body: some View {
@@ -26,6 +27,7 @@ struct RootView<SignedIn: View>: View {
         .animation(.easeOut(duration: 0.2), value: model.phase)
         .tint(Theme.foreground)
         .id(typeSize)   // fonts are sized from Dynamic Type at build time — rebuild when it changes
+        .preferredColorScheme(AppearanceChoice(rawValue: appearance)?.colorScheme)
     }
 }
 

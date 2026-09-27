@@ -64,6 +64,7 @@ struct TimerWidget: Widget {
         StaticConfiguration(kind: kind, provider: TimerProvider()) { entry in
             TimerWidgetView(entry: entry)
                 .containerBackground(for: .widget) { Theme.card }
+                .forcedColorScheme(AppearanceChoice.widgets.colorScheme)
         }
         .configurationDisplayName("Trackify")
         .description("See what's running and start or stop tasks with one tap.")

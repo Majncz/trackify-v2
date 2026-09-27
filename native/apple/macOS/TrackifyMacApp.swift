@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        AppearanceChoice.applyToMacApp()
         if model.isTestHookEnabled, let a = UserDefaults.standard.string(forKey: "TrackifyAppearance") {
             NSApp.appearance = NSAppearance(named: a == "dark" ? .darkAqua : .aqua)
         }

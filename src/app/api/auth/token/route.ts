@@ -7,7 +7,7 @@ import { hashApiToken, verifyPassword } from "@/lib/password";
 import { clientIp, rateClear, rateHit, rateLimited, tooManyResponseBody, LOGIN_FAILURES, LOGIN_WINDOW_MS } from "@/lib/rate-limit";
 
 const tokenRequestSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  email: z.string().trim().toLowerCase().pipe(z.string().email("Invalid email address")),
   password: z.string().min(1, "Password is required"),
   /** Shown in token lists, e.g. "Trackify for Mac". */
   deviceName: z.string().trim().min(1).max(60).optional(),

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
 const registerSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  email: z.string().trim().toLowerCase().pipe(z.string().email("Invalid email address")),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 

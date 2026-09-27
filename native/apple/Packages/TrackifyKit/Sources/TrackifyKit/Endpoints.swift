@@ -5,7 +5,7 @@ public extension APIClient {
     // MARK: Auth
     func login(email: String, password: String, deviceName: String) async throws -> AuthTokenResponse {
         let data = try await send(makeRequest("POST", "/api/auth/token",
-                                              body: try JSONSerialization.data(withJSONObject: ["email": email, "password": password, "deviceName": deviceName]),
+                                              body: try JSONSerialization.data(withJSONObject: ["email": Self.normalizedEmail(email), "password": password, "deviceName": deviceName]),
                                               auth: false))
         return try decode(AuthTokenResponse.self, data)
     }
@@ -14,12 +14,17 @@ public extension APIClient {
 
     func register(email: String, password: String) async throws {
         try await send(makeRequest("POST", "/api/auth/register",
-                                   body: try JSONSerialization.data(withJSONObject: ["email": email, "password": password]), auth: false))
+                                   body: try JSONSerialization.data(withJSONObject: ["email": Self.normalizedEmail(email), "password": password]), auth: false))
     }
 
     func forgotPassword(email: String) async throws {
         try await send(makeRequest("POST", "/api/auth/forgot-password",
-                                   body: try JSONSerialization.data(withJSONObject: ["email": email]), auth: false))
+                                   body: try JSONSerialization.data(withJSONObject: ["email": Self.normalizedEmail(email)]), auth: false))
+    }
+
+    /// Emails are case-insensitive; stored lower-case.
+    static func normalizedEmail(_ email: String) -> String {
+        email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     // MARK: Tasks

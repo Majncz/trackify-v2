@@ -1,4 +1,5 @@
 import SwiftUI
+import WidgetKit
 import TrackifyKit
 #if canImport(ServiceManagement)
 import ServiceManagement
@@ -14,6 +15,7 @@ struct SettingsView: View {
                 PageHeader("Settings", subtitle: "Manage your account")
                 AccountCard()
                 HiddenTasksCard()
+                AppearanceCard()
                 PreferencesCard()
                 SecurityCard()
                 AboutCard()
@@ -147,6 +149,38 @@ private struct HiddenTasksCard: View {
             }
         }
         .card(padding: 20)
+    }
+}
+
+private struct AppearanceCard: View {
+    @AppStorage(SharedKeys.appAppearance, store: AppGroup.defaults) private var app = AppearanceChoice.system.rawValue
+    @AppStorage(SharedKeys.widgetAppearance, store: AppGroup.defaults) private var widgets = AppearanceChoice.system.rawValue
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            CardTitle(icon: "circle.lefthalf.filled", title: "Appearance", subtitle: "Follow the system, or pick light or dark.")
+            row("App", $app)
+            row("Widgets", $widgets)
+        }
+        .card(padding: 20)
+        .onChange(of: app) { _, _ in
+            #if os(macOS)
+            AppearanceChoice.applyToMacApp()
+            #endif
+        }
+        .onChange(of: widgets) { _, _ in WidgetCenter.shared.reloadAllTimelines() }
+    }
+
+    private func row(_ title: String, _ value: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.scaled(13, weight: .medium)).foregroundStyle(Theme.mutedForeground)
+            Picker(title, selection: value) {
+                ForEach(AppearanceChoice.allCases) { Text($0.label).tag($0.rawValue) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .accessibilityIdentifier("appearance-\(title.lowercased())")
+        }
     }
 }
 

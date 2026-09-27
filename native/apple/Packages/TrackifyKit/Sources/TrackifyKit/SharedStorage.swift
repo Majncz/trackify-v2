@@ -221,4 +221,8 @@ public enum SharedKeys {
     public static let menuBarShowSeconds = "trackify.menubar.showSeconds"
     public static let menuBarHideName = "trackify.menubar.hideName"
     public static let reminderHours = "trackify.reminder.hours"   // 0 = off
+    /// "system" | "light" | "dark"
+    public static let appAppearance = "trackify.appearance.app"
+    /// "system" | "light" | "dark" — home/lock-screen and desktop widgets
+    public static let widgetAppearance = "trackify.appearance.widgets"
 }
