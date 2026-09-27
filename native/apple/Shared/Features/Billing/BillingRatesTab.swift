@@ -124,6 +124,9 @@ struct BillingRatesView: View {
             }
             .inspectorColumnWidth(min: 300, ideal: 340, max: 440)
         }
+        .onChange(of: ready ? billing.first?.id : nil, initial: true) { _, id in
+            if selectedId == nil { selectedId = id }
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button { selectedId = selectedId == nil ? (billing.first ?? notBilling.first)?.id : nil } label: {

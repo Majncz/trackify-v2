@@ -139,6 +139,10 @@ struct BillingPaymentsView: View {
             }
             .inspectorColumnWidth(min: 300, ideal: 360, max: 480)
         }
+        // Like Mail: open with the newest payment selected.
+        .onChange(of: payments.first?.id, initial: true) { _, id in
+            if selectedId == nil { selectedId = id }
+        }
     }
     #endif
 }
