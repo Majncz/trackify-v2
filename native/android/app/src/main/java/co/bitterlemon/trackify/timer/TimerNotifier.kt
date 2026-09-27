@@ -1,6 +1,7 @@
 package co.bitterlemon.trackify.timer
 
 import android.Manifest
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -41,6 +42,8 @@ class TimerNotifier(private val context: Context) {
         Build.VERSION.SDK_INT < 33 ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
+    private var serviceRunning = false
+
     fun update(snap: WidgetSnapshotData) {
         val r = snap.running
         if (!snap.signedIn || r == null) {
@@ -50,6 +53,21 @@ class TimerNotifier(private val context: Context) {
         if (key == lastKey) return
         if (!canPost()) return
         lastKey = key
+        val n = build(snap) ?: return
+        try {
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, n)
+        } catch (_: SecurityException) {
+        }
+        if (!serviceRunning) {
+            serviceRunning = true
+            TimerLiveService.start(context)
+        }
+    }
+
+    /** The running-timer notification for this snapshot, or null when idle / signed out. */
+    fun build(snap: WidgetSnapshotData): Notification? {
+        val r = snap.running
+        if (!snap.signedIn || r == null) return null
 
         val open = PendingIntent.getActivity(
             context, 0,
@@ -78,14 +96,16 @@ class TimerNotifier(private val context: Context) {
             .addAction(R.drawable.ic_stop, "Stop", stop)
             .addAction(R.drawable.ic_swap, "Switch…", switch)
             .setRequestPromotedOngoing(true)
-        try {
-            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, b.build())
-        } catch (_: SecurityException) {
-        }
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+        return b.build()
     }
 
     fun cancel() {
         lastKey = null
+        if (serviceRunning) {
+            serviceRunning = false
+            TimerLiveService.stop(context)
+        }
         NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
     }
 
