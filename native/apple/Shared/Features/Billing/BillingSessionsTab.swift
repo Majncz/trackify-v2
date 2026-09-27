@@ -120,6 +120,7 @@ struct BillingSessionsView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .listSectionSpacing(.compact)
         .overlay { if !showsList { stateView } }
         .environment(\.editMode, $editMode)
         .navigationTitle("Sessions")
