@@ -211,6 +211,11 @@ final class ScreenshotWalkTests: TrackifyUITestCase {
             app.buttons["createGroup"].tap()
             if waitFor(app.textFields["groupName"], 5) { shot("14-group-editor") }
             dismissSheet()
+            if app.textFields["groupName"].exists {
+                // Form sheet on iPad: tap the dimmed area above it.
+                app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.04)).tap()
+                waitGone(app.textFields["groupName"])
+            }
         }
         scrollDown(4)
         shot("15-stats-activity", settle: 1.5)

@@ -35,7 +35,11 @@ struct VisualizationsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                #if os(iOS)
+                PageHeader("Race")
+                #else
                 PageHeader("Visualizations", subtitle: "Play the hours back and watch the team race")
+                #endif
                 RaceSection(showTitle: false)
             }
             .padding(16)
