@@ -17,6 +17,33 @@ struct TaskDetailView: View {
     @FocusState private var nameFocused: Bool
 
     var body: some View {
+        Group {
+            #if os(iOS)
+            phoneList
+            #else
+            scrollContent
+            #endif
+        }
+        .background(Theme.background)
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .navigationTitle(model.task(taskId)?.name ?? "Task")
+        .confirmationDialog("Hide this task? You can restore it from Hidden tasks.", isPresented: $confirmHide, titleVisibility: .visible) {
+            Button("Hide", role: .destructive) {
+                Task {
+                    try? await model.hide(taskId)
+                    dismiss()
+                }
+            }
+        }
+        .sheet(item: $editing) { e in EditEntrySheet(event: e).trackifySheet() }
+        .sheet(isPresented: $loggingPast) {
+            if let t = model.task(taskId) { LogPastSheet(task: t).trackifySheet() }
+        }
+    }
+
+    private var scrollContent: some View {
         ScrollView {
             if let task = model.task(taskId) {
                 VStack(alignment: .leading, spacing: 16) {
@@ -36,24 +63,123 @@ struct TaskDetailView: View {
                 .frame(maxWidth: .infinity)
             }
         }
-        .background(Theme.background)
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .navigationTitle(model.task(taskId)?.name ?? "Task")
-        .confirmationDialog("Hide this task? You can restore it from Settings.", isPresented: $confirmHide, titleVisibility: .visible) {
-            Button("Hide", role: .destructive) {
-                Task {
-                    try? await model.hide(taskId)
-                    dismiss()
+    }
+
+    #if os(iOS)
+    // MARK: iPhone / iPad: a plain grouped list
+
+    private var phoneList: some View {
+        List {
+            if let task = model.task(taskId) {
+                let isRunning = model.running?.taskId == task.id
+                Section {
+                    nameField(task)
+                    if let g = task.taskGroup {
+                        HStack { Text("Group"); Spacer(); AccentBadge(text: g.name, hex: g.accentHex) }
+                    }
+                    TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                        let live = isRunning ? max(0, ctx.date.ms - (model.running?.startTime ?? 0)) : 0
+                        LabeledContent("Total time") { Text(Fmt.durationWords(task.totalMs + live)).tabular() }
+                    }
+                    LabeledContent("Sessions") { Text("\(task.events.count)").tabular() }
+                } footer: {
+                    if let renameError { Text(renameError).foregroundStyle(Theme.destructive) }
+                }
+                Section {
+                    Button { model.toggle(task.id) } label: {
+                        Label(isRunning ? "Stop" : "Start", systemImage: isRunning ? "stop.fill" : "play.fill")
+                    }
+                    .foregroundStyle(isRunning ? Theme.destructive : Theme.foreground)
+                    Button { loggingPast = true } label: { Label("Log past time", systemImage: "clock.arrow.circlepath") }
+                        .foregroundStyle(Theme.foreground)
+                }
+                entrySections(task)
+                Section("Billing") { TaskBillingPanel(task: task).padding(.vertical, 4) }
+                Section {
+                    Button(role: .destructive) { confirmHide = true } label: { Label("Hide task", systemImage: "eye.slash") }
+                }
+            } else {
+                Text("Task not found").foregroundStyle(Theme.mutedForeground)
+            }
+        }
+        .listStyle(.insetGrouped)
+    }
+
+    @ViewBuilder private func nameField(_ task: TrackifyTask) -> some View {
+        if editingName {
+            TextField("Task name", text: $nameDraft)
+                .font(.title3.weight(.semibold))
+                .focused($nameFocused)
+                .submitLabel(.done)
+                .onSubmit { commitRename(task) }
+                .onChange(of: nameFocused) { _, f in if !f && editingName { commitRename(task) } }
+                .accessibilityIdentifier("renameField")
+        } else {
+            Button {
+                nameDraft = task.name
+                editingName = true
+                nameFocused = true
+            } label: {
+                HStack {
+                    Text(task.name).font(.title3.weight(.semibold)).foregroundStyle(Theme.foreground).multilineTextAlignment(.leading)
+                    Spacer()
+                    Image(systemName: "pencil").foregroundStyle(Theme.mutedForeground)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Rename")
+            .accessibilityIdentifier("taskName")
+        }
+    }
+
+    @ViewBuilder private func entrySections(_ task: TrackifyTask) -> some View {
+        let calc = DayCalc.current
+        let days = Dictionary(grouping: task.events) { calc.dayKey($0.from) }
+            .map { (key: $0.key, events: $0.value.sorted { $0.from > $1.from }) }
+            .sorted { $0.key > $1.key }
+        let shown = showAllDays ? days : Array(days.prefix(5))
+        if days.isEmpty {
+            Section("Time entries") { Text("No time entries yet.").foregroundStyle(Theme.mutedForeground) }
+        }
+        ForEach(shown, id: \.key) { day in
+            Section {
+                ForEach(day.events) { e in
+                    Button { editing = e } label: {
+                        HStack {
+                            Text("\(calc.format(e.from, "h:mm a")) → \(calc.format(e.to, "h:mm a"))").tabular().foregroundStyle(Theme.foreground)
+                            if e.paymentRecordId != nil {
+                                Text("Paid").font(.caption.weight(.semibold)).foregroundStyle(Theme.mutedForeground)
+                            }
+                            Spacer()
+                            Text(Fmt.durationWords(e.durationMs)).tabular().foregroundStyle(Theme.mutedForeground)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .swipeActions {
+                        Button(role: .destructive) { Task { try? await model.deleteEvent(e.id) } } label: { Label("Delete", systemImage: "trash") }
+                    }
+                    .contextMenu {
+                        Button { editing = e } label: { Label("Edit", systemImage: "pencil") }
+                        Button(role: .destructive) { Task { try? await model.deleteEvent(e.id) } } label: { Label("Delete", systemImage: "trash") }
+                    }
+                }
+            } header: {
+                HStack {
+                    Text(dayLabel(day.key))
+                    Spacer()
+                    Text(Fmt.durationWords(day.events.reduce(0) { $0 + $1.durationMs })).tabular()
                 }
             }
         }
-        .sheet(item: $editing) { e in EditEntrySheet(event: e).trackifySheet() }
-        .sheet(isPresented: $loggingPast) {
-            if let t = model.task(taskId) { LogPastSheet(task: t).trackifySheet() }
+        if days.count > 5 {
+            Section {
+                Button(showAllDays ? "Show fewer days" : "Show \(days.count - 5) more days") { showAllDays.toggle() }
+            }
         }
     }
+    #endif
 
     private func headerCard(_ task: TrackifyTask) -> some View {
         let isRunning = model.running?.taskId == task.id

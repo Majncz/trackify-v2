@@ -5,11 +5,15 @@ import TrackifyKit
 
 struct BillingGuide: View {
     var onOpenTasksTab: () -> Void
+    /// Shown on demand (iPhone info button): no dismiss controls, no card chrome.
+    var onDemand = false
     /// Web: localStorage `billing-guide-dismissed=1`.
     @AppStorage("billing-guide-dismissed") private var dismissed = false
 
     var body: some View {
-        if !dismissed {
+        if onDemand {
+            content
+        } else if !dismissed {
             content
         }
     }
@@ -31,11 +35,13 @@ struct BillingGuide: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
-                Button(action: dismiss) {
-                    Image(systemName: "xmark").font(.scaled(13, weight: .semibold))
+                if !onDemand {
+                    Button(action: dismiss) {
+                        Image(systemName: "xmark").font(.scaled(13, weight: .semibold))
+                    }
+                    .buttonStyle(.t(.ghost, .icon))
+                    .accessibilityLabel("Hide guide")
                 }
-                .buttonStyle(.t(.ghost, .icon))
-                .accessibilityLabel("Hide guide")
             }
             VStack(alignment: .leading, spacing: 10) {
                 step(1, [Self.em("Rates"), Self.muted(" tab: choose which existing tasks have a rate (that's the only setup).")])
@@ -48,14 +54,16 @@ struct BillingGuide: View {
             }
             FlowLayout(spacing: 8, lineSpacing: 8) {
                 Button("Open billable tasks", action: onOpenTasksTab).buttonStyle(.t(.secondary, .sm))
-                Button("Don't show this again", action: dismiss).buttonStyle(.t(.outline, .sm))
+                if !onDemand {
+                    Button("Don't show this again", action: dismiss).buttonStyle(.t(.outline, .sm))
+                }
             }
         }
-        .padding(16)
+        .padding(onDemand ? 0 : 16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.primary.opacity(0.05), in: shape)
-        .background(Theme.card, in: shape)
-        .overlay(shape.strokeBorder(Theme.primary.opacity(0.25), lineWidth: 1))
+        .background(onDemand ? Color.clear : Theme.primary.opacity(0.05), in: shape)
+        .background(onDemand ? Color.clear : Theme.card, in: shape)
+        .overlay(shape.strokeBorder(onDemand ? Color.clear : Theme.primary.opacity(0.25), lineWidth: 1))
     }
 
     private func step(_ n: Int, _ parts: [Text]) -> some View {

@@ -43,7 +43,7 @@ class TrackifyUITestCase: XCTestCase {
     /// Tab bar (iPhone) or sidebar (iPad / regular width).
     func go(_ label: String) {
         let tab = app.tabBars.buttons[label]
-        if tab.exists { tab.tap(); return }
+        if tab.exists { tab.tap(); Thread.sleep(forTimeInterval: 0.4); return }
         let nav = app.descendants(matching: .any).matching(identifier: "nav-\(label)").firstMatch
         if nav.exists {
             nav.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
@@ -52,9 +52,45 @@ class TrackifyUITestCase: XCTestCase {
         }
         let cell = app.collectionViews.cells.containing(.staticText, identifier: label).firstMatch
         if cell.exists { cell.tap(); return }
-        let text = app.staticTexts[label].firstMatch
-        if text.exists { text.tap(); return }
         app.buttons[label].firstMatch.tap()
+    }
+
+    var hasTabBar: Bool { app.tabBars.firstMatch.exists }
+
+    /// A More destination: More tab → row on iPhone, sidebar row on iPad.
+    func openMore(_ id: String, _ label: String) {
+        if hasTabBar {
+            go("More")
+            let row = app.descendants(matching: .any).matching(identifier: "more-\(id)").firstMatch
+            if !row.waitForExistence(timeout: 3) { go("More") }   // second tap pops to root
+            if row.waitForExistence(timeout: 3) { row.tap() } else { app.staticTexts[label].firstMatch.tap() }
+            Thread.sleep(forTimeInterval: 0.6)
+        } else {
+            go(label)
+        }
+    }
+
+    func back() {
+        let b = app.navigationBars.buttons.element(boundBy: 0)
+        if b.exists { b.tap(); Thread.sleep(forTimeInterval: 0.6) }
+    }
+
+    /// Timer tab is on screen (header "Today …").
+    var timerHeader: XCUIElement { app.descendants(matching: .any).matching(identifier: "todayTotal").firstMatch }
+
+    /// A task row on the Timer tab, scrolled into view.
+    func taskRow(_ name: String) -> XCUIElement {
+        let b = app.buttons["task-\(name)"]
+        var tries = 0
+        while (!b.exists || !b.isHittable) && tries < 6 { app.swipeUp(velocity: .slow); tries += 1 }
+        return b
+    }
+
+    /// Long-press a row and pick an item from its context menu.
+    func rowMenu(_ row: XCUIElement, _ item: String) {
+        row.press(forDuration: 1.2)
+        let b = app.buttons[item].firstMatch
+        if b.waitForExistence(timeout: 3) { b.tap() }
     }
 
     func dismissSheet() {
@@ -71,6 +107,13 @@ class TrackifyUITestCase: XCTestCase {
     func scrollTop() {
         for _ in 0..<4 { app.swipeDown(velocity: .fast) }
     }
+
+    func hideKeyboard() {
+        if app.keyboards.firstMatch.exists {
+            let go = app.keyboards.buttons["Go"]
+            if go.exists { app.swipeDown(velocity: .fast) } else { app.swipeDown(velocity: .fast) }
+        }
+    }
 }
 
 /// Walks every screen with the rich demo account and saves screenshots.
@@ -86,130 +129,168 @@ final class ScreenshotWalkTests: TrackifyUITestCase {
 
     func test02Walk() {
         launch()
-        XCTAssertTrue(waitFor(app.staticTexts["Dashboard"], 40), "home never appeared")
-        waitFor(app.otherElements["leaderboard"], 10)
-        shot("01-home", settle: 2.5)
+        XCTAssertTrue(waitFor(timerHeader, 40), "timer tab never appeared")
+        waitFor(app.buttons["runningClock"], 8)
+        shot("01-timer", settle: 2.5)
         scrollDown()
-        shot("02-home-tasks")
-        scrollDown(2)
-        shot("03-home-timespent", settle: 1.5)
-        if app.buttons["Yearly"].exists {
-            app.buttons["Yearly"].tap()
-            shot("04-home-yearly", settle: 1.2)
-        }
+        shot("02-timer-scrolled")
         scrollTop()
 
         // Fix this session (a timer is running on the demo account during CI)
         let clock = app.buttons["runningClock"]
         if clock.waitForExistence(timeout: 5) {
             clock.tap()
-            if waitFor(app.buttons["fixSave"], 5) { shot("05-fix-session") }
+            if waitFor(app.buttons["fixSave"], 5) { shot("03-fix-session") }
             dismissSheet()
         }
 
-        // Log past time on the first task card
-        let plus = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'logPast-'")).firstMatch
-        if plus.waitForExistence(timeout: 5) {
-            plus.tap()
-            if waitFor(app.buttons["logPastSave"], 5) { shot("06-log-past") }
-            dismissSheet()
+        // Search → filter, then a name that doesn't exist → "Create … and start"
+        let search = app.textFields["taskSearch"]
+        if search.waitForExistence(timeout: 5) {
+            search.tap()
+            search.typeText("le")
+            shot("04-search")
+            search.typeText("sson plans")
+            if waitFor(app.buttons["createAndStart"], 3) { shot("05-search-create") }
+            app.buttons["Clear"].firstMatch.tap()
+            hideKeyboard()
+        }
+
+        // Row menu (long press) → Log past time
+        let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'task-'")).element(boundBy: 1)
+        if row.waitForExistence(timeout: 5) {
+            row.press(forDuration: 1.2)
+            shot("06-row-menu", settle: 1)
+            let log = app.buttons["Log past time…"].firstMatch
+            if log.waitForExistence(timeout: 3) {
+                log.tap()
+                if waitFor(app.buttons["logPastSave"], 5) { shot("07-log-past") }
+                dismissSheet()
+            } else { app.swipeDown(velocity: .fast) }
         }
 
         app.buttons["newTask"].tap()
-        if waitFor(app.textFields["newTaskName"], 5) { shot("07-new-task") }
+        if waitFor(app.textFields["newTaskName"], 5) { shot("08-new-task") }
         dismissSheet()
 
-        // Task detail
-        let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'taskCard-'")).element(boundBy: 1)
-        if card.waitForExistence(timeout: 5) {
-            // Tap the title area — the lower half holds Start/Stop buttons.
-            card.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.12)).tap()
-            if waitFor(app.buttons["taskName"], 8) {
-                shot("08-task-detail", settle: 1.5)
-                scrollDown(2)
-                shot("09-task-billing", settle: 1.2)
+        // Task detail from the running card's name
+        let runningName = app.buttons["runningTask"]
+        if runningName.waitForExistence(timeout: 3) {
+            runningName.tap()
+        } else if row.exists {
+            rowMenu(row, "Details")
+        }
+        if waitFor(app.buttons["taskName"], 8) {
+            shot("09-task-detail", settle: 1.5)
+            scrollDown(3)
+            shot("10-task-detail-more", settle: 1.2)
+            if hasTabBar {
+                // Re-tapping the active tab pops back to the Timer list.
+                go("Timer")
+                XCTAssertTrue(waitFor(app.textFields["taskSearch"], 5), "re-tapping Timer didn't pop to root")
+            } else {
+                back()
             }
-            let back = app.navigationBars.buttons.element(boundBy: 0)
-            if back.exists { back.tap() }
         }
 
+        // Owner bug: switching tabs from a pushed screen must work, and the tab keeps its stack.
         go("Stats")
-        shot("10-stats", settle: 2)
+        shot("11-stats", settle: 2)
         scrollDown(2)
-        shot("11-stats-top")
+        shot("12-stats-top")
         scrollDown(3)
-        shot("12-stats-groups")
+        shot("13-stats-groups", settle: 1)
         if app.buttons["createGroup"].exists {
             app.buttons["createGroup"].tap()
-            if waitFor(app.textFields["groupName"], 5) { shot("13-group-editor") }
+            if waitFor(app.textFields["groupName"], 5) { shot("14-group-editor") }
             dismissSheet()
         }
+        scrollDown(4)
+        shot("15-stats-activity", settle: 1.5)
 
         go("Team")
-        shot("14-team", settle: 2.5)
-        scrollDown(2)
-        shot("15-team-race", settle: 3)
+        waitFor(app.otherElements["leaderboard"], 10)
+        shot("16-team", settle: 2.5)
+        let race = app.descendants(matching: .any).matching(identifier: "openRace").firstMatch
+        if race.waitForExistence(timeout: 3) {
+            race.tap()
+            shot("17-race", settle: 3)
+            if hasTabBar {
+                go("Team")
+                XCTAssertTrue(race.waitForExistence(timeout: 3), "re-tapping Team didn't pop to root")
+            }
+        }
 
-        go("Billing")
-        shot("16-billing", settle: 2.5)
+        openMore("billing", "Billing")
+        shot("18-more-billing", settle: 2.5)
         scrollDown(2)
-        shot("17-billing-sessions", settle: 1)
+        shot("19-billing-sessions", settle: 1)
         scrollTop()
-        for (tab, name) in [("History", "18-billing-history"), ("Rates", "19-billing-rates"), ("AI billing", "20-billing-ai")] {
+        for (tab, name) in [("History", "20-billing-history"), ("Rates", "21-billing-rates"), ("AI billing", "22-billing-ai")] {
             let b = app.buttons[tab].firstMatch
             if b.exists {
                 b.tap()
                 shot(name, settle: 2)
-                scrollDown(2)
-                shot(name + "-more", settle: 1)
-                scrollTop()
             }
         }
 
-        go("Chat")
-        shot("21-chat", settle: 1.5)
+        openMore("chat", "AI chat")
+        shot("23-chat", settle: 1.5)
         let firstConversation = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'chatTab-'")).firstMatch
         if firstConversation.waitForExistence(timeout: 3) {
             firstConversation.tap()
-            shot("21-chat-conversation", settle: 3)
+            shot("24-chat-conversation", settle: 3)
         }
 
-        if isPad || !app.tabBars.firstMatch.exists {
-            go("Settings")
-        } else {
-            go("Home")
-            app.buttons["openSettings"].tap()
-        }
-        shot("22-settings", settle: 1.5)
+        openMore("settings", "Settings")
+        shot("25-settings", settle: 1.5)
         scrollDown(2)
-        shot("23-settings-more")
+        shot("26-settings-more")
+
+        // Owner's bug: from Settings, tapping Timer must show the timer.
+        go("Timer")
+        XCTAssertTrue(waitFor(timerHeader, 5), "Timer tab not reachable from Settings")
+        if hasTabBar {
+            // More remembers Settings; re-tap returns to the More list.
+            go("More")
+            XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3), "More lost its stack")
+            go("More")
+            XCTAssertTrue(waitFor(app.descendants(matching: .any).matching(identifier: "more-billing").firstMatch, 3), "re-tapping More didn't pop")
+            shot("27-more", settle: 1)
+        }
+
+        openMore("hidden", "Hidden tasks")
+        shot("28-hidden-tasks", settle: 1.5)
+        openMore("widgets", "Widgets")
+        shot("29-widgets", settle: 1)
+        openMore("about", "About")
+        XCTAssertTrue(waitFor(app.staticTexts["appVersion"], 5))
+        shot("30-about", settle: 1)
     }
 
     /// Live Activity on the lock screen and in the Dynamic Island (timer running on the demo account in CI).
     func test03LiveActivity() {
         launch()
-        XCTAssertTrue(waitFor(app.staticTexts["Dashboard"], 40))
+        XCTAssertTrue(waitFor(timerHeader, 40))
         guard app.buttons["runningClock"].waitForExistence(timeout: 10) else { return }
         Thread.sleep(forTimeInterval: 3)
         XCUIDevice.shared.press(.home)
-        shot("24-dynamic-island", settle: 2.5)
+        shot("31-dynamic-island", settle: 2.5)
         XCUIDevice.shared.perform(NSSelectorFromString("pressLockButton"))
-        shot("25-lock-screen-live-activity", settle: 3)
+        shot("32-lock-screen-live-activity", settle: 3)
     }
 
     /// Short pass over the main screens for the device matrix (keeps CI time bounded).
     func test04KeyScreens() {
         launch()
-        XCTAssertTrue(waitFor(app.staticTexts["Dashboard"], 40))
+        XCTAssertTrue(waitFor(timerHeader, 40))
         waitFor(app.buttons["runningClock"], 8)
-        shot("k1-home", settle: 4)
-        scrollDown(2)
-        shot("k2-home-tasks")
-        go("Stats"); shot("k3-stats", settle: 2)
-        go("Team"); shot("k4-team", settle: 2.5)
-        go("Billing"); shot("k5-billing", settle: 2.5)
-        go("Chat"); shot("k6-chat", settle: 1.5)
-        if isPad || !app.tabBars.firstMatch.exists { go("Settings") } else { go("Home"); app.buttons["openSettings"].tap() }
-        shot("k7-settings", settle: 1.5)
+        shot("k1-timer", settle: 4)
+        go("Stats"); shot("k2-stats", settle: 2)
+        go("Team"); shot("k3-team", settle: 2.5)
+        if hasTabBar { go("More"); shot("k4-more", settle: 1) }
+        openMore("billing", "Billing"); shot("k5-billing", settle: 2.5)
+        openMore("chat", "AI chat"); shot("k6-chat", settle: 1.5)
+        openMore("settings", "Settings"); shot("k7-settings", settle: 1.5)
     }
 }

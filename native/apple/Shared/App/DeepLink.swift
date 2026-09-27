@@ -27,10 +27,13 @@ final class NavigationState {
     static let shared = NavigationState()
     var screen: AppScreen = AppScreen.launchScreen ?? .home
     var homePath: [Route] = []
+    /// Bumped on every request so a tab UI can react even when `screen` didn't change.
+    var requests = 0
 
-    func select(_ s: AppScreen) { screen = s }
+    func select(_ s: AppScreen) { screen = s; requests += 1 }
     func open(_ r: Route) {
         screen = .home
         homePath = [r]
+        requests += 1
     }
 }

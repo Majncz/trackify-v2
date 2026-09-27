@@ -57,33 +57,24 @@ final class TimerFlowTests: TrackifyUITestCase {
         super.tearDown()
     }
 
-    /// Finds a task-card button, expanding "Show All" and scrolling as needed.
-    func taskButton(_ id: String) -> XCUIElement {
-        let b = app.buttons[id]
-        if !b.exists, app.buttons["showAllTasks"].exists { app.buttons["showAllTasks"].tap() }
-        var tries = 0
-        while (!b.exists || !b.isHittable) && tries < 6 { app.swipeUp(velocity: .slow); tries += 1 }
-        return b
-    }
-
     func scrollToTop() { for _ in 0..<5 { app.swipeDown(velocity: .fast) } }
 
     func testStartSwitchStopFixAndLogPast() {
         launch(account: "\(account):\(password)", extra: ["-TrackifyFreshLogin", "YES"])
-        XCTAssertTrue(waitFor(app.staticTexts["Dashboard"], 40))
+        XCTAssertTrue(waitFor(timerHeader, 40))
 
-        // Start Alpha — optimistic UI, then the server confirms.
+        // Start Alpha by tapping its row — optimistic UI, then the server confirms.
         XCTAssertTrue(waitFor(app.buttons["newTask"], 15))
-        let startAlpha = taskButton("start-UITest Alpha")
-        XCTAssertTrue(waitFor(startAlpha, 10))
-        startAlpha.tap()
+        let alpha = taskRow("UITest Alpha")
+        XCTAssertTrue(waitFor(alpha, 10))
+        alpha.tap()
         scrollToTop()
-        XCTAssertTrue(waitFor(app.buttons["stopRunning"], 5), "running banner missing")
+        XCTAssertTrue(waitFor(app.buttons["stopRunning"], 5), "running card missing")
         XCTAssertTrue(expectServer { ($0["taskId"] as? String) == self.taskId("UITest Alpha") }, "server never saw Alpha running")
         shot("flow-01-running")
 
-        // Switch to Beta.
-        taskButton("start-UITest Beta").tap()
+        // Switch to Beta with one tap.
+        taskRow("UITest Beta").tap()
         scrollToTop()
         XCTAssertTrue(expectServer { ($0["taskId"] as? String) == self.taskId("UITest Beta") }, "switch not saved")
         shot("flow-02-switched")
@@ -100,10 +91,10 @@ final class TimerFlowTests: TrackifyUITestCase {
         XCTAssertTrue(expectServer { ($0["running"] as? Bool) == false }, "stop not saved")
         XCTAssertFalse(app.buttons["stopRunning"].waitForExistence(timeout: 2))
 
-        // Log past time on Alpha → the server has a new manual entry.
+        // Log past time on Alpha (row menu) → the server has a new manual entry.
         let alphaId = taskId("UITest Alpha") ?? ""
         let before = (api("GET", "/api/events?taskId=\(alphaId)") as? [[String: Any]])?.count ?? 0
-        taskButton("logPast-UITest Alpha").tap()
+        rowMenu(taskRow("UITest Alpha"), "Log past time…")
         XCTAssertTrue(waitFor(app.buttons["logPastSave"], 5))
         shot("flow-04-logpast")
         app.buttons["logPastSave"].tap()
@@ -125,6 +116,17 @@ final class TimerFlowTests: TrackifyUITestCase {
         let gone = NSPredicate(format: "exists == false")
         expectation(for: gone, evaluatedWith: app.buttons["stopRunning"])
         waitForExpectations(timeout: 15)
+
+        // Search → create a task and start it with the keyboard's Go.
+        let name = "UITest Gamma"
+        let search = app.textFields["taskSearch"]
+        XCTAssertTrue(waitFor(search, 5))
+        search.tap()
+        search.typeText(name + "\n")
+        XCTAssertTrue(expectServer { ($0["taskId"] as? String) == self.taskId(name) }, "create-and-start not saved")
+        shot("flow-06-created")
+        _ = api("POST", "/api/timer/stop", [:])
+        if let id = taskId(name) { _ = api("DELETE", "/api/tasks/\(id)") }
     }
 
     /// Polls `GET /api/timer` until the predicate holds.

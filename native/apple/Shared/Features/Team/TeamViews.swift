@@ -1,21 +1,31 @@
 import SwiftUI
 import TrackifyKit
 
-/// iOS "Team" tab: leaderboard + the Visualizations bar race.
+/// iOS "Team" tab: the leaderboard, then a row that opens the bar-race player.
 struct TeamView: View {
     @Environment(AppModel.self) private var model
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                PageHeader("Team", subtitle: "Who's tracking, and the hours played back")
-                LeaderboardCard()
-                RaceSection()
+        List {
+            Section { LeaderboardCard().padding(.vertical, 4) }
+            #if os(iOS)
+            Section {
+                NavigationLink(value: TeamRoute.race) {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Race")
+                            Text("Play the team's hours back").font(.footnote).foregroundStyle(Theme.mutedForeground)
+                        }
+                    } icon: { Image(systemName: "chart.bar.xaxis") }
+                }
+                .accessibilityIdentifier("openRace")
             }
-            .padding(16)
-            .frame(maxWidth: 896)
-            .frame(maxWidth: .infinity)
+            #endif
         }
-        .background(Theme.background)
+        #if os(iOS)
+        .listStyle(.insetGrouped)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .navigationTitle("Team")
         .refreshable { await model.refreshAll() }
     }
 }

@@ -21,9 +21,31 @@ enum Motion {
 
 // MARK: - Card
 
+/// How `.card()` draws. iPhone/iPad screens use `.plain` (content only — the surrounding List/section
+/// provides structure, no cards inside cards); the Mac dashboard keeps real cards.
+enum CardChrome { case card, plain }
+
+private struct CardChromeKey: EnvironmentKey { static let defaultValue: CardChrome = .card }
+
+extension EnvironmentValues {
+    var cardChrome: CardChrome {
+        get { self[CardChromeKey.self] }
+        set { self[CardChromeKey.self] = newValue }
+    }
+}
+
 struct CardModifier: ViewModifier {
     var padding: CGFloat = 16
-    func body(content: Content) -> some View {
+    @Environment(\.cardChrome) private var chrome
+    @ViewBuilder func body(content: Content) -> some View {
+        if chrome == .plain {
+            content.frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            chromed(content)
+        }
+    }
+
+    private func chromed(_ content: Content) -> some View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -298,6 +320,17 @@ struct PageHeader<Trailing: View>: View {
     }
 
     var body: some View {
+        #if os(iOS)
+        // Phones/tablets: no web hero header — the title goes in the navigation bar.
+        Color.clear.frame(height: 0)
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+        #else
+        header
+        #endif
+    }
+
+    private var header: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.pageTitle).tracking(-0.3).foregroundStyle(Theme.foreground)
@@ -329,7 +362,11 @@ struct Segmented<T: Hashable>: View {
             ForEach(items, id: \.0) { item in
                 let on = item.0 == selection
                 Button {
+                    #if os(iOS)
+                    selection = item.0   // instant: no cross-fade between categories on phones
+                    #else
                     withAnimation(.easeOut(duration: 0.15)) { selection = item.0 }
+                    #endif
                 } label: {
                     Text(item.1)
                         .font(.scaled(compact ? 12 : 13, weight: .medium))

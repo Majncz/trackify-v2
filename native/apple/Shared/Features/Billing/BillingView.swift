@@ -13,6 +13,7 @@ struct BillingView: View {
     @State private var width: CGFloat = 390
     @State private var showMarkPaid = false
     @State private var markPaidRows: [BillingSessionRow] = []
+    @State private var showGuide = false
 
     /// Test hook / deep link: `TrackifyBillingTab` = sessions | history | rates | ai.
     static func initialTab() -> BillingTab {
@@ -32,7 +33,9 @@ struct BillingView: View {
                 if store.billingTasks != nil && !store.hasEnrolled {
                     BillingSetupCard { go(.rates) }
                 }
+                #if os(macOS)
                 BillingGuide { go(.rates) }
+                #endif
                 tabsSection
             }
             .padding(16)
@@ -57,6 +60,20 @@ struct BillingView: View {
         .task(id: loadKey) {
             await store.load(tick: model.dataTick, api: model.api)
         }
+        #if os(iOS)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showGuide = true } label: { Image(systemName: "info.circle") }
+                    .accessibilityLabel("How billing works")
+            }
+        }
+        .sheet(isPresented: $showGuide) {
+            ScrollView {
+                BillingGuide(onOpenTasksTab: { showGuide = false; go(.rates) }, onDemand: true).padding(20)
+            }
+            .trackifySheet()
+        }
+        #endif
         .sheet(isPresented: $showMarkPaid) {
             MarkPaidSheet(sessions: markPaidRows) {
                 Task { await store.afterPaymentChange(model.api) }
@@ -81,7 +98,9 @@ struct BillingView: View {
             ZStack(alignment: .top) {
                 tabContent(tab)
                     .id(tab)
+                    #if os(macOS)
                     .transition(slideTransition)
+                    #endif
             }
             .frame(maxWidth: .infinity, alignment: .top)
             .clipped()
@@ -111,6 +130,10 @@ struct BillingView: View {
     private func go(_ next: BillingTab) {
         guard next != tab else { return }
         slideForward = next.index > tab.index
+        #if os(iOS)
+        tab = next   // phones: switch instantly, no carousel slide
+        return
+        #else
         if reduceMotion {
             tab = next
             return
@@ -119,6 +142,7 @@ struct BillingView: View {
         DispatchQueue.main.async {
             withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.5)) { tab = next }
         }
+        #endif
     }
 }
 
