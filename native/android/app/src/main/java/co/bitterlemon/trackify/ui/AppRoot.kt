@@ -31,6 +31,7 @@ import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -159,22 +160,14 @@ private fun MainShell(pendingRoute: MutableState<String?>) {
             bottomBar = {
                 if (!wide) CappedFontScale {
                     Column {
-                        HorizontalDivider(color = T.c.border)
-                        NavigationBar(containerColor = T.c.background, tonalElevation = 0.dp) {
+                        NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 0.dp) {
                             tabs.forEach { tab ->
                                 val selected = currentTab == tab.graph
                                 NavigationBarItem(
                                     selected = selected,
                                     onClick = { nav.selectTab(tab) },
                                     icon = { Icon(if (selected) tab.selectedIcon else tab.icon, null, modifier = Modifier.size(24.dp)) },
-                                    label = { Text(tab.label, fontSize = 12.sp, maxLines = 1, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium) },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = T.c.foreground,
-                                        selectedTextColor = T.c.foreground,
-                                        unselectedIconColor = T.c.mutedForeground,
-                                        unselectedTextColor = T.c.mutedForeground,
-                                        indicatorColor = T.c.muted,
-                                    ),
+                                    label = { Text(tab.label, fontSize = 12.sp, maxLines = 1, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium) },
                                 )
                             }
                         }
@@ -184,7 +177,7 @@ private fun MainShell(pendingRoute: MutableState<String?>) {
         ) { pad ->
             Row(Modifier.fillMaxSize().padding(pad).consumeWindowInsets(pad)) {
                 if (wide) CappedFontScale {
-                    NavigationRail(containerColor = T.c.background, windowInsets = WindowInsets.navigationBars) {
+                    NavigationRail(containerColor = MaterialTheme.colorScheme.surfaceContainer, windowInsets = WindowInsets.navigationBars) {
                         Spacer(Modifier.height(8.dp))
                         tabs.forEach { tab ->
                             val selected = currentTab == tab.graph
@@ -192,17 +185,11 @@ private fun MainShell(pendingRoute: MutableState<String?>) {
                                 selected = selected,
                                 onClick = { nav.selectTab(tab) },
                                 icon = { Icon(if (selected) tab.selectedIcon else tab.icon, null, modifier = Modifier.size(24.dp)) },
-                                label = { Text(tab.label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium) },
-                                colors = NavigationRailItemDefaults.colors(
-                                    selectedIconColor = T.c.foreground, selectedTextColor = T.c.foreground,
-                                    unselectedIconColor = T.c.mutedForeground, unselectedTextColor = T.c.mutedForeground,
-                                    indicatorColor = T.c.muted,
-                                ),
+                                label = { Text(tab.label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium) },
                             )
                         }
                     }
                 }
-                if (wide) VerticalDivider(color = T.c.border)
                 Box(Modifier.weight(1f).fillMaxHeight()) {
                     AppNavHost(nav, onOpenBilling = { openInMore("billing") })
                 }

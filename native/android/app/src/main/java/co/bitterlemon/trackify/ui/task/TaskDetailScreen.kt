@@ -139,7 +139,7 @@ fun TaskDetailScreen(id: String, onBack: () -> Unit, onOpenBilling: () -> Unit =
             val running = timer.running?.taskId == task.id
             val now = co.bitterlemon.trackify.ui.team.rememberTicker(running)
             val live = if (running) maxOf(0L, now - timer.running!!.startTime) else 0L
-            Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 20.dp)) {
+            Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 16.dp)) {
                 EditableName(task)
                 task.taskGroup?.let {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
@@ -148,18 +148,12 @@ fun TaskDetailScreen(id: String, onBack: () -> Unit, onOpenBilling: () -> Unit =
                         Text(it.name, fontSize = 14.sp, color = T.c.mutedForeground)
                     }
                 }
-                Row(Modifier.fillMaxWidth().padding(top = 20.dp)) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Total", fontSize = 13.sp, color = T.c.mutedForeground)
-                        Text(Format.durationWords(task.events.sumOf { it.toMs - it.fromMs } + live), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = T.c.foreground, style = Tabular)
-                    }
-                    Column(Modifier.weight(1f)) {
-                        Text("Sessions", fontSize = 13.sp, color = T.c.mutedForeground)
-                        Text("${task.events.size}", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = T.c.foreground, style = Tabular)
-                    }
+                Row(Modifier.fillMaxWidth().padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    co.bitterlemon.trackify.ui.components.StatTile("Total", Format.durationWords(task.events.sumOf { it.toMs - it.fromMs } + live), Modifier.weight(1f))
+                    co.bitterlemon.trackify.ui.components.StatTile("Sessions", "${task.events.size}", Modifier.weight(1f))
                 }
                 Row(Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (running) TButton("Stop", { graph.engine.stop() }, Modifier.weight(1f), variant = BtnVariant.Destructive, size = BtnSize.Lg, icon = Icons.Outlined.Stop)
+                    if (running) TButton("Stop", { graph.engine.stop() }, Modifier.weight(1f), size = BtnSize.Lg, icon = Icons.Outlined.Stop)
                     else TButton("Start", { graph.engine.start(task.id) }, Modifier.weight(1f), size = BtnSize.Lg, icon = Icons.Outlined.PlayArrow)
                     TButton("Log past time", { logOpen = true }, Modifier.weight(1f), variant = BtnVariant.Outline, size = BtnSize.Lg, icon = Icons.Outlined.Add)
                 }

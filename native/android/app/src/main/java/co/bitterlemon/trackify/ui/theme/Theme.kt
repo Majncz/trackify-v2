@@ -1,6 +1,13 @@
 package co.bitterlemon.trackify.ui.theme
 
+import android.content.Context
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
@@ -16,7 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import co.bitterlemon.trackify.util.Accents
 
-/** Trackify neutral tokens (NATIVE_SPEC §4). */
+/** Trackify tokens, derived from the Material 3 scheme (see [tokensFor]). */
 @Immutable
 data class TColors(
     val dark: Boolean,
@@ -42,37 +49,7 @@ data class TColors(
     val raceStage: Color,
 )
 
-val LightColors = TColors(
-    dark = false,
-    background = Color(0xFFFFFFFF),
-    foreground = Color(0xFF0A0A0A),
-    card = Color(0xFFFFFFFF),
-    primary = Color(0xFF171717),
-    onPrimary = Color(0xFFFAFAFA),
-    muted = Color(0xFFF5F5F5),
-    mutedForeground = Color(0xFF737373),
-    border = Color(0xFFE5E5E5),
-    destructive = Color(0xFFEF4444),
-    onDestructive = Color(0xFFFAFAFA),
-    raceStage = Color(0xFFF7F7F5),
-)
-
-val DarkColors = TColors(
-    dark = true,
-    background = Color(0xFF0A0A0A),
-    foreground = Color(0xFFFAFAFA),
-    card = Color(0xFF111111),
-    primary = Color(0xFFFAFAFA),
-    onPrimary = Color(0xFF171717),
-    muted = Color(0xFF262626),
-    mutedForeground = Color(0xFFA3A3A3),
-    border = Color(0xFF262626),
-    destructive = Color(0xFFEF4444),
-    onDestructive = Color(0xFFFAFAFA),
-    raceStage = Color(0xFF161616),
-)
-
-val LocalTColors = staticCompositionLocalOf { LightColors }
+val LocalTColors = staticCompositionLocalOf { tokensFor(BrandLight, false) }
 
 object T {
     val c: TColors @Composable get() = LocalTColors.current
@@ -86,58 +63,85 @@ fun hexColor(hex: String?, fallback: Color = Color(0xFF6B7280)): Color {
     return Color(0xFF000000.toInt() or v)
 }
 
+/**
+ * Fallback Material 3 scheme (Android 8–11, where there is no wallpaper colour): tonal palette generated from the
+ * Trackify green. On Android 12+ the app uses the wallpaper's dynamic scheme instead.
+ */
+val BrandLight = lightColorScheme(
+    primary = Color(0xFF386A20), onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFFB8F397), onPrimaryContainer = Color(0xFF042100),
+    secondary = Color(0xFF55624C), onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFD9E7CB), onSecondaryContainer = Color(0xFF131F0D),
+    tertiary = Color(0xFF386666), onTertiary = Color(0xFFFFFFFF),
+    tertiaryContainer = Color(0xFFBBEBEB), onTertiaryContainer = Color(0xFF002020),
+    error = Color(0xFFBA1A1A), onError = Color(0xFFFFFFFF),
+    errorContainer = Color(0xFFFFDAD6), onErrorContainer = Color(0xFF410002),
+    background = Color(0xFFF9FAF1), onBackground = Color(0xFF1A1C18),
+    surface = Color(0xFFF9FAF1), onSurface = Color(0xFF1A1C18),
+    surfaceVariant = Color(0xFFDFE4D7), onSurfaceVariant = Color(0xFF43483E),
+    outline = Color(0xFF73796D), outlineVariant = Color(0xFFC3C8BB),
+    inverseSurface = Color(0xFF2F312D), inverseOnSurface = Color(0xFFF1F1EA), inversePrimary = Color(0xFF9DD67D),
+    surfaceDim = Color(0xFFD9DBD2), surfaceBright = Color(0xFFF9FAF1),
+    surfaceContainerLowest = Color(0xFFFFFFFF), surfaceContainerLow = Color(0xFFF3F4EC),
+    surfaceContainer = Color(0xFFEDEFE6), surfaceContainerHigh = Color(0xFFE7E9E0), surfaceContainerHighest = Color(0xFFE1E3DA),
+)
+
+val BrandDark = darkColorScheme(
+    primary = Color(0xFF9DD67D), onPrimary = Color(0xFF0C3900),
+    primaryContainer = Color(0xFF205107), onPrimaryContainer = Color(0xFFB8F397),
+    secondary = Color(0xFFBDCBAF), onSecondary = Color(0xFF283420),
+    secondaryContainer = Color(0xFF3E4A35), onSecondaryContainer = Color(0xFFD9E7CB),
+    tertiary = Color(0xFFA0CFCF), onTertiary = Color(0xFF003737),
+    tertiaryContainer = Color(0xFF1E4E4E), onTertiaryContainer = Color(0xFFBBEBEB),
+    error = Color(0xFFFFB4AB), onError = Color(0xFF690005),
+    errorContainer = Color(0xFF93000A), onErrorContainer = Color(0xFFFFDAD6),
+    background = Color(0xFF11140F), onBackground = Color(0xFFE1E4D9),
+    surface = Color(0xFF11140F), onSurface = Color(0xFFE1E4D9),
+    surfaceVariant = Color(0xFF43483E), onSurfaceVariant = Color(0xFFC3C8BB),
+    outline = Color(0xFF8D9286), outlineVariant = Color(0xFF43483E),
+    inverseSurface = Color(0xFFE1E4D9), inverseOnSurface = Color(0xFF2F312D), inversePrimary = Color(0xFF386A20),
+    surfaceDim = Color(0xFF11140F), surfaceBright = Color(0xFF373A34),
+    surfaceContainerLowest = Color(0xFF0C0F0A), surfaceContainerLow = Color(0xFF191D17),
+    surfaceContainer = Color(0xFF1D211B), surfaceContainerHigh = Color(0xFF282B25), surfaceContainerHighest = Color(0xFF33362F),
+)
+
+/** The app's colour scheme: wallpaper colours on Android 12+, the Trackify green palette before that. */
+fun trackifyColorScheme(context: Context, dark: Boolean): ColorScheme = when {
+    Build.VERSION.SDK_INT >= 31 -> if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    else -> if (dark) BrandDark else BrandLight
+}
+
+/** Legacy token names used across the screens, mapped onto Material 3 roles. */
+fun tokensFor(s: ColorScheme, dark: Boolean) = TColors(
+    dark = dark,
+    background = s.surface,
+    foreground = s.onSurface,
+    card = s.surfaceContainerLow,
+    primary = s.primary,
+    onPrimary = s.onPrimary,
+    muted = s.surfaceContainerHigh,
+    mutedForeground = s.onSurfaceVariant,
+    border = s.outlineVariant,
+    destructive = s.error,
+    onDestructive = s.onError,
+    raceStage = s.surfaceContainerLow,
+)
+
+@Composable
+fun isAppDark(themePref: String): Boolean = when (themePref) {
+    "dark" -> true
+    "light" -> false
+    else -> isSystemInDarkTheme()
+}
+
 @Composable
 fun TrackifyTheme(themePref: String = "system", content: @Composable () -> Unit) {
-    val dark = when (themePref) {
-        "dark" -> true
-        "light" -> false
-        else -> isSystemInDarkTheme()
-    }
-    val c = if (dark) DarkColors else LightColors
-    val scheme = if (dark) darkColorScheme(
-        primary = c.primary, onPrimary = c.onPrimary,
-        secondary = c.muted, onSecondary = c.foreground,
-        background = c.background, onBackground = c.foreground,
-        surface = c.card, onSurface = c.foreground,
-        surfaceVariant = c.muted, onSurfaceVariant = c.mutedForeground,
-        surfaceContainer = c.card, surfaceContainerHigh = Color(0xFF171717), surfaceContainerHighest = c.muted,
-        surfaceContainerLow = c.card, surfaceContainerLowest = c.background,
-        outline = c.border, outlineVariant = c.border,
-        error = c.destructive, onError = c.onDestructive,
-        primaryContainer = c.muted, onPrimaryContainer = c.foreground,
-        secondaryContainer = c.muted, onSecondaryContainer = c.foreground,
-        inverseSurface = c.foreground, inverseOnSurface = c.background,
-        surfaceTint = Color.Transparent,
-    ) else lightColorScheme(
-        primary = c.primary, onPrimary = c.onPrimary,
-        secondary = c.muted, onSecondary = c.foreground,
-        background = c.background, onBackground = c.foreground,
-        surface = c.card, onSurface = c.foreground,
-        surfaceVariant = c.muted, onSurfaceVariant = c.mutedForeground,
-        surfaceContainer = c.card, surfaceContainerHigh = c.card, surfaceContainerHighest = c.muted,
-        surfaceContainerLow = c.card, surfaceContainerLowest = c.background,
-        outline = c.border, outlineVariant = c.border,
-        error = c.destructive, onError = c.onDestructive,
-        primaryContainer = c.muted, onPrimaryContainer = c.foreground,
-        secondaryContainer = c.muted, onSecondaryContainer = c.foreground,
-        inverseSurface = c.foreground, inverseOnSurface = c.background,
-        surfaceTint = Color.Transparent,
-    )
-    val base = Typography()
-    val typography = Typography(
-        headlineSmall = base.headlineSmall.copy(fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = (-0.3).sp),
-        titleLarge = base.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 22.sp, letterSpacing = (-0.3).sp),
-        titleMedium = base.titleMedium.copy(fontWeight = FontWeight.SemiBold, fontSize = 16.sp),
-        titleSmall = base.titleSmall.copy(fontWeight = FontWeight.Medium, fontSize = 14.sp),
-        bodyLarge = base.bodyLarge.copy(fontSize = 16.sp),
-        bodyMedium = base.bodyMedium.copy(fontSize = 14.sp),
-        bodySmall = base.bodySmall.copy(fontSize = 12.sp),
-        labelLarge = base.labelLarge.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-        labelMedium = base.labelMedium.copy(fontSize = 12.sp, fontWeight = FontWeight.Medium),
-        labelSmall = base.labelSmall.copy(fontSize = 11.sp),
-    )
+    val dark = isAppDark(themePref)
+    val context = LocalContext.current
+    val scheme = remember(dark, context) { trackifyColorScheme(context, dark) }
+    val c = tokensFor(scheme, dark)
     CompositionLocalProvider(LocalTColors provides c) {
-        MaterialTheme(colorScheme = scheme, typography = typography, content = content)
+        MaterialTheme(colorScheme = scheme, typography = Typography(), content = content)
     }
 }
 

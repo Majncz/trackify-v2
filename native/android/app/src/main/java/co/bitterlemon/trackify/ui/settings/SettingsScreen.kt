@@ -109,16 +109,20 @@ fun SettingsScreen(onBack: () -> Unit) {
                 Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
                     SectionLabel("Account")
                     ListRow(profile?.email?.ifEmpty { null } ?: session?.email ?: "", subtitle = "Email", icon = Icons.Outlined.Mail)
-                    Box(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) { DisplayNameForm(profile?.displayName ?: "") }
+                    Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) { DisplayNameForm(profile?.displayName ?: "") }
 
                     SectionLabel("Appearance")
-                    Column(Modifier.padding(horizontal = 20.dp)) {
-                        Text("App", fontSize = 14.sp, color = T.c.foreground)
-                        Spacer(Modifier.height(6.dp))
+                    Column(Modifier.padding(horizontal = 16.dp)) {
+                        Text("App", fontSize = 16.sp, color = T.c.foreground)
+                        Spacer(Modifier.height(8.dp))
                         Segmented(listOf("system" to "System", "light" to "Light", "dark" to "Dark"), theme, { v -> scope.launch { graph.session.setTheme(v) } }, Modifier.fillMaxWidth())
-                        Spacer(Modifier.height(14.dp))
-                        Text("Home-screen widgets", fontSize = 14.sp, color = T.c.foreground)
-                        Spacer(Modifier.height(6.dp))
+                        Spacer(Modifier.height(20.dp))
+                        Text("Home-screen widgets", fontSize = 16.sp, color = T.c.foreground)
+                        Text(
+                            if (android.os.Build.VERSION.SDK_INT >= 31) "System follows dark mode and uses your wallpaper colours" else "System follows dark mode",
+                            fontSize = 14.sp, color = T.c.mutedForeground,
+                        )
+                        Spacer(Modifier.height(8.dp))
                         Segmented(
                             listOf("system" to "System", "light" to "Light", "dark" to "Dark"), widgetTheme,
                             { v -> scope.launch { graph.session.setWidgetTheme(v); graph.syncSurfacesNow() } },

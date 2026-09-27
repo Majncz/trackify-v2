@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -42,6 +43,17 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Icon
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import co.bitterlemon.trackify.data.ConnectionStatus
+import co.bitterlemon.trackify.ui.components.CappedFontScale
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -188,23 +200,29 @@ fun HomeScreen(onOpenTask: (String) -> Unit) {
         }
     }
 
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
-        // Compact header: today's total (live), connection dot, new task.
-        Row(
-            Modifier.fillMaxWidth().height(64.dp).padding(start = 20.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("Today", fontSize = 20.sp, color = T.c.mutedForeground)
-            Spacer(Modifier.width(8.dp))
-            Text(
-                if (tasksOrNull == null) "—" else Format.durationWords(todayTotal).let { if (todayTotal < 60_000) "0m" else it },
-                fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, style = Tabular,
-            )
-            Spacer(Modifier.width(10.dp))
-            ConnectionDot(status)
-            Spacer(Modifier.weight(1f))
-            IconButton(onClick = { newTaskOpen = true }) {
-                Icon(Icons.Outlined.Add, "New task", tint = T.c.foreground)
+        // Top app bar: today's total (live); a status dot only when the live connection has a problem.
+        CappedFontScale {
+            Row(
+                Modifier.fillMaxWidth().height(64.dp).padding(start = 16.dp, end = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Today", fontSize = 22.sp, color = T.c.foreground)
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    if (tasksOrNull == null) "—" else Format.durationWords(todayTotal).let { if (todayTotal < 60_000) "0m" else it },
+                    fontSize = 22.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary, style = Tabular,
+                )
+                Spacer(Modifier.weight(1f))
+                if (status != ConnectionStatus.Connected) {
+                    ConnectionDot(status)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (status == ConnectionStatus.Reconnecting) "Connecting…" else "Offline",
+                        fontSize = 14.sp, color = T.c.mutedForeground,
+                    )
+                }
             }
         }
 
@@ -216,9 +234,16 @@ fun HomeScreen(onOpenTask: (String) -> Unit) {
             },
             modifier = Modifier.fillMaxSize(),
         ) {
+            // When a timer starts while the list is at the top, reveal the running card (it is inserted above).
+            val listState = rememberLazyListState()
+            val hasRunning = running != null
+            LaunchedEffect(hasRunning) {
+                if (hasRunning && listState.firstVisibleItemIndex <= 1) listState.scrollToItem(0)
+            }
             LazyColumn(
                 Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 24.dp),
+                state = listState,
+                contentPadding = PaddingValues(bottom = 96.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 if (running != null) {
@@ -243,8 +268,8 @@ fun HomeScreen(onOpenTask: (String) -> Unit) {
                         ErrorAlert("Couldn't load tasks", tasksError, modifier = Modifier.widthIn(max = 720.dp).padding(16.dp))
                     }
                     tasksOrNull == null -> items(6, key = { "sk$it" }) {
-                        Row(Modifier.widthIn(max = 720.dp).fillMaxWidth().height(60.dp).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Skeleton(Modifier.size(10.dp))
+                        Row(Modifier.widthIn(max = 720.dp).fillMaxWidth().height(72.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Skeleton(Modifier.size(40.dp).clip(CircleShape))
                             Spacer(Modifier.width(16.dp))
                             Skeleton(Modifier.weight(1f).height(16.dp))
                             Spacer(Modifier.width(48.dp))
@@ -259,6 +284,13 @@ fun HomeScreen(onOpenTask: (String) -> Unit) {
                         )
                     }
                     else -> {
+                        if (q.isEmpty() && shown.isNotEmpty()) item(key = "hint") {
+                            Text(
+                                if (running != null) "Tap a task to switch · hold for more" else "Tap a task to start · hold for more",
+                                fontSize = 14.sp, color = T.c.mutedForeground,
+                                modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
+                            )
+                        }
                         items(shown, key = { it.id }) { t ->
                             val isRunning = running?.taskId == t.id
                             TaskRow(
@@ -266,6 +298,7 @@ fun HomeScreen(onOpenTask: (String) -> Unit) {
                                 pending = (isRunning && timer.pending) || t.id in timer.savingTaskIds,
                                 todayMs = todayMs(t, running?.startTime?.takeIf { isRunning }, now),
                                 onTap = { tap(t) }, onMenu = { focus.clearFocus(); menuFor = t },
+                                onStop = { graph.engine.stop() },
                             )
                         }
                         if (q.isNotEmpty() && !exactMatch) item(key = "create") {
@@ -275,6 +308,13 @@ fun HomeScreen(onOpenTask: (String) -> Unit) {
                 }
             }
         }
+    }
+        FloatingActionButton(
+            onClick = { newTaskOpen = true },
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+        ) { Icon(Icons.Outlined.Add, "New task") }
     }
 
     menuFor?.let { t ->
@@ -306,61 +346,84 @@ fun HomeScreen(onOpenTask: (String) -> Unit) {
     logFor?.let { t -> LogPastDialog(t, tasks, running?.startTime, running?.taskId, onDismiss = { logFor = null }) }
 }
 
+/** Readable text colour on top of [bg]. */
+private fun onColor(bg: Color): Color = if (bg.luminance() > 0.45f) Color(0xFF1B1B1F) else Color.White
+
+/**
+ * The running task, as the hero of the screen: a primary-container card with the task, a big live clock and one
+ * big Stop. Tap the clock or "Started …" to fix the session; tap the name to open the task.
+ */
 @Composable
 private fun RunningCard(timer: TimerUi, task: Task?, now: Long, onClock: () -> Unit, onStop: () -> Unit, onName: () -> Unit) {
     val r = timer.running ?: return
+    val cs = MaterialTheme.colorScheme
     val elapsed = maxOf(0L, now - r.startTime)
+    val on = cs.onPrimaryContainer
     Column(
         Modifier
             .widthIn(max = 720.dp)
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(T.c.muted)
-            .padding(start = 20.dp, end = 16.dp, top = 16.dp, bottom = 16.dp),
+            .clip(RoundedCornerShape(28.dp))
+            .background(cs.primaryContainer)
+            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 20.dp),
     ) {
         Row(
-            Modifier.clip(RoundedCornerShape(6.dp)).clickable(onClickLabel = "Open task", onClick = onName),
+            Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Open task", onClick = onName).padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AccentDot(hexColor(task?.accent ?: "#22C55E"), 10.dp)
+            AccentDot(hexColor(task?.accent ?: "#22C55E"), 12.dp)
             Spacer(Modifier.width(10.dp))
-            Text(task?.name ?: "…", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-            task?.taskGroup?.let {
-                Text("  ·  ${it.name}", fontSize = 14.sp, color = T.c.mutedForeground, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Column(Modifier.weight(1f, fill = false)) {
+                Text(task?.name ?: "…", fontSize = 18.sp, fontWeight = FontWeight.Medium, color = on, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                task?.taskGroup?.let { Text(it.name, fontSize = 14.sp, color = on.copy(alpha = 0.75f), maxLines = 1, overflow = TextOverflow.Ellipsis) }
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                Format.duration(elapsed),
-                style = MonoDigits, fontSize = 40.sp, fontWeight = FontWeight.Bold, color = T.c.foreground,
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable(onClickLabel = "Fix this session", role = Role.Button, onClick = onClock)
-                    .semantics { contentDescription = "Elapsed ${Format.durationWords(elapsed, true)}. Tap to fix this session" }
-                    .padding(vertical = 6.dp),
-            )
-            Spacer(Modifier.width(12.dp))
-            Row(
-                Modifier
-                    .heightIn(min = 48.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(T.c.destructive)
-                    .clickable(role = Role.Button, onClickLabel = "Stop", onClick = onStop)
-                    .padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Outlined.Stop, null, tint = T.c.onDestructive, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Stop", color = T.c.onDestructive, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        // The clock is a display number: it scales with the card width, not with the font-size setting.
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val size = (maxWidth.value / 4.9f).coerceAtMost(72f)
+            CappedFontScale(1f) {
+                Text(
+                    Format.duration(elapsed),
+                    style = MonoDigits, fontSize = size.sp, fontWeight = FontWeight.Normal, color = on,
+                    maxLines = 1, letterSpacing = (-1).sp,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(onClickLabel = "Fix this session", role = Role.Button, onClick = onClock)
+                        .semantics { contentDescription = "Elapsed ${Format.durationWords(elapsed, true)}. Tap to fix this session" }
+                        .padding(vertical = 2.dp),
+                )
             }
         }
         Pulsing(timer.pending) { a ->
-            Text(
-                if (timer.pending) "Syncing…" else "Since ${Time.clock(r.startTime)} · tap the time to fix it",
-                fontSize = 13.sp, color = T.c.mutedForeground, modifier = Modifier.alpha(a),
-            )
+            Row(
+                Modifier.alpha(a).clip(RoundedCornerShape(8.dp)).clickable(onClickLabel = "Fix this session", onClick = onClock).padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    if (timer.pending) "Syncing…" else "Started ${Time.clock(r.startTime)}",
+                    fontSize = 14.sp, color = on.copy(alpha = 0.8f),
+                )
+                if (!timer.pending) {
+                    Spacer(Modifier.width(6.dp))
+                    Icon(Icons.Outlined.Edit, null, tint = on.copy(alpha = 0.8f), modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(cs.primary)
+                .clickable(role = Role.Button, onClickLabel = "Stop", onClick = onStop),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Filled.Stop, null, tint = cs.onPrimary, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Stop", color = cs.onPrimary, fontSize = 16.sp, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -372,7 +435,7 @@ private fun SearchField(value: String, onChange: (String) -> Unit, onGo: () -> U
         onValueChange = onChange,
         singleLine = true,
         textStyle = TextStyle(fontSize = 16.sp, color = T.c.foreground),
-        cursorBrush = SolidColor(T.c.foreground),
+        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Go),
         keyboardActions = KeyboardActions(onGo = { onGo() }),
         modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -380,87 +443,105 @@ private fun SearchField(value: String, onChange: (String) -> Unit, onGo: () -> U
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .border(1.dp, T.c.border, RoundedCornerShape(24.dp))
+                    .heightIn(min = 56.dp)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                     .padding(start = 16.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Outlined.Search, null, tint = T.c.mutedForeground, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(12.dp))
+                Icon(Icons.Outlined.Search, null, tint = T.c.mutedForeground, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.width(16.dp))
                 Box(Modifier.weight(1f)) {
                     if (value.isEmpty()) Text("Start a task…", color = T.c.mutedForeground, fontSize = 16.sp, maxLines = 1)
                     inner()
                 }
                 if (value.isNotEmpty()) {
-                    IconButton(onClick = { onChange("") }) { Icon(Icons.Outlined.Close, "Clear", tint = T.c.mutedForeground, modifier = Modifier.size(20.dp)) }
+                    IconButton(onClick = { onChange("") }) { Icon(Icons.Outlined.Close, "Clear", tint = T.c.mutedForeground) }
                 } else Spacer(Modifier.width(12.dp))
             }
         },
     )
 }
 
+/** Round avatar in the task's colour with its initial (Material list-item leading element). */
+@Composable
+private fun TaskAvatar(task: Task, size: androidx.compose.ui.unit.Dp = 40.dp) {
+    val accent = hexColor(task.accent)
+    Box(Modifier.size(size).clip(CircleShape).background(accent), contentAlignment = Alignment.Center) {
+        CappedFontScale(1f) {
+            Text(
+                task.name.trim().firstOrNull()?.uppercase() ?: "•",
+                color = onColor(accent), fontSize = (size.value * 0.42f).sp, fontWeight = FontWeight.Medium,
+            )
+        }
+    }
+}
+
+/**
+ * One task: tap = start / switch, long-press = the row sheet. No per-row buttons; only the running row shows a
+ * Stop button (and is tinted).
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TaskRow(task: Task, isRunning: Boolean, pending: Boolean, todayMs: Long, onTap: () -> Unit, onMenu: () -> Unit) {
-    Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = 60.dp)
-                .background(if (isRunning) T.c.muted.copy(alpha = 0.6f) else androidx.compose.ui.graphics.Color.Transparent)
-                .combinedClickable(
-                    onClick = onTap, onLongClick = onMenu, role = Role.Button,
-                    onClickLabel = if (isRunning) "Stop" else "Start", onLongClickLabel = "More actions",
-                )
-                .padding(start = 20.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            AccentDot(hexColor(task.accent), 10.dp)
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
-                Text(
-                    task.name, fontSize = 16.sp, fontWeight = if (isRunning) FontWeight.SemiBold else FontWeight.Normal,
-                    color = T.c.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-                task.taskGroup?.let { Text(it.name, fontSize = 13.sp, color = T.c.mutedForeground, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-            }
-            if (todayMs >= 60_000) {
-                Spacer(Modifier.width(8.dp))
-                Text(Format.durationWords(todayMs), fontSize = 14.sp, color = T.c.mutedForeground, style = Tabular, maxLines = 1)
-            }
-            Spacer(Modifier.width(12.dp))
-            Pulsing(pending) { a ->
-                Box(
-                    Modifier.size(36.dp).alpha(a).clip(CircleShape)
-                        .then(if (isRunning) Modifier.background(T.c.foreground) else Modifier.border(1.dp, T.c.border, CircleShape)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        if (isRunning) Icons.Outlined.Stop else Icons.Outlined.PlayArrow, null,
-                        tint = if (isRunning) T.c.background else T.c.foreground, modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
-            IconButton(onClick = onMenu) { Icon(Icons.Outlined.MoreVert, "More for ${task.name}", tint = T.c.mutedForeground) }
+private fun TaskRow(task: Task, isRunning: Boolean, pending: Boolean, todayMs: Long, onTap: () -> Unit, onMenu: () -> Unit, onStop: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val fg = if (isRunning) cs.onSecondaryContainer else cs.onSurface
+    val sub = if (isRunning) cs.onSecondaryContainer.copy(alpha = 0.8f) else cs.onSurfaceVariant
+    Row(
+        Modifier
+            .widthIn(max = 720.dp)
+            .fillMaxWidth()
+            .padding(horizontal = if (isRunning) 8.dp else 0.dp, vertical = if (isRunning) 4.dp else 0.dp)
+            .clip(RoundedCornerShape(if (isRunning) 20.dp else 0.dp))
+            .background(if (isRunning) cs.secondaryContainer else Color.Transparent)
+            .combinedClickable(
+                onClick = onTap, onLongClick = onMenu, role = Role.Button,
+                onClickLabel = if (isRunning) "Stop" else "Start", onLongClickLabel = "More actions",
+            )
+            .heightIn(min = 72.dp)
+            .padding(start = if (isRunning) 8.dp else 16.dp, end = if (isRunning) 8.dp else 24.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Pulsing(pending) { a -> Box(Modifier.alpha(a)) { TaskAvatar(task) } }
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+            Text(
+                task.name, fontSize = 16.sp, fontWeight = if (isRunning) FontWeight.Medium else FontWeight.Normal,
+                color = fg, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
+            val subtitle = listOfNotNull(if (isRunning) "Running" else null, task.taskGroup?.name).joinToString(" · ")
+            if (subtitle.isNotEmpty()) Text(subtitle, fontSize = 14.sp, color = sub, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        RowDivider(inset = 46.dp)
+        if (todayMs >= 60_000) {
+            Spacer(Modifier.width(12.dp))
+            Text(Format.durationWords(todayMs), fontSize = 14.sp, color = sub, style = Tabular, maxLines = 1)
+        }
+        if (isRunning) {
+            Spacer(Modifier.width(8.dp))
+            FilledIconButton(
+                onClick = onStop,
+                colors = IconButtonDefaults.filledIconButtonColors(containerColor = cs.primary, contentColor = cs.onPrimary),
+                modifier = Modifier.size(48.dp),
+            ) { Icon(Icons.Filled.Stop, "Stop ${task.name}") }
+        }
     }
 }
 
 @Composable
 private fun CreateRow(name: String, creating: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.widthIn(max = 720.dp).fillMaxWidth().heightIn(min = 60.dp)
+        Modifier.widthIn(max = 720.dp).fillMaxWidth().heightIn(min = 72.dp)
             .clickable(enabled = !creating, role = Role.Button, onClick = onClick)
-            .padding(horizontal = 20.dp),
+            .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Outlined.Add, null, tint = T.c.foreground, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(12.dp))
+        Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+            Icon(Icons.Outlined.Add, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+        }
+        Spacer(Modifier.width(16.dp))
         Text(
-            if (creating) "Creating…" else "Create \u201c$name\u201d and start", fontSize = 16.sp, fontWeight = FontWeight.Medium,
-            color = T.c.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            if (creating) "Creating…" else "Create \u201c$name\u201d and start", fontSize = 16.sp,
+            color = T.c.foreground, maxLines = 2, overflow = TextOverflow.Ellipsis,
         )
     }
 }

@@ -101,8 +101,15 @@ struct BillingSessionsView: View {
                 ForEach(sections) { section in
                     Section {
                         ForEach(section.rows) { row in
-                            NavigationLink(value: row) {
-                                BillingSessionCell(row: row, stacked: typeSize.isAccessibilitySize)
+                            // No disclosure arrow while selecting: it only squeezed the task name.
+                            Group {
+                                if editing {
+                                    BillingSessionCell(row: row, stacked: typeSize.isAccessibilitySize)
+                                } else {
+                                    NavigationLink(value: row) {
+                                        BillingSessionCell(row: row, stacked: typeSize.isAccessibilitySize)
+                                    }
+                                }
                             }
                             .selectionDisabled(row.isPaid)
                             .accessibilityIdentifier("sessionRow")

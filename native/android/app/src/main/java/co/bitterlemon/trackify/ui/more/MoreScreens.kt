@@ -1,6 +1,11 @@
 package co.bitterlemon.trackify.ui.more
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -65,7 +70,35 @@ fun MoreScreen(onOpen: (String) -> Unit) {
         ScreenBar("More")
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             item {
-                Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
+                // Account card (Google-app style): who is signed in; tap for Settings.
+                val name = profile?.displayName?.ifBlank { null } ?: session?.email ?: ""
+                androidx.compose.foundation.layout.Row(
+                    Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(28.dp))
+                        .background(androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainer)
+                        .clickable { onOpen("settings") }
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    androidx.compose.foundation.layout.Box(
+                        Modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(androidx.compose.material3.MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            name.trim().firstOrNull()?.uppercase() ?: "?", fontSize = 20.sp,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                    androidx.compose.foundation.layout.Spacer(Modifier.width(16.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(name, fontSize = 18.sp, color = T.c.foreground, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        session?.email?.let { if (it != name) Text(it, fontSize = 14.sp, color = T.c.mutedForeground, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
+                    }
+                }
+            }
+            item {
+                Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(top = 8.dp)) {
                     val rows = listOf(
                         Triple("billing", "Billing", Icons.Outlined.AttachMoney),
                         Triple("chat", "AI chat", Icons.AutoMirrored.Outlined.Chat),
@@ -77,12 +110,6 @@ fun MoreScreen(onOpen: (String) -> Unit) {
                     rows.forEach { (route, label, icon) ->
                         ListRow(label, icon = icon, onClick = { onOpen(route) }, trailing = { Chevron() })
                     }
-                    RowDivider(Modifier.padding(top = 8.dp))
-                    Text(
-                        "Signed in as ${profile?.displayName?.ifBlank { null } ?: session?.email ?: ""}",
-                        fontSize = 13.sp, color = T.c.mutedForeground,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
-                    )
                 }
             }
         }
@@ -150,25 +177,25 @@ fun WidgetsScreen(onBack: () -> Unit) {
                     )
                     SectionLabel("Home screen")
                     ListRow(
-                        "Quick-start widget", subtitle = "Running timer, or your recent tasks as one-tap buttons",
+                        "Timer", subtitle = "The running timer with Stop, or resume your last task in one tap. Resize it from 2×1 to 4×2",
                         icon = Icons.Outlined.SmartDisplay, onClick = { pinWidget(context, co.bitterlemon.trackify.widget.SmallTimerWidgetReceiver::class.java) },
-                        trailing = { Text("Add", fontSize = 15.sp, color = T.c.foreground) },
+                        trailing = { AddChip() },
                     )
                     ListRow(
-                        "Tasks widget", subtitle = "Running timer, today's total and a list of tasks",
+                        "Timer and tasks", subtitle = "The running timer, today's total and your recent tasks: tap one to start or switch",
                         icon = Icons.Outlined.ViewAgenda, onClick = { pinWidget(context, co.bitterlemon.trackify.widget.LargeTimerWidgetReceiver::class.java) },
-                        trailing = { Text("Add", fontSize = 15.sp, color = T.c.foreground) },
+                        trailing = { AddChip() },
                     )
                     if (android.os.Build.VERSION.SDK_INT >= 33) {
                         SectionLabel("Quick Settings")
                         ListRow(
                             "Trackify tile", subtitle = "Tap to stop, or start your last task",
                             icon = Icons.Outlined.Tune, onClick = { requestTile(context) },
-                            trailing = { Text("Add", fontSize = 15.sp, color = T.c.foreground) },
+                            trailing = { AddChip() },
                         )
                     }
                     Text(
-                        "Widget colours follow Settings → Appearance.", fontSize = 13.sp, color = T.c.mutedForeground,
+                        "Widgets use your wallpaper colours. Force light or dark in Settings → Appearance.", fontSize = 13.sp, color = T.c.mutedForeground,
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
                     )
                 }
@@ -230,4 +257,14 @@ private fun requestTile(context: android.content.Context) {
         android.graphics.drawable.Icon.createWithResource(context, co.bitterlemon.trackify.R.drawable.ic_stat_timer),
         context.mainExecutor,
     ) { }
+}
+
+@Composable
+private fun AddChip() {
+    Text(
+        "Add", fontSize = 14.sp, color = androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer,
+        modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+            .background(androidx.compose.material3.MaterialTheme.colorScheme.secondaryContainer)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    )
 }

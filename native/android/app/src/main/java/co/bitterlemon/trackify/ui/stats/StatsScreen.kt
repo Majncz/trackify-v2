@@ -183,15 +183,12 @@ fun StatsScreen() {
             return@LazyColumn
         }
         item(key = "totals") {
-            Row(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Text("Total", fontSize = 13.sp, color = T.c.mutedForeground)
-                    Text(Format.fmtMs(res.totalMs), fontSize = 28.sp, fontWeight = FontWeight.Bold, color = T.c.foreground, style = Tabular, maxLines = 1)
-                }
-                Column(Modifier.weight(1f)) {
-                    Text("Daily average", fontSize = 13.sp, color = T.c.mutedForeground)
-                    Text(Format.fmtMs(res.dailyAvgMs), fontSize = 28.sp, fontWeight = FontWeight.Bold, color = T.c.foreground, style = Tabular, maxLines = 1)
-                }
+            Row(
+                Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                co.bitterlemon.trackify.ui.components.StatTile("Total", Format.fmtMs(res.totalMs), Modifier.weight(1f))
+                co.bitterlemon.trackify.ui.components.StatTile("Daily average", Format.fmtMs(res.dailyAvgMs), Modifier.weight(1f))
             }
         }
         if (res.trend.any { it.total > 0 }) {
@@ -263,7 +260,7 @@ private fun StatCard(title: String, value: String, caption: String?, modifier: M
     TCard(modifier) {
         Text(title, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = T.c.mutedForeground)
         Spacer(Modifier.height(8.dp))
-        Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = T.c.foreground, style = Tabular, maxLines = 1)
+        Text(value, fontSize = 24.sp, fontWeight = FontWeight.Medium, color = T.c.foreground, style = Tabular, maxLines = 1)
         if (caption != null) Text(caption, fontSize = 12.sp, color = T.c.mutedForeground)
     }
 }
@@ -392,8 +389,8 @@ private fun GroupsSection(res: StatsResult, onCopy: (String) -> Unit, onEdit: (G
     val groups = res.groups
     var menuFor by remember { mutableStateOf<co.bitterlemon.trackify.util.GroupRow?>(null) }
     Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Groups", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = T.c.mutedForeground, modifier = Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Groups", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = androidx.compose.material3.MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
             if (groups.size >= 2) IconButton({ onCopy(groups.joinToString("\n\n") { StatsData.groupText(it) }) }) {
                 Icon(Icons.Outlined.ContentCopy, "Copy all groups", tint = T.c.mutedForeground, modifier = Modifier.size(20.dp))
             }

@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Widget picker preview (Android 12–14; 15+ uses the generated Glance preview). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent" android:layout_height="match_parent"
-    android:orientation="vertical" android:padding="14dp" android:background="@drawable/widget_preview_bg">
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Trackify." android:textStyle="bold" android:textColor="@color/widget_fg" android:textSize="13sp"/>
-    <FrameLayout android:layout_width="1dp" android:layout_height="0dp" android:layout_weight="1"/>
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Deep work" android:textColor="@color/widget_fg" android:textSize="14sp"/>
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="01:24:09" android:fontFamily="monospace" android:textStyle="bold" android:textColor="@color/widget_fg" android:textSize="26sp"/>
+    android:orientation="vertical" android:padding="12dp" android:background="@drawable/widget_preview_bg"
+    android:backgroundTint="@color/widget_primary_container">
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Tracking"
+        android:textColor="@color/widget_on_primary_container" android:textSize="12sp"/>
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Client portal"
+        android:textColor="@color/widget_on_primary_container" android:textSize="15sp" android:fontFamily="sans-serif-medium" android:maxLines="2"/>
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="1:24:09"
+        android:textColor="@color/widget_on_primary_container" android:textSize="26sp" android:fontFeatureSettings="tnum"/>
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"/>
+    <TextView android:layout_width="match_parent" android:layout_height="44dp" android:gravity="center" android:text="■  Stop"
+        android:background="@drawable/widget_preview_primary" android:textColor="@color/widget_on_primary"
+        android:textSize="14sp" android:fontFamily="sans-serif-medium"/>
 </LinearLayout>

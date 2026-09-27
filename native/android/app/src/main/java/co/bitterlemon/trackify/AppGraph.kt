@@ -102,6 +102,7 @@ class AppGraph(private val context: Context) {
             // Every process start (first launch after an update included) redraws the widgets with this build.
             syncSurfaces()
             WidgetUpdater.updateAllNow(context)
+            runCatching { co.bitterlemon.trackify.widget.WidgetPreviews.publish(context) }
         }
         observeEffects()
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {

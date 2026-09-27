@@ -82,29 +82,28 @@ fun TDialog(
                 .widthIn(max = maxWidth)
                 .fillMaxWidth()
                 .heightIn(max = screenH - 48.dp)
-                .shadow(16.dp, RoundedCornerShape(14.dp))
-                .clip(RoundedCornerShape(14.dp))
-                .background(T.c.card)
-                .border(1.dp, T.c.border, RoundedCornerShape(14.dp)),
+                .shadow(6.dp, RoundedCornerShape(28.dp))
+                .clip(RoundedCornerShape(28.dp))
+                .background(androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh),
         ) {
-            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, modifier = Modifier.weight(1f).padding(top = 6.dp))
+            Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp, top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(title, fontSize = 24.sp, fontWeight = FontWeight.Normal, color = T.c.foreground, modifier = Modifier.weight(1f).padding(top = 6.dp))
                 IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, "Close", tint = T.c.mutedForeground, modifier = Modifier.size(18.dp)) }
             }
             if (description != null) {
-                Text(description, fontSize = 14.sp, color = T.c.mutedForeground, modifier = Modifier.padding(horizontal = 20.dp))
+                Text(description, fontSize = 14.sp, color = T.c.mutedForeground, modifier = Modifier.padding(horizontal = 24.dp))
             }
             Column(
                 Modifier
                     .weight(1f, fill = false)
                     .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
                 content = content,
             )
             if (footer != null) {
                 // FlowRow so the buttons wrap instead of truncating at large font sizes.
                 androidx.compose.foundation.layout.FlowRow(
-                    Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 20.dp, top = 4.dp),
+                    Modifier.fillMaxWidth().padding(start = 24.dp, end = 16.dp, bottom = 20.dp, top = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     itemVerticalAlignment = Alignment.CenterVertically,
@@ -129,29 +128,24 @@ private fun TSheet(
         sheetState = state,
         // Sheets holding sliders/lists (non-scrollable) must not steal horizontal drags.
         sheetGesturesEnabled = scrollable,
-        containerColor = T.c.card,
+        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerLow,
         contentColor = T.c.foreground,
-        tonalElevation = 0.dp,
-        scrimColor = Color.Black.copy(alpha = 0.4f),
-        dragHandle = {
-            Box(Modifier.padding(top = 10.dp, bottom = 6.dp).size(width = 36.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(T.c.mutedForeground.copy(alpha = 0.4f)))
-        },
     ) {
         Column(Modifier.fillMaxWidth().imePadding()) {
-            Text(title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp))
+            Text(title, fontSize = 22.sp, fontWeight = FontWeight.Normal, color = T.c.foreground, modifier = Modifier.padding(start = 24.dp, end = 24.dp))
             if (description != null) {
-                Text(description, fontSize = 14.sp, color = T.c.mutedForeground, modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp))
+                Text(description, fontSize = 14.sp, color = T.c.mutedForeground, modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp))
             }
             Column(
                 Modifier
                     .weight(1f, fill = false)
                     .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
                 content = content,
             )
             if (footer != null) {
                 androidx.compose.foundation.layout.FlowRow(
-                    Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 16.dp, top = 4.dp),
+                    Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 16.dp, top = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     itemVerticalAlignment = Alignment.CenterVertically,
@@ -168,17 +162,12 @@ fun ActionSheet(title: String?, onDismiss: () -> Unit, content: @Composable Colu
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = state,
-        containerColor = T.c.card,
+        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerLow,
         contentColor = T.c.foreground,
-        tonalElevation = 0.dp,
-        scrimColor = Color.Black.copy(alpha = 0.4f),
-        dragHandle = {
-            Box(Modifier.padding(top = 10.dp, bottom = 6.dp).size(width = 36.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(T.c.mutedForeground.copy(alpha = 0.4f)))
-        },
     ) {
         Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
             if (title != null) {
-                Text(title, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = T.c.mutedForeground, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+                Text(title, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = T.c.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp))
             }
             content()
         }
@@ -190,11 +179,11 @@ fun ActionSheet(title: String?, onDismiss: () -> Unit, content: @Composable Colu
 fun SheetAction(icon: ImageVector, label: String, onClick: () -> Unit, destructive: Boolean = false) {
     val color = if (destructive) T.c.destructive else T.c.foreground
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 20.dp),
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 24.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, null, tint = color, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.width(20.dp))
+        Icon(icon, null, tint = if (destructive) color else T.c.mutedForeground, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.width(16.dp))
         Text(label, fontSize = 16.sp, color = color)
     }
 }
@@ -215,8 +204,8 @@ fun ConfirmDialog(
         maxWidth = 420.dp,
         sheet = false,
         footer = {
-            TButton("Cancel", onDismiss, variant = BtnVariant.Outline)
-            TButton(confirmLabel, { onConfirm(); onDismiss() }, variant = if (destructive) BtnVariant.Destructive else BtnVariant.Default)
+            TButton("Cancel", onDismiss, variant = BtnVariant.Ghost)
+            TButton(confirmLabel, { onConfirm(); onDismiss() }, variant = if (destructive) BtnVariant.DestructiveGhost else BtnVariant.Ghost)
         },
     ) {
         Text(text, fontSize = 14.sp, color = T.c.mutedForeground)

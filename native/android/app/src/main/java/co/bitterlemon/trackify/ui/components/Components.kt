@@ -70,11 +70,14 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
 import co.bitterlemon.trackify.data.ConnectionStatus
 import co.bitterlemon.trackify.ui.theme.T
 
-val CardShape = RoundedCornerShape(12.dp)
-val ControlShape = RoundedCornerShape(8.dp)
+val CardShape = RoundedCornerShape(16.dp)
+val ControlShape = RoundedCornerShape(12.dp)
+val PillShape = RoundedCornerShape(50)
 
 @Composable
 fun Wordmark(size: Int = 18, modifier: Modifier = Modifier) {
@@ -126,15 +129,14 @@ fun TCard(
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val bg = background ?: T.c.card
-    val shadowMod = if (!T.c.dark) Modifier.shadow(1.dp, CardShape, ambientColor = Color(0x1A000000), spotColor = Color(0x1A000000)) else Modifier
+    // Material 3 filled card: a tonal surface, no hairline and no shadow (a border only when a caller asks for one).
+    val bg = background ?: MaterialTheme.colorScheme.surfaceContainer
     Column(
         modifier
-            .then(shadowMod)
             .clip(CardShape)
-            .background(T.c.card)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
             .background(bg)
-            .border(borderWidth, border ?: T.c.border, CardShape)
+            .then(if (border != null) Modifier.border(borderWidth, border, CardShape) else Modifier)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(padding),
         content = content,
@@ -155,38 +157,44 @@ fun TButton(
     enabled: Boolean = true,
     contentDescription: String? = null,
 ) {
-    val c = T.c
+    // Material 3 buttons: filled, filled tonal, outlined and text, all fully rounded.
+    val cs = MaterialTheme.colorScheme
     val (bg, fg) = when (variant) {
-        BtnVariant.Default -> c.primary to c.onPrimary
-        BtnVariant.Destructive -> c.destructive to c.onDestructive
-        BtnVariant.Outline -> c.background to c.foreground
-        BtnVariant.Secondary -> c.muted to c.foreground
-        BtnVariant.Ghost -> Color.Transparent to c.foreground
-        BtnVariant.DestructiveGhost -> Color.Transparent to c.destructive
+        BtnVariant.Default -> cs.primary to cs.onPrimary
+        BtnVariant.Destructive -> cs.error to cs.onError
+        BtnVariant.Outline -> Color.Transparent to cs.primary
+        BtnVariant.Secondary -> cs.secondaryContainer to cs.onSecondaryContainer
+        BtnVariant.Ghost -> Color.Transparent to cs.primary
+        BtnVariant.DestructiveGhost -> Color.Transparent to cs.error
     }
     val height = when (size) {
         BtnSize.Sm -> 32.dp
-        BtnSize.Lg -> 44.dp
-        BtnSize.Icon -> 36.dp
+        BtnSize.Lg -> 48.dp
+        BtnSize.Icon -> 40.dp
         BtnSize.Default -> 40.dp
     }
-    val fontSize = if (size == BtnSize.Sm) 12.sp else 14.sp
+    val fontSize = if (size == BtnSize.Sm) 13.sp else 14.sp
     Row(
         modifier
             .heightIn(min = height)
             .then(if (size == BtnSize.Icon) Modifier.width(height) else Modifier)
-            .alpha(if (enabled) 1f else 0.5f)
-            .clip(ControlShape)
+            .alpha(if (enabled) 1f else 0.38f)
+            .clip(PillShape)
             .background(bg)
-            .then(if (variant == BtnVariant.Outline) Modifier.border(1.dp, c.border, ControlShape) else Modifier)
+            .then(if (variant == BtnVariant.Outline) Modifier.border(1.dp, cs.outline, PillShape) else Modifier)
             .clickable(enabled = enabled, role = Role.Button, onClickLabel = contentDescription ?: text, onClick = onClick)
-            .padding(horizontal = if (size == BtnSize.Icon) 0.dp else if (size == BtnSize.Sm) 10.dp else 14.dp),
+            .padding(horizontal = when {
+                size == BtnSize.Icon -> 0.dp
+                size == BtnSize.Sm -> 12.dp
+                variant == BtnVariant.Ghost || variant == BtnVariant.DestructiveGhost -> 12.dp
+                else -> 20.dp
+            }),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) {
-            Icon(icon, contentDescription = if (text == null) contentDescription else null, tint = fg, modifier = Modifier.size(16.dp))
-            if (text != null) Spacer(Modifier.width(6.dp))
+            Icon(icon, contentDescription = if (text == null) contentDescription else null, tint = fg, modifier = Modifier.size(18.dp))
+            if (text != null) Spacer(Modifier.width(8.dp))
         }
         if (text != null) {
             Text(text, color = fg, fontSize = fontSize, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -199,18 +207,19 @@ enum class BadgeVariant { Default, Secondary, Outline, Destructive }
 @Composable
 fun TBadge(text: String, modifier: Modifier = Modifier, variant: BadgeVariant = BadgeVariant.Secondary, color: Color? = null, background: Color? = null, mono: Boolean = false) {
     val c = T.c
+    val cs = MaterialTheme.colorScheme
     val (bg, fg) = when (variant) {
-        BadgeVariant.Default -> c.primary to c.onPrimary
-        BadgeVariant.Secondary -> c.muted to c.foreground
-        BadgeVariant.Outline -> Color.Transparent to c.foreground
-        BadgeVariant.Destructive -> c.destructive to c.onDestructive
+        BadgeVariant.Default -> cs.primary to cs.onPrimary
+        BadgeVariant.Secondary -> cs.secondaryContainer to cs.onSecondaryContainer
+        BadgeVariant.Outline -> Color.Transparent to cs.onSurfaceVariant
+        BadgeVariant.Destructive -> cs.errorContainer to cs.onErrorContainer
     }
     Text(
         text,
         modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(background ?: bg)
-            .then(if (variant == BadgeVariant.Outline) Modifier.border(1.dp, c.border, RoundedCornerShape(6.dp)) else Modifier)
+            .then(if (variant == BadgeVariant.Outline) Modifier.border(1.dp, c.border, RoundedCornerShape(8.dp)) else Modifier)
             .padding(horizontal = 8.dp, vertical = 2.dp),
         color = color ?: fg,
         fontSize = 12.sp,
@@ -244,7 +253,7 @@ fun TInput(
     if (autoFocus) androidx.compose.runtime.LaunchedEffect(Unit) { kotlinx.coroutines.delay(150); runCatching { requester.requestFocus() } }
     Column(modifier) {
         if (label != null) {
-            Text(label, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = T.c.foreground)
+            Text(label, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = T.c.mutedForeground)
             Spacer(Modifier.height(6.dp))
         }
         BasicTextField(
@@ -255,8 +264,8 @@ fun TInput(
             minLines = minLines,
             maxLines = if (singleLine) 1 else 8,
             enabled = enabled,
-            textStyle = TextStyle(fontSize = 15.sp, color = T.c.foreground),
-            cursorBrush = SolidColor(T.c.foreground),
+            textStyle = TextStyle(fontSize = 16.sp, color = T.c.foreground),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
             keyboardOptions = KeyboardOptions(keyboardType = if (password) KeyboardType.Password else keyboardType, imeAction = imeAction),
             keyboardActions = KeyboardActions(onAny = { onIme?.invoke() }),
@@ -264,16 +273,16 @@ fun TInput(
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 44.dp)
+                        .heightIn(min = 52.dp)
                         .clip(ControlShape)
-                        .background(T.c.background)
-                        .border(1.dp, if (focused) T.c.foreground.copy(alpha = 0.35f) else T.c.border, ControlShape)
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                        .border(if (focused) 2.dp else 0.dp, if (focused) MaterialTheme.colorScheme.primary else Color.Transparent, ControlShape)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = if (singleLine) Alignment.CenterVertically else Alignment.Top,
                 ) {
                     Box(Modifier.weight(1f)) {
                         if (value.isEmpty() && placeholder != null) {
-                            Text(placeholder, color = T.c.mutedForeground, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(placeholder, color = T.c.mutedForeground, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         inner()
                     }
@@ -331,35 +340,22 @@ fun Muted(text: String, modifier: Modifier = Modifier, size: Int = 13, maxLines:
     Text(text, modifier = modifier, fontSize = size.sp, color = T.c.mutedForeground, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
 }
 
-/** Segmented control (web `Tabs`/toggle groups). */
+/** Single-choice Material 3 segmented button row. */
 @Composable
 fun <K> Segmented(options: List<Pair<K, String>>, selected: K, onSelect: (K) -> Unit, modifier: Modifier = Modifier, compact: Boolean = false) {
-    Row(
-        modifier
-            .clip(ControlShape)
-            .background(T.c.muted)
-            .padding(3.dp),
-    ) {
-        options.forEach { (key, label) ->
+    androidx.compose.material3.SingleChoiceSegmentedButtonRow(modifier) {
+        options.forEachIndexed { i, (key, label) ->
             val sel = key == selected
-            Box(
-                Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(if (sel) T.c.card else Color.Transparent)
-                    .then(if (sel && !T.c.dark) Modifier.border(0.5.dp, T.c.border, RoundedCornerShape(6.dp)) else Modifier)
-                    .clickable(role = Role.Tab) { onSelect(key) }
-                    .padding(vertical = if (compact) 5.dp else 7.dp, horizontal = 6.dp),
-                contentAlignment = Alignment.Center,
+            SegmentedButton(
+                selected = sel,
+                onClick = { onSelect(key) },
+                shape = androidx.compose.material3.SegmentedButtonDefaults.itemShape(i, options.size),
+                // The check mark only fits when there are few segments.
+                icon = { if (options.size <= 3 && !compact) androidx.compose.material3.SegmentedButtonDefaults.Icon(sel) },
+                contentPadding = PaddingValues(horizontal = if (options.size > 3 || compact) 4.dp else 12.dp),
+                modifier = if (compact) Modifier.heightIn(min = 36.dp) else Modifier,
             ) {
-                Text(
-                    label,
-                    fontSize = if (compact) 12.sp else 13.sp,
-                    fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Medium,
-                    color = if (sel) T.c.foreground else T.c.mutedForeground,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Text(label, fontSize = if (compact) 13.sp else 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -371,14 +367,14 @@ fun Chip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifi
     Text(
         label,
         modifier = modifier
-            .clip(RoundedCornerShape(50))
-            .background(if (selected) T.c.primary else T.c.card)
-            .border(1.dp, if (selected) T.c.primary else T.c.border, RoundedCornerShape(50))
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+            .border(1.dp, if (selected) Color.Transparent else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
             .clickable(role = Role.RadioButton, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        fontSize = 13.sp,
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+        fontSize = 14.sp,
         fontWeight = FontWeight.Medium,
-        color = if (selected) T.c.onPrimary else T.c.foreground,
+        color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
 
@@ -395,20 +391,20 @@ fun ErrorAlert(title: String, message: String?, onDismiss: (() -> Unit)? = null,
         modifier
             .fillMaxWidth()
             .clip(ControlShape)
-            .border(1.dp, T.c.destructive.copy(alpha = 0.5f), ControlShape)
-            .background(T.c.destructive.copy(alpha = 0.06f))
-            .padding(12.dp),
+            .background(MaterialTheme.colorScheme.errorContainer)
+            .padding(14.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        Icon(Icons.Outlined.ErrorOutline, null, tint = T.c.destructive, modifier = Modifier.size(18.dp))
+        val onErr = MaterialTheme.colorScheme.onErrorContainer
+        Icon(Icons.Outlined.ErrorOutline, null, tint = onErr, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, color = T.c.destructive, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-            if (!message.isNullOrBlank()) Text(message, color = T.c.destructive, fontSize = 13.sp)
+            Text(title, color = onErr, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            if (!message.isNullOrBlank()) Text(message, color = onErr, fontSize = 14.sp)
         }
         if (onDismiss != null) {
             IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
-                Icon(Icons.Outlined.Close, "Dismiss", tint = T.c.destructive, modifier = Modifier.size(16.dp))
+                Icon(Icons.Outlined.Close, "Dismiss", tint = onErr, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -461,7 +457,7 @@ fun Pulsing(active: Boolean, content: @Composable (Float) -> Unit) {
 
 @Composable
 fun SurfaceBlock(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Surface(modifier, color = T.c.card, shape = CardShape, border = BorderStroke(1.dp, T.c.border), content = content)
+    Surface(modifier, color = MaterialTheme.colorScheme.surfaceContainer, shape = CardShape, content = content)
 }
 
 /** Plain top bar for every screen: optional back arrow, title, trailing actions. No subtitle, no hero. */
@@ -474,7 +470,7 @@ fun ScreenBar(
 ) {
     CappedFontScale {
         Row(
-            modifier.fillMaxWidth().height(64.dp).padding(start = if (onBack != null) 4.dp else 20.dp, end = 4.dp),
+            modifier.fillMaxWidth().height(64.dp).padding(start = if (onBack != null) 4.dp else 16.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (onBack != null) {
@@ -484,7 +480,7 @@ fun ScreenBar(
                 Spacer(Modifier.width(4.dp))
             }
             Text(
-                title ?: "", fontSize = if (onBack != null) 20.sp else 24.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground,
+                title ?: "", fontSize = if (onBack != null) 22.sp else 24.sp, fontWeight = FontWeight.Normal, color = T.c.foreground,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
             )
             actions()
@@ -509,12 +505,12 @@ fun ListRow(
             .fillMaxWidth()
             .heightIn(min = 56.dp)
             .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
-            .padding(horizontal = 20.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) {
-            Icon(icon, null, tint = if (destructive) T.c.destructive else T.c.mutedForeground, modifier = Modifier.size(22.dp))
-            Spacer(Modifier.width(20.dp))
+            Icon(icon, null, tint = if (destructive) T.c.destructive else T.c.mutedForeground, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(16.dp))
         }
         Column(Modifier.weight(1f)) {
             Text(title, fontSize = 16.sp, color = color, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -531,8 +527,8 @@ fun ListRow(
 @Composable
 fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(
-        text, modifier = modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 6.dp),
-        fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = T.c.mutedForeground,
+        text, modifier = modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 8.dp),
+        fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary,
     )
 }
 
@@ -540,4 +536,22 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier) {
 @Composable
 fun RowDivider(modifier: Modifier = Modifier, inset: Dp = 0.dp) {
     androidx.compose.material3.HorizontalDivider(modifier.padding(start = inset), color = T.c.border)
+}
+
+/** Tonal number tile (Material 3 filled card): a label and a large tabular value. */
+@Composable
+fun StatTile(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+    ) {
+        Text(label, fontSize = 14.sp, color = T.c.mutedForeground, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            value, fontSize = 26.sp, fontWeight = FontWeight.Medium, color = T.c.foreground, maxLines = 1,
+            overflow = TextOverflow.Ellipsis, style = co.bitterlemon.trackify.ui.theme.Tabular,
+        )
+    }
 }

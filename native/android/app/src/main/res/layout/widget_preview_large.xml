@@ -1,9 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Widget picker preview (Android 12–14; 15+ uses the generated Glance preview). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent" android:layout_height="match_parent"
-    android:orientation="vertical" android:padding="14dp" android:background="@drawable/widget_preview_bg">
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Trackify." android:textStyle="bold" android:textColor="@color/widget_fg" android:textSize="15sp"/>
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="Deep work" android:textColor="@color/widget_fg" android:textSize="15sp"/>
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="01:24:09" android:fontFamily="monospace" android:textStyle="bold" android:textColor="@color/widget_fg" android:textSize="22sp"/>
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="Client work · Emails · Standup" android:textColor="@color/widget_fg" android:alpha="0.6" android:textSize="13sp"/>
+    android:orientation="vertical" android:padding="8dp" android:background="@drawable/widget_preview_bg">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal"
+        android:gravity="center_vertical" android:padding="14dp" android:background="@drawable/widget_preview_primary_container">
+        <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Since 9:41"
+                android:textColor="@color/widget_on_primary_container" android:textSize="12sp"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Client portal"
+                android:textColor="@color/widget_on_primary_container" android:textSize="16sp" android:fontFamily="sans-serif-medium"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="1:24:09"
+                android:textColor="@color/widget_on_primary_container" android:textSize="30sp" android:fontFeatureSettings="tnum"/>
+        </LinearLayout>
+        <TextView android:layout_width="56dp" android:layout_height="56dp" android:gravity="center" android:text="■"
+            android:background="@drawable/widget_preview_primary" android:textColor="@color/widget_on_primary" android:textSize="18sp"/>
+    </LinearLayout>
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Switch to"
+        android:layout_marginStart="12dp" android:layout_marginTop="10dp" android:layout_marginBottom="6dp"
+        android:textColor="@color/widget_on_surface_variant" android:textSize="13sp" android:fontFamily="sans-serif-medium"/>
+    <TextView android:layout_width="match_parent" android:layout_height="48dp" android:gravity="center_vertical" android:paddingHorizontal="14dp"
+        android:text="Code review" android:background="@drawable/widget_preview_surface" android:textColor="@color/widget_on_surface" android:textSize="14sp"/>
+    <TextView android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="4dp" android:gravity="center_vertical" android:paddingHorizontal="14dp"
+        android:text="Emails &amp; admin" android:background="@drawable/widget_preview_surface" android:textColor="@color/widget_on_surface" android:textSize="14sp"/>
+    <TextView android:layout_width="match_parent" android:layout_height="48dp" android:layout_marginTop="4dp" android:gravity="center_vertical" android:paddingHorizontal="14dp"
+        android:text="Standup" android:background="@drawable/widget_preview_surface" android:textColor="@color/widget_on_surface" android:textSize="14sp"/>
 </LinearLayout>
