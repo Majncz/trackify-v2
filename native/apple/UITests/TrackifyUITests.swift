@@ -256,8 +256,11 @@ final class ScreenshotWalkTests: TrackifyUITestCase {
             let select = app.buttons["billingSelect"]
             if select.waitForExistence(timeout: 3) && select.isEnabled {
                 select.tap()
-                let all = app.buttons["selectAllUnpaid"]
-                if all.waitForExistence(timeout: 2) { all.tap() }
+                let rows = app.descendants(matching: .any).matching(identifier: "sessionRow")
+                if rows.element(boundBy: 1).waitForExistence(timeout: 3) {
+                    rows.element(boundBy: 0).tap()
+                    rows.element(boundBy: 1).tap()
+                }
                 shot("19b-billing-select", settle: 1)
                 let mark = app.buttons["billingMarkPaid"]
                 if mark.waitForExistence(timeout: 2) && mark.isEnabled {
@@ -276,7 +279,7 @@ final class ScreenshotWalkTests: TrackifyUITestCase {
             let payment = app.descendants(matching: .any).matching(identifier: "paymentRow").firstMatch
             if payment.waitForExistence(timeout: 3) {
                 payment.tap()
-                if waitFor(app.buttons["reopenPayment"], 4) { shot("20b-billing-payment", settle: 1) }
+                shot("20b-billing-payment", settle: 1.5)
             }
             backToBilling()
         }

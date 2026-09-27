@@ -170,13 +170,12 @@ struct BillingRateEditor: View {
         Form {
             if let task = model.task(taskId) {
                 Section {
-                    LabeledContent("Task") {
+                    LabeledContent("Group") {
                         HStack(spacing: 6) {
                             Circle().fill(Color(hex: task.accentHex)).frame(width: 8, height: 8)
-                            Text(task.name)
+                            Text(task.taskGroup?.name ?? "Ungrouped")
                         }
                     }
-                    LabeledContent("Group", value: task.taskGroup?.name ?? "Ungrouped")
                 }
                 TaskBillingSection(task: task, rows: store.billingTasks ?? [], onChanged: {
                     Task { await store.afterRatesChange(model.api) }

@@ -105,6 +105,7 @@ struct BillingSessionsView: View {
                                 BillingSessionCell(row: row, stacked: typeSize.isAccessibilitySize)
                             }
                             .selectionDisabled(row.isPaid)
+                            .accessibilityIdentifier("sessionRow")
                             .swipeActions(edge: .leading) {
                                 if !row.isPaid {
                                     Button { openMarkPaid([row]) } label: { Label("Mark Paid", systemImage: "checkmark.circle") }
@@ -148,11 +149,15 @@ struct BillingSessionsView: View {
             if !store.selectedSessions.isEmpty {
                 ToolbarItemGroup(placement: .bottomBar) {
                     if selection.multipleCurrencies {
-                        Text("Select one currency").font(.footnote).foregroundStyle(.secondary)
+                        Text("Select one currency to mark as paid").font(.footnote).foregroundStyle(.secondary)
+                        Spacer()
+                    } else {
+                        Spacer()
                     }
-                    Spacer()
                     Button { openMarkPaid(store.selectedSessions) } label: {
-                        Text("Mark as Paid (\(selection.count) · \(selection.byCurrency.map { Money.format($0.1, $0.0) }.joined(separator: " · ")))")
+                        Text(selection.multipleCurrencies
+                             ? "Mark as Paid"
+                             : "Mark as Paid (\(selection.count) · \(selection.byCurrency.map { Money.format($0.1, $0.0) }.joined()))")
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
                     }
@@ -415,10 +420,11 @@ struct BillingSessionCell: View {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Circle().fill(Color(hex: row.accentHex)).frame(width: 8, height: 8)
                         .alignmentGuide(.firstTextBaseline) { d in d[.bottom] - 1 }
-                    Text(row.taskName).lineLimit(2)
+                    Text(row.taskName).lineLimit(stacked ? 3 : 1)
                 }
                 Text([row.clockRange, row.taskGroup?.name].compactMap { $0 }.joined(separator: " · "))
                     .font(.subheadline).foregroundStyle(.secondary).monospacedDigit()
+                    .lineLimit(stacked ? 3 : 1)
                 if row.isPaid {
                     Label(row.paymentPaidAt.map { "Paid \(DayCalc.current.format($0, "MMM d"))" } ?? "Paid", systemImage: "checkmark.seal")
                         .font(.footnote).foregroundStyle(.secondary)
