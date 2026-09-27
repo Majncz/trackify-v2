@@ -220,7 +220,7 @@ extension View {
     /// Form section footers: the Mac's grouped form centers wrapped footers, so pin them leading like System Settings.
     func billingFooter() -> some View {
         #if os(macOS)
-        self.font(.callout).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+        self.font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading)
         #else
         self
         #endif

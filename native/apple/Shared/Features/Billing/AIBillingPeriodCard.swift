@@ -84,6 +84,10 @@ struct AIPeriodDetail: View {
                 } else {
                     LabeledContent("Window closes", value: AIBillingFormat.shortDate(AIPeriodState.windowCloses(period)))
                 }
+            } header: {
+                #if os(macOS)
+                Text(period.name).font(.title3.weight(.semibold)).foregroundStyle(.primary)
+                #endif
             }
             .monospacedDigit()
 
@@ -140,8 +144,8 @@ struct AIPeriodDetail: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle(period.name)
         #if os(iOS)
+        .navigationTitle(period.name)
         .navigationBarTitleDisplayMode(.inline)
         #endif
     }

@@ -179,6 +179,10 @@ struct BillingRateEditor: View {
                             Text(task.taskGroup?.name ?? "Ungrouped")
                         }
                     }
+                 header: {
+                    #if os(macOS)
+                    Text(task.name).font(.title3.weight(.semibold)).foregroundStyle(.primary)
+                    #endif
                 }
                 TaskBillingSection(task: task, rows: store.billingTasks ?? [], onChanged: {
                     Task { await store.afterRatesChange(model.api) }
@@ -188,8 +192,8 @@ struct BillingRateEditor: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle(model.task(taskId)?.name ?? "Rate")
         #if os(iOS)
+        .navigationTitle(model.task(taskId)?.name ?? "Rate")
         .navigationBarTitleDisplayMode(.inline)
         #endif
     }

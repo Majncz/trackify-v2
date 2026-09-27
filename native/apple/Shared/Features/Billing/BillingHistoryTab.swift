@@ -250,8 +250,8 @@ struct BillingPaymentDetail: View {
             }.billingFooter() }
         }
         .formStyle(.grouped)
-        .navigationTitle(Money.format(payment.totalAmount, payment.currency))
         #if os(iOS)
+        .navigationTitle(Money.format(payment.totalAmount, payment.currency))
         .navigationBarTitleDisplayMode(.inline)
         #endif
     }
