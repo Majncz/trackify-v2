@@ -82,7 +82,14 @@ class TrackifyUITestCase: XCTestCase {
 
     /// Back to the Billing list: re-enter it from More on iPhone, Back on iPad.
     func backToBilling() {
-        if hasTabBar { openMore("billing", "Billing") } else { back() }
+        if hasTabBar { openMore("billing", "Billing"); return }
+        // iPad: pop with the Back button until the Billing list is showing again.
+        let row = app.descendants(matching: .any).matching(identifier: "billing-sessions").firstMatch
+        for _ in 0..<4 where !(row.exists && row.isHittable) {
+            let b = app.navigationBars.buttons["BackButton"].firstMatch
+            if b.exists { b.tap() } else { back() }
+            Thread.sleep(forTimeInterval: 0.7)
+        }
     }
 
     func back() {

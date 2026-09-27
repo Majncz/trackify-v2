@@ -122,6 +122,8 @@ struct BillingSessionsView: View {
         }
         .listStyle(.insetGrouped)
         .listSectionSpacing(.compact)
+        // The app tint is monochrome; selection checkmarks need a real accent to stay visible in dark mode.
+        .tint(.blue)
         .overlay { if !showsList { stateView } }
         .environment(\.editMode, $editMode)
         .navigationTitle("Sessions")
