@@ -7,24 +7,36 @@ struct TaskDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let taskId: String
 
-    @State private var editingName = false
+    @State private var renaming = false
     @State private var nameDraft = ""
     @State private var renameError: String?
     @State private var confirmHide = false
     @State private var showAllDays = false
     @State private var editing: TimeEvent?
     @State private var loggingPast = false
-    @FocusState private var nameFocused: Bool
 
     var body: some View {
         list
         #if os(iOS)
         .background(Theme.background)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Rename") { startRename() }
+                    .disabled(model.task(taskId) == nil)
+                    .accessibilityIdentifier("renameTask")
+            }
+        }
         #else
         .toolbar { macToolbar }
         #endif
         .navigationTitle(model.task(taskId)?.name ?? "Task")
+        .alert("Rename Task", isPresented: $renaming) {
+            TextField("Task name", text: $nameDraft)
+                .accessibilityIdentifier("renameField")
+            Button("Cancel", role: .cancel) {}
+            Button("Save") { if let t = model.task(taskId) { commitRename(t) } }
+        }
         .confirmationDialog("Hide this task? You can restore it from Hidden tasks.", isPresented: $confirmHide, titleVisibility: .visible) {
             Button("Hide", role: .destructive) {
                 Task {
@@ -60,6 +72,8 @@ struct TaskDetailView: View {
         if let task = model.task(taskId) {
             let isRunning = model.running?.taskId == task.id
             ToolbarItemGroup(placement: .primaryAction) {
+                Button { startRename() } label: { Label("Rename…", systemImage: "pencil") }
+                    .help("Rename task")
                 Button { loggingPast = true } label: { Label("Log Past Time…", systemImage: "clock.arrow.circlepath") }
                     .help("Log past time")
                 Button { confirmHide = true } label: { Label("Hide", systemImage: "eye.slash") }
@@ -78,7 +92,6 @@ struct TaskDetailView: View {
             if let task = model.task(taskId) {
                 let isRunning = model.running?.taskId == task.id
                 Section {
-                    nameField(task)
                     if let g = task.taskGroup {
                         HStack { Text("Group"); Spacer(); AccentBadge(text: g.name, hex: g.accentHex) }
                     }
@@ -101,7 +114,7 @@ struct TaskDetailView: View {
                 }
                 #endif
                 entrySections(task)
-                Section("Billing") { TaskBillingPanel(task: task).padding(.vertical, 4) }
+                TaskBillingSection(task: task)
                 #if os(iOS)
                 Section {
                     Button(role: .destructive) { confirmHide = true } label: { Label("Hide task", systemImage: "eye.slash") }
@@ -110,38 +123,6 @@ struct TaskDetailView: View {
             } else {
                 Text("Task not found").foregroundStyle(Theme.mutedForeground)
             }
-    }
-
-    @ViewBuilder private func nameField(_ task: TrackifyTask) -> some View {
-        if editingName {
-            TextField("Task name", text: $nameDraft)
-                .font(.title3.weight(.semibold))
-                .focused($nameFocused)
-                .submitLabel(.done)
-                .onSubmit { commitRename(task) }
-                .onChange(of: nameFocused) { _, f in if !f && editingName { commitRename(task) } }
-                #if os(macOS)
-                .labelsHidden()
-                .onExitCommand { editingName = false }
-                #endif
-                .accessibilityIdentifier("renameField")
-        } else {
-            Button {
-                nameDraft = task.name
-                editingName = true
-                nameFocused = true
-            } label: {
-                HStack {
-                    Text(task.name).font(.title3.weight(.semibold)).foregroundStyle(Theme.foreground).multilineTextAlignment(.leading)
-                    Spacer()
-                    Image(systemName: "pencil").foregroundStyle(Theme.mutedForeground)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint("Rename")
-            .accessibilityIdentifier("taskName")
-        }
     }
 
     @ViewBuilder private func entrySections(_ task: TrackifyTask) -> some View {
@@ -190,9 +171,13 @@ struct TaskDetailView: View {
             }
         }
     }
+    private func startRename() {
+        nameDraft = model.task(taskId)?.name ?? ""
+        renaming = true
+    }
+
     private func commitRename(_ task: TrackifyTask) {
         let n = nameDraft.trimmingCharacters(in: .whitespaces)
-        editingName = false
         guard !n.isEmpty, n != task.name else { return }
         renameError = nil
         Task {
@@ -268,13 +253,13 @@ struct EditEntrySheet: View {
     }
 }
 
-// MARK: - Billing & rates panel (shared by task detail + Billing → Rates)
+// MARK: - Billing rate rows (shared by task detail + Billing → Rates)
 
-struct TaskBillingPanel: View {
+/// Enrol / edit / remove a task's hourly rate as native form rows, inside a `Section` of a List or Form.
+struct TaskBillingSection: View {
     @Environment(AppModel.self) private var model
     let task: TrackifyTask
-    var compact = false
-    /// Provided by the Rates tab (which already loaded the rows); otherwise the panel fetches.
+    /// Provided by Billing → Rates (which already loaded the rows); otherwise the section fetches.
     var rows: [BillingTaskRow]? = nil
     var onChanged: (() -> Void)? = nil
 
@@ -289,122 +274,83 @@ struct TaskBillingPanel: View {
     @FocusState private var rateFocused: Bool
 
     private var billing: BillingTaskRow? { (rows ?? loaded)?.first { $0.taskId == task.id } }
-    private var accent: String { task.accentHex }
+    private var ready: Bool { rows != nil || loaded != nil }
 
     var body: some View {
-        Group {
-            if rows == nil && loaded == nil && !loadFailed {
-                VStack(alignment: .leading, spacing: 10) { Skeleton(height: 20, width: 160); Skeleton(height: 40); Skeleton(height: 80) }.card()
-            } else if loadFailed && rows == nil {
-                Text("Could not load billing settings for this task.").font(.scaled(14)).foregroundStyle(Theme.destructive).card()
-            } else {
-                panel
-            }
-        }
-        .task(id: model.dataTick) { if rows == nil { await load() } }
-        .confirmationDialog("Remove this task from billing? Paid history stays linked to past sessions.", isPresented: $confirmRemove, titleVisibility: .visible) {
-            Button("Remove", role: .destructive) { remove() }
-        }
-    }
-
-    private var panel: some View {
-        let minutes = BillingMath.trackedMinutes(task.events)
-        let estimate: Double? = billing.map { b in task.events.reduce(0) { $0 + BillingMath.earnings(minutes: BillingMath.durationMinutes(from: $1.from, to: $1.to), rate: b.hourlyRate) } }
-        return VStack(alignment: .leading, spacing: 14) {
-            if !compact {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label("Billing & rates", systemImage: "dollarsign.circle").font(.cardTitle)
-                        Text("Same settings as Billing → Rates. Changes apply to unpaid sessions on the Sessions tab.")
-                            .font(.scaled(13)).foregroundStyle(Theme.mutedForeground)
-                    }
-                    Spacer()
-                }
-            } else {
-                Text(task.name).font(.scaled(15, weight: .semibold))
-            }
-            HStack(spacing: 6) {
-                if let g = task.taskGroup { AccentBadge(text: g.name, hex: g.accentHex) } else { Badge(text: "Ungrouped") }
-                if billing != nil { Badge(text: "Billing on", kind: .primary) } else { Badge(text: "Not billing", kind: .outline) }
-            }
-            if compact {
-                Text("Tracked \(Fmt.durationMinutes(Double(minutes))) · Est. \(billing != nil && estimate != nil ? Money.format(estimate!, billing!.currency) : "—") at current rate")
-                    .font(.scaled(13)).foregroundStyle(Theme.mutedForeground).tabular()
-            } else {
-                HStack(spacing: 24) {
-                    stat("Tracked time", Fmt.durationMinutes(Double(minutes)))
-                    stat("Est. at current rate", billing != nil && estimate != nil ? Money.format(estimate!, billing!.currency) : "—")
-                    Spacer()
-                }
-            }
-            VStack(alignment: .leading, spacing: 12) {
-                if let b = billing {
-                    HStack {
-                        Text("RATE & RULES").font(.label11).tracking(0.6).foregroundStyle(Theme.mutedForeground)
-                        Spacer()
-                        Button { confirmRemove = true } label: { Image(systemName: "trash").foregroundStyle(Theme.destructive) }
-                            .buttonStyle(.plain).frame(width: 32, height: 32).help("Remove from billing")
-                            .accessibilityLabel("Remove from billing")
-                    }
-                    HStack(alignment: .bottom, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("HOURLY RATE").font(.label11).tracking(0.6).foregroundStyle(Theme.mutedForeground)
-                            TField(placeholder: "0", text: $rateText)
-                                .focused($rateFocused)
-                                #if os(iOS)
-                                .keyboardType(.decimalPad)
-                                #endif
-                                .onSubmit { saveRate(b) }
-                                .onChange(of: rateFocused) { _, f in if !f { saveRate(b) } }
-                        }
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("CURRENCY").font(.label11).tracking(0.6).foregroundStyle(Theme.mutedForeground)
-                            CurrencyPicker(code: Binding(get: { b.currency }, set: { c in patch(b, currency: c) }))
-                        }
-                    }
+        Section {
+            if !ready && !loadFailed {
+                ProgressView().frame(maxWidth: .infinity)
+                    .task(id: model.dataTick) { await load() }
+            } else if !ready {
+                Text("Could not load billing settings for this task.").foregroundStyle(.red)
+                    .task(id: model.dataTick) { await load() }
+            } else if let b = billing {
+                rateField(text: $rateText, currency: b.currency)
                     .onAppear { rateText = Self.rateString(b.hourlyRate) }
                     .onChange(of: b.hourlyRate) { _, r in rateText = Self.rateString(r) }
-                } else {
-                    Text("Add an hourly rate to include this task in Billing sessions and payment history.")
-                        .font(.scaled(13)).foregroundStyle(Theme.mutedForeground)
-                    HStack(alignment: .bottom, spacing: 10) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("HOURLY RATE").font(.label11).tracking(0.6).foregroundStyle(Theme.mutedForeground)
-                            TField(placeholder: "50", text: $draftRate)
-                                #if os(iOS)
-                                .keyboardType(.decimalPad)
-                                #endif
-                                .frame(maxWidth: 120)
-                        }
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("CURRENCY").font(.label11).tracking(0.6).foregroundStyle(Theme.mutedForeground)
-                            CurrencyPicker(code: $draftCurrency)
-                        }
-                        Spacer(minLength: 0)
+                    .onSubmit { saveRate(b) }
+                    .onChange(of: rateFocused) { _, f in if !f { saveRate(b) } }
+                    .task(id: model.dataTick) { if rows == nil { await load() } }
+                currencyPicker(Binding(get: { b.currency }, set: { patch(b, currency: $0) }))
+                totals(rate: b.hourlyRate, currency: b.currency)
+                Button("Remove from Billing", role: .destructive) { confirmRemove = true }
+                    .confirmationDialog("Remove this task from billing?", isPresented: $confirmRemove, titleVisibility: .visible) {
+                        Button("Remove", role: .destructive) { remove() }
+                    } message: {
+                        Text("Paid history stays linked to past sessions.")
                     }
-                    Button(busy ? "Adding…" : "Add to billing", action: enroll)
-                        .buttonStyle(.t(.primary, .md, full: true)).disabled(busy)
-                }
-                InlineError(text: error)
+            } else {
+                rateField(text: $draftRate, currency: draftCurrency)
+                    .task(id: model.dataTick) { if rows == nil { await load() } }
+                currencyPicker($draftCurrency)
+                totals(rate: nil, currency: draftCurrency)
+                Button(busy ? "Adding…" : "Add to Billing", action: enroll)
+                    .disabled(busy || Money.parseAmount(draftRate) == nil)
+                    .accessibilityIdentifier("enrollBilling")
             }
-            .padding(12)
-            .background(Theme.muted.opacity(0.35), in: RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.border))
+            if let error { Text(error).foregroundStyle(.red) }
+        } header: {
+            Text("Billing")
+        } footer: {
+            if ready {
+                Text(billing != nil
+                     ? "Rate changes apply to unpaid sessions. Paid sessions keep the amount recorded with their payment."
+                     : "Give this task an hourly rate to include its time in Billing sessions and payments.")
+            }
         }
-        .padding(compact ? 14 : 20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(hex: accent, opacity: billing != nil ? (compact ? 0.05 : 0.04) : (compact ? 0.08 : 0.06)), in: RoundedRectangle(cornerRadius: Theme.cardRadius))
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.cardRadius))
-        .overlay(alignment: .leading) {
-            UnevenRoundedRectangle(topLeadingRadius: Theme.cardRadius, bottomLeadingRadius: Theme.cardRadius).fill(Color(hex: accent)).frame(width: 3)
-        }
-        .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius).strokeBorder(Theme.border))
     }
 
-    private func stat(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
-            Text(value).font(.scaled(18, weight: .semibold)).tabular()
+    private func rateField(text: Binding<String>, currency: String) -> some View {
+        LabeledContent("Hourly rate") {
+            HStack(spacing: 6) {
+                TextField("Hourly rate", text: text, prompt: Text("0"))
+                    .labelsHidden()
+                    .multilineTextAlignment(.trailing)
+                    .monospacedDigit()
+                    .focused($rateFocused)
+                    #if os(iOS)
+                    .keyboardType(.decimalPad)
+                    #else
+                    .frame(maxWidth: 120)
+                    #endif
+                    .accessibilityIdentifier("hourlyRate")
+                Text("\(Money.unitLabel(currency)) / h").foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func currencyPicker(_ code: Binding<String>) -> some View {
+        Picker("Currency", selection: code) {
+            ForEach(Money.options(including: code.wrappedValue), id: \.code) { Text($0.label).tag($0.code) }
+        }
+    }
+
+    @ViewBuilder private func totals(rate: Double?, currency: String) -> some View {
+        let minutes = BillingMath.trackedMinutes(task.events)
+        LabeledContent("Tracked", value: Fmt.durationMinutes(Double(minutes))).monospacedDigit()
+        if let rate {
+            let estimate = task.events.reduce(0.0) { $0 + BillingMath.earnings(minutes: BillingMath.durationMinutes(from: $1.from, to: $1.to), rate: rate) }
+            LabeledContent("Estimated at this rate", value: Money.format(estimate, currency)).monospacedDigit()
         }
     }
 
@@ -434,6 +380,7 @@ struct TaskBillingPanel: View {
 
     private func saveRate(_ b: BillingTaskRow) {
         guard let n = Money.parseAmount(rateText), n >= 0, n != b.hourlyRate else { return }
+        error = nil
         Task {
             do { _ = try await model.api.updateBilling(id: b.id, hourlyRate: n); await changed() }
             catch let e as APIError { error = e.message } catch {}
@@ -442,6 +389,7 @@ struct TaskBillingPanel: View {
 
     private func patch(_ b: BillingTaskRow, currency: String) {
         guard currency != b.currency else { return }
+        error = nil
         Task {
             do { _ = try await model.api.updateBilling(id: b.id, currency: currency); await changed() }
             catch let e as APIError { error = e.message } catch {}
@@ -450,6 +398,7 @@ struct TaskBillingPanel: View {
 
     private func remove() {
         guard let b = billing else { return }
+        error = nil
         Task {
             do { try await model.api.removeBilling(id: b.id); await changed() }
             catch let e as APIError { error = e.message } catch {}
@@ -457,31 +406,3 @@ struct TaskBillingPanel: View {
     }
 }
 
-struct CurrencyPicker: View {
-    @Binding var code: String
-    var body: some View {
-        Menu {
-            ForEach(Money.options(including: code), id: \.code) { o in
-                Button { code = o.code } label: {
-                    if o.code == code { Label(o.label, systemImage: "checkmark") } else { Text(o.label) }
-                }
-            }
-        } label: {
-            HStack {
-                Text(Money.options(including: code).first { $0.code == code }?.label ?? code).lineLimit(1)
-                Spacer(minLength: 6)
-                Image(systemName: "chevron.up.chevron.down").font(.scaled(11)).foregroundStyle(Theme.mutedForeground)
-            }
-            .font(.scaled(14))
-            .foregroundStyle(Theme.foreground)
-            .padding(.horizontal, 12)
-            .frame(minWidth: 150, minHeight: 40)
-            .background(Theme.background, in: RoundedRectangle(cornerRadius: Theme.controlRadius))
-            .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius).strokeBorder(Theme.border))
-        }
-        .menuStyle(.button)
-            .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .accessibilityLabel("Currency")
-    }
-}

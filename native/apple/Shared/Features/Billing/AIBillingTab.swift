@@ -62,7 +62,7 @@ enum AIBillingFormat {
     static func shortDate(_ d: Date) -> String { d.formatted(date: .numeric, time: .omitted) }
 }
 
-struct AIBillingTab: View {
+struct AIBillingView: View {
     @Environment(AppModel.self) private var model
 
     @State private var viewCurrency = Money.defaultCurrency
@@ -76,69 +76,229 @@ struct AIBillingTab: View {
     @State private var editor: AIBillingEditorTarget?
     @State private var deleteTarget: AIPeriod?
     @State private var chartMode: AIBillingChartMode = .monthly
+    @State private var chartSelection: String?
+    #if os(macOS)
+    @State private var selectedId: String?
+    #endif
 
     private var periods: [AIPeriod] { periodList ?? analytics?.periods ?? [] }
 
+    private func isActive(_ p: AIPeriod) -> Bool {
+        p.metrics?.isActive ?? (AIPeriodState.of(p) == .running)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            AIBillingHeader(viewCurrency: $viewCurrency) { editor = .new }
-
-            if let missing = analytics?.fxMissingCurrencies, !missing.isEmpty {
-                AIBillingFxAlert(currencies: missing, viewCurrency: viewCurrency)
+        platformBody
+            .task(id: "\(viewCurrency)|\(model.dataTick)") { await load() }
+            .task { await loadPresets() }
+            .sheet(item: $editor) { target in
+                AIBillingEditor(target: target, presets: presets) {
+                    Task { await load(); await loadPresets() }
+                }
             }
-
-            kpiSection
-
-            if let a = analytics, !a.cumulativeByMonth.isEmpty {
-                AIBillingChartCard(analytics: a, mode: $chartMode)
+            .confirmationDialog("Delete this AI subscription?",
+                                isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } }),
+                                titleVisibility: .visible,
+                                presenting: deleteTarget) { p in
+                Button("Delete", role: .destructive) { delete(p) }
+                Button("Cancel", role: .cancel) { deleteTarget = nil }
+            } message: { _ in
+                Text("This removes only this entry and the analytics tied to it. It can't be undone.")
             }
-
-            if let ranked = analytics?.rankings.mostTrackedHours, !ranked.isEmpty {
-                AIBillingRankingCard(rows: Array(ranked.prefix(8)))
+            .alert("Couldn't Update", isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(actionError ?? "")
             }
+    }
 
-            AIBillingEntriesSection(
-                periods: periods,
-                loading: loading && analytics == nil && periodList == nil,
-                viewCurrency: viewCurrency,
-                busy: patching,
-                actionError: actionError,
-                onPatch: { p, body in patch(p, body) },
-                onEdit: { p in editor = .edit(p) },
-                onDelete: { p in deleteTarget = p }
-            )
+    // MARK: Sections (shared by iPhone list and Mac form)
+
+    @ViewBuilder private var sections: some View {
+        Section {
+            Picker("View totals in", selection: $viewCurrency) {
+                ForEach(Money.options(including: viewCurrency), id: \.code) { Text($0.code).tag($0.code) }
+            }
+            if let a = analytics {
+                let s = a.summary
+                LabeledContent("Lifetime AI billing", value: Money.format(s.lifetimeSpendInView, a.viewCurrency))
+                LabeledContent("Overlap this month", value: Money.format(s.currentMonthOverlapSpendInView, a.viewCurrency))
+                LabeledContent("Active entries", value: "\(s.activeSubscriptions)")
+                LabeledContent("Total entries", value: "\(s.periodCount)")
+            } else if let loadError {
+                Text(loadError).foregroundStyle(.red)
+            } else {
+                ProgressView().frame(maxWidth: .infinity)
+            }
+        } header: {
+            Text("Summary")
+        } footer: {
+            Text("Each entry is a budget line; totals simply add up. Timer time that overlaps several windows is credited to the earliest-starting one. Mark an entry depleted when its credits run out early.")
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .task(id: "\(viewCurrency)|\(model.dataTick)") { await load() }
-        .task { await loadPresets() }
-        .sheet(item: $editor) { target in
-            AIBillingEditor(target: target, presets: presets) {
-                Task { await load(); await loadPresets() }
+        .monospacedDigit()
+
+        if let missing = analytics?.fxMissingCurrencies, !missing.isEmpty {
+            Section {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Exchange rate unavailable").fontWeight(.medium)
+                        Text("No rates for \(missing.joined(separator: ", ")). Totals in \(viewCurrency) may be incomplete; each entry still shows its own price.")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                }
             }
-            .trackifySheet()
         }
-        .confirmationDialog("Delete this AI billing entry?",
-                            isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } }),
-                            titleVisibility: .visible,
-                            presenting: deleteTarget) { p in
-            Button("Delete", role: .destructive) { delete(p) }
-            Button("Cancel", role: .cancel) { deleteTarget = nil }
-        } message: { _ in
-            Text("This removes only the billing line and analytics tied to it. Cannot be undone.")
+
+        if let a = analytics, !a.cumulativeByMonth.isEmpty {
+            let points = chartMode == .monthly ? a.spendByMonth : a.cumulativeByMonth
+            Section {
+                Picker("Chart", selection: $chartMode) {
+                    Text("Monthly").tag(AIBillingChartMode.monthly)
+                    Text("Cumulative").tag(AIBillingChartMode.cumulative)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                VStack(alignment: .leading, spacing: 8) {
+                    Group {
+                        if let sel = chartSelection, let p = points.first(where: { $0.month == sel }) {
+                            let label = AIBillingFormat.monthDate(sel).map { DayCalc.current.format($0, "MMM yyyy") } ?? sel
+                            Text("\(label) · \(Money.format(p.totalInView, a.viewCurrency))")
+                        } else {
+                            Text(chartMode == .monthly ? "Spend per month in \(a.viewCurrency)" : "Running total in \(a.viewCurrency)")
+                        }
+                    }
+                    .font(.footnote).foregroundStyle(.secondary).monospacedDigit()
+                    AIBillingChart(points: points, mode: chartMode, currency: a.viewCurrency, selected: $chartSelection)
+                        .frame(height: 200)
+                }
+                .padding(.vertical, 4)
+            } header: {
+                Text("Spending")
+            }
+            .onChange(of: chartMode) { _, _ in chartSelection = nil }
+        }
+
+        if let ranked = analytics?.rankings.mostTrackedHours, !ranked.isEmpty {
+            Section("Most Tracked Hours Credited") {
+                ForEach(Array(ranked.prefix(8).enumerated()), id: \.offset) { _, r in
+                    LabeledContent(r.name, value: "\(AIBillingFormat.number(r.trackedHours))h").monospacedDigit()
+                }
+            }
+        }
+
+        let active = periods.filter { isActive($0) }
+        let past = periods.filter { !isActive($0) }
+        Section {
+            if loading && analytics == nil && periodList == nil {
+                ProgressView().frame(maxWidth: .infinity)
+            } else if periods.isEmpty {
+                Text("No AI subscriptions yet. Tap + to add one.").foregroundStyle(.secondary)
+            } else if active.isEmpty {
+                Text("No active entries.").foregroundStyle(.secondary)
+            }
+            ForEach(active) { p in entryRow(p) }
+        } header: {
+            Text("Active")
+        }
+        if !past.isEmpty {
+            Section("Past") {
+                ForEach(past) { p in entryRow(p) }
+            }
         }
     }
 
-    @ViewBuilder private var kpiSection: some View {
-        if let a = analytics {
-            AIBillingKPIGrid(analytics: a)
-        } else if loading {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], spacing: 8) {
-                ForEach(0..<4, id: \.self) { _ in Skeleton(height: 72) }
-            }
-        } else if let loadError {
-            Text(loadError).font(.scaled(14)).foregroundStyle(Theme.destructive)
+    @ViewBuilder private func entryMenu(_ p: AIPeriod) -> some View {
+        Button { editor = .edit(p) } label: { Label("Edit…", systemImage: "pencil") }
+        if p.depletedAt != nil {
+            Button { patch(p, ["depletedAt": nil]) } label: { Label("Clear Depletion", systemImage: "arrow.uturn.backward") }
+        } else if isActive(p) {
+            Button { patch(p, ["depletedAt": Date()]) } label: { Label("Mark Depleted", systemImage: "battery.0percent") }
         }
+        Button(role: .destructive) { deleteTarget = p } label: { Label("Delete…", systemImage: "trash") }
     }
+
+    private func detail(_ p: AIPeriod) -> some View {
+        AIPeriodDetail(
+            period: p,
+            viewCurrency: viewCurrency,
+            active: isActive(p),
+            busy: patching,
+            onEdit: { editor = .edit(p) },
+            onPatch: { body in patch(p, body) },
+            onDelete: { deleteTarget = p })
+    }
+
+    // MARK: iPhone / iPad
+
+    #if os(iOS)
+    private var platformBody: some View {
+        List { sections }
+            .listStyle(.insetGrouped)
+            .navigationTitle("AI Subscriptions")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(for: AIPeriodRoute.self) { r in
+                AIPeriodHost(period: periods.first { $0.id == r.id }) { detail($0) }
+            }
+            .refreshable { await load() }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { editor = .new } label: { Label("Add AI Subscription", systemImage: "plus") }
+                        .accessibilityIdentifier("addAIBilling")
+                }
+            }
+    }
+
+    private func entryRow(_ p: AIPeriod) -> some View {
+        NavigationLink(value: AIPeriodRoute(id: p.id)) { AIPeriodCell(period: p) }
+            .swipeActions {
+                Button(role: .destructive) { deleteTarget = p } label: { Label("Delete", systemImage: "trash") }
+                if p.depletedAt == nil && isActive(p) {
+                    Button { patch(p, ["depletedAt": Date()]) } label: { Label("Depleted", systemImage: "battery.0percent") }
+                        .tint(.orange)
+                }
+            }
+            .contextMenu { entryMenu(p) }
+    }
+    #endif
+
+    // MARK: Mac
+
+    #if os(macOS)
+    private var selected: AIPeriod? { periods.first { $0.id == selectedId } }
+
+    private var platformBody: some View {
+        Form { sections }
+            .formStyle(.grouped)
+            .inspector(isPresented: Binding(get: { selected != nil }, set: { if !$0 { selectedId = nil } })) {
+                Group {
+                    if let p = selected { detail(p) }
+                }
+                .inspectorColumnWidth(min: 300, ideal: 360, max: 480)
+            }
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { editor = .new } label: { Label("Add AI Subscription", systemImage: "plus") }
+                        .help("Add an AI subscription")
+                        .accessibilityIdentifier("addAIBilling")
+                }
+            }
+    }
+
+    private func entryRow(_ p: AIPeriod) -> some View {
+        Button { selectedId = selectedId == p.id ? nil : p.id } label: {
+            HStack {
+                AIPeriodCell(period: p)
+                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(selectedId == p.id ? Color.accentColor.opacity(0.15) : nil)
+        .contextMenu { entryMenu(p) }
+    }
+    #endif
 
     // MARK: Data
 
@@ -170,7 +330,7 @@ struct AIBillingTab: View {
             do {
                 _ = try await model.api.updateAIPeriod(id: p.id, body)
             } catch {
-                actionError = (error as? APIError)?.message ?? "Could not update entry"
+                actionError = (error as? APIError)?.message ?? "Could not update the entry."
             }
             patching = false
             await load()
@@ -180,182 +340,37 @@ struct AIBillingTab: View {
     private func delete(_ p: AIPeriod) {
         deleteTarget = nil
         actionError = nil
+        #if os(macOS)
+        if selectedId == p.id { selectedId = nil }
+        #endif
         Task {
             do {
                 try await model.api.deleteAIPeriod(id: p.id)
             } catch {
-                actionError = (error as? APIError)?.message ?? "Could not delete"
+                actionError = (error as? APIError)?.message ?? "Could not delete the entry."
             }
             await load()
         }
     }
 }
 
-// MARK: - Header
+struct AIPeriodRoute: Hashable { let id: String }
 
-struct AIBillingHeader: View {
-    @Binding var viewCurrency: String
-    var onAdd: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("AI billing").font(.cardTitle).foregroundStyle(Theme.foreground)
-                explainer
-                    .font(.scaled(14))
-                    .foregroundStyle(Theme.mutedForeground)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            HStack(alignment: .bottom, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    FieldLabel(text: "View totals in")
-                    CurrencyPicker(code: $viewCurrency)
-                }
-                Spacer(minLength: 0)
-                Button(action: onAdd) {
-                    Label("Add AI billing", systemImage: "plus")
-                }
-                .buttonStyle(.t(.primary))
-            }
-        }
-    }
-
-    private var explainer: Text {
-        Text("Each row is a budget line — lifetime totals add up simply (100 + 150 = 250). Timer overlap is split automatically when billing windows overlap: the earliest-start row wins each slice. Active days counts whole calendar days from the row start through today, the end date, or depletion — whichever comes first. Use ")
-            + Text("Mark depleted").fontWeight(.medium).foregroundColor(Theme.foreground)
-            + Text(" to cap the window when credits run out before the calendar end.")
-    }
-}
-
-struct AIBillingFxAlert: View {
-    var currencies: [String]
-    var viewCurrency: String
+#if os(iOS)
+/// Pops the pushed detail when its entry was deleted.
+private struct AIPeriodHost<Content: View>: View {
+    let period: AIPeriod?
+    @ViewBuilder var content: (AIPeriod) -> Content
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Exchange rate unavailable").font(.scaled(14, weight: .semibold)).foregroundStyle(Theme.foreground)
-            Text("Could not load rates for: \(currencies.joined(separator: ", ")). Lifetime and chart totals in \(viewCurrency) may be incomplete; native prices on each card are still shown.")
-                .font(.scaled(13))
-                .foregroundStyle(Theme.foreground.opacity(0.85))
-                .fixedSize(horizontal: false, vertical: true)
+        Group {
+            if let period { content(period) } else { Color.clear }
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.amber.opacity(0.1), in: RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous).strokeBorder(Theme.amber.opacity(0.5)))
+        .onChange(of: period == nil) { _, gone in if gone { dismiss() } }
     }
 }
-
-// MARK: - KPIs
-
-struct AIBillingKPIGrid: View {
-    var analytics: AIAnalytics
-
-    var body: some View {
-        let s = analytics.summary
-        let cur = analytics.viewCurrency
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], spacing: 8) {
-            AIBillingKPICard(title: "Lifetime AI billing (\(cur))", value: Money.format(s.lifetimeSpendInView, cur), highlight: true)
-            AIBillingKPICard(title: "Overlap this month (\(cur))", value: Money.format(s.currentMonthOverlapSpendInView, cur))
-            AIBillingKPICard(title: "Active entries", value: "\(s.activeSubscriptions)")
-            AIBillingKPICard(title: "Total entries", value: "\(s.periodCount)")
-        }
-    }
-}
-
-struct AIBillingKPICard: View {
-    var title: String
-    var value: String
-    var highlight = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.scaled(12, weight: .medium)).foregroundStyle(Theme.mutedForeground).lineLimit(2)
-            Text(value).font(.scaled(18, weight: .semibold)).tabular().foregroundStyle(Theme.foreground)
-                .lineLimit(1).minimumScaleFactor(0.7)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, minHeight: 72, alignment: .topLeading)
-        .background(highlight ? Theme.primary.opacity(0.05) : Theme.card,
-                    in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
-            .strokeBorder(highlight ? Theme.primary.opacity(0.4) : Theme.border, lineWidth: 1))
-    }
-}
-
-// MARK: - Chart
-
-struct AIBillingChartCard: View {
-    var analytics: AIAnalytics
-    @Binding var mode: AIBillingChartMode
-    @State private var selected: String?
-
-    private var points: [AIAnalytics.MonthPoint] {
-        mode == .monthly ? analytics.spendByMonth : analytics.cumulativeByMonth
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(mode == .monthly ? "Spend per month" : "Cumulative spend").font(.cardTitle)
-                    Text(mode == .monthly ? "Monthly AI billing total in \(analytics.viewCurrency)"
-                                          : "Running total in \(analytics.viewCurrency) over time")
-                        .font(.scaled(13)).foregroundStyle(Theme.mutedForeground)
-                }
-                Spacer(minLength: 0)
-                AIBillingModeToggle(mode: $mode)
-            }
-            selectionLine
-            AIBillingChart(points: points, mode: mode, currency: analytics.viewCurrency, selected: $selected)
-                .frame(height: 200)
-                .padding(8)
-                .background(Theme.muted.opacity(0.2), in: RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous).strokeBorder(Theme.border.opacity(0.6)))
-        }
-        .card()
-        .onChange(of: mode) { _, _ in selected = nil }
-    }
-
-    @ViewBuilder private var selectionLine: some View {
-        if let sel = selected, let p = points.first(where: { $0.month == sel }) {
-            let label = AIBillingFormat.monthDate(sel).map { DayCalc.current.format($0, "MMM yyyy") } ?? sel
-            Text("\(label) · \(mode == .monthly ? "Spend" : "Total"): \(Money.format(p.totalInView, analytics.viewCurrency))")
-                .font(.scaled(12, weight: .medium)).foregroundStyle(Theme.mutedForeground).tabular()
-        }
-    }
-}
-
-struct AIBillingModeToggle: View {
-    @Binding var mode: AIBillingChartMode
-
-    var body: some View {
-        HStack(spacing: 0) {
-            item(.monthly, "Monthly")
-            Rectangle().fill(Theme.border).frame(width: 1)
-            item(.cumulative, "Cumulative")
-        }
-        .fixedSize()
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Theme.border))
-    }
-
-    private func item(_ m: AIBillingChartMode, _ label: String) -> some View {
-        let on = mode == m
-        return Button { mode = m } label: {
-            Text(label)
-                .font(.scaled(12, weight: .medium))
-                .foregroundStyle(on ? Theme.onPrimary : Theme.mutedForeground)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .frame(maxHeight: .infinity)
-                .background(on ? Theme.primary : Color.clear)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(on ? .isSelected : [])
-    }
-}
+#endif
 
 struct AIBillingChart: View {
     var points: [AIAnalytics.MonthPoint]
@@ -419,99 +434,3 @@ struct AIBillingChart: View {
     }
 }
 
-// MARK: - Rankings
-
-struct AIBillingRankingCard: View {
-    var rows: [AIAnalytics.Ranked]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Most tracked hours credited").font(.cardTitle)
-            VStack(spacing: 0) {
-                ForEach(Array(rows.enumerated()), id: \.offset) { i, r in
-                    HStack(spacing: 8) {
-                        Text(r.name).lineLimit(1).truncationMode(.tail)
-                        Spacer(minLength: 8)
-                        Text("\(AIBillingFormat.number(r.trackedHours))h").tabular()
-                    }
-                    .font(.scaled(14))
-                    .padding(.vertical, 8)
-                    if i < rows.count - 1 { Rectangle().fill(Theme.border.opacity(0.5)).frame(height: 1) }
-                }
-            }
-        }
-        .card()
-        .frame(maxWidth: 576, alignment: .leading)
-    }
-}
-
-// MARK: - Entries
-
-struct AIBillingEntriesSection: View {
-    var periods: [AIPeriod]
-    var loading: Bool
-    var viewCurrency: String
-    var busy: Bool
-    var actionError: String?
-    var onPatch: (AIPeriod, [String: Any?]) -> Void
-    var onEdit: (AIPeriod) -> Void
-    var onDelete: (AIPeriod) -> Void
-
-    @State private var showPast = false
-
-    private func isActive(_ p: AIPeriod) -> Bool {
-        p.metrics?.isActive ?? (AIPeriodState.of(p) == .running)
-    }
-
-    var body: some View {
-        let active = periods.filter { isActive($0) }
-        let past = periods.filter { !isActive($0) }
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Entries").font(.scaled(14, weight: .semibold))
-            InlineError(text: actionError)
-            if loading {
-                Skeleton(height: 160)
-            } else if periods.isEmpty {
-                Text("No AI billing entries yet. Use Add AI billing to start tracking.")
-                    .font(.scaled(14))
-                    .foregroundStyle(Theme.mutedForeground)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 32)
-                    .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
-                        .strokeBorder(Theme.border, style: StrokeStyle(lineWidth: 1, dash: [5, 4])))
-            } else {
-                if active.isEmpty {
-                    Text("No active entries.").font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
-                } else {
-                    cards(active)
-                }
-                if !past.isEmpty {
-                    DisclosureGroup(isExpanded: $showPast) {
-                        cards(past).padding(.top, 8)
-                    } label: {
-                        Text("Past entries (\(past.count))")
-                            .font(.scaled(12, weight: .medium))
-                            .foregroundStyle(Theme.mutedForeground)
-                    }
-                    .tint(Theme.mutedForeground)
-                }
-            }
-        }
-    }
-
-    private func cards(_ list: [AIPeriod]) -> some View {
-        VStack(spacing: 12) {
-            ForEach(list) { p in
-                AIBillingPeriodCard(
-                    period: p,
-                    viewCurrency: viewCurrency,
-                    busy: busy,
-                    onPatch: { body in onPatch(p, body) },
-                    onEdit: { onEdit(p) },
-                    onDelete: { onDelete(p) }
-                )
-            }
-        }
-    }
-}

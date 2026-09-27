@@ -4,19 +4,35 @@ import TrackifyKit
 
 // MARK: - Billing screen state (WEB_AUDIT §1.7, billing-page.tsx)
 
-enum BillingTab: String, CaseIterable, Hashable {
-    case sessions, history, rates, ai
+enum BillingRoute: String, CaseIterable, Hashable, Identifiable {
+    case sessions, payments, rates, ai
+
+    var id: String { rawValue }
 
     var label: String {
         switch self {
         case .sessions: "Sessions"
-        case .history: "History"
+        case .payments: "Payments"
         case .rates: "Rates"
-        case .ai: "AI billing"
+        case .ai: "AI Subscriptions"
         }
     }
 
-    var index: Int { Self.allCases.firstIndex(of: self) ?? 0 }
+    var icon: String {
+        switch self {
+        case .sessions: "list.bullet.rectangle"
+        case .payments: "banknote"
+        case .rates: "tag"
+        case .ai: "sparkles"
+        }
+    }
+
+    /// Test hook / deep link: `-TrackifyBillingTab sessions|history|payments|rates|ai`.
+    static var launchRoute: BillingRoute? {
+        guard let raw = UserDefaults.standard.string(forKey: "TrackifyBillingTab") else { return nil }
+        if raw == "history" { return .payments }
+        return BillingRoute(rawValue: raw)
+    }
 }
 
 /// Everything that decides which sessions the ledger requests.
@@ -27,12 +43,6 @@ struct BillingSessionsKey: Hashable {
     var group: String
     var task: String
     var status: BillingMath.Status
-}
-
-/// `.task(id:)` key: data tick (socket/refresh) + the sessions filter.
-struct BillingLoadKey: Hashable {
-    var tick: Int
-    var sessions: BillingSessionsKey
 }
 
 @Observable
@@ -68,11 +78,11 @@ final class BillingStore {
 
     // Ledger UI
     var selected: Set<String> = []
-    var collapsed: Set<String> = []
 
     private var sessionsToken = 0
     private var lastTick: Int?
     private var lastSessionsKey: BillingSessionsKey?
+    private var requestedKey: BillingSessionsKey?
 
     // MARK: Derived
 
@@ -161,10 +171,6 @@ final class BillingStore {
         }
     }
 
-    func toggleCollapsed(_ key: String) {
-        if collapsed.contains(key) { collapsed.remove(key) } else { collapsed.insert(key) }
-    }
-
     /// Heatmap click: Period = Custom that day, Status = All.
     func filterToDay(_ day: Date) {
         let calc = DayCalc.current
@@ -177,16 +183,17 @@ final class BillingStore {
 
     // MARK: Loading
 
-    /// Called from `.task(id: BillingLoadKey)`: a filter change reloads only the ledger (with skeleton);
-    /// appearing or a data tick refreshes everything.
+    /// Appearing or a data tick (socket / refresh) reloads everything.
     func load(tick: Int, api: APIClient) async {
-        let key = sessionsKey
-        if lastTick == tick, let last = lastSessionsKey, last != key {
-            await loadSessions(api, skeleton: true)
-        } else {
-            await loadAll(api, skeleton: lastSessionsKey != key)
-        }
+        guard lastTick != tick || lastSessionsKey == nil else { return }
+        await loadAll(api, skeleton: lastSessionsKey == nil)
         if !Task.isCancelled { lastTick = tick }
+    }
+
+    /// A filter change reloads only the ledger.
+    func filtersChanged(_ api: APIClient) async {
+        guard let requested = requestedKey, requested != sessionsKey else { return }
+        await loadSessions(api, skeleton: true)
     }
 
     func loadAll(_ api: APIClient, skeleton: Bool = false) async {
@@ -224,6 +231,7 @@ final class BillingStore {
         sessionsToken += 1
         let token = sessionsToken
         let key = sessionsKey
+        requestedKey = key
         if skeleton {
             sessionsLoading = true
             sessionsError = nil
@@ -235,6 +243,7 @@ final class BillingStore {
                 taskId: key.task == "all" ? nil : key.task)
             guard token == sessionsToken else { return }
             sessions = rows
+            selected.formIntersection(Set(rows.filter { !$0.isPaid }.map(\.id)))
             sessionsError = nil
             sessionsLoading = false
             lastSessionsKey = key
@@ -283,5 +292,63 @@ final class BillingStore {
             reopening = nil
             reopenError = (error as? APIError)?.message ?? "Failed to reopen"
         }
+    }
+}
+
+// MARK: - Labels
+
+extension BillingMath.GroupBy {
+    /// Readable ledger section title for a UTC group key ("2026-09-26", "2026-W39", "2026-09").
+    func title(_ key: String) -> String {
+        let bits = key.split(separator: "-")
+        var c = DateComponents()
+        c.timeZone = TimeZone(identifier: "UTC")
+        switch self {
+        case .day:
+            guard bits.count == 3, let y = Int(bits[0]), let m = Int(bits[1]), let d = Int(bits[2]) else { return key }
+            c.year = y; c.month = m; c.day = d
+            guard let date = Calendar(identifier: .gregorian).date(from: c) else { return key }
+            let f = DateFormatter()
+            f.timeZone = TimeZone(identifier: "UTC")
+            let thisYear = Calendar.current.component(.year, from: Date()) == y
+            f.setLocalizedDateFormatFromTemplate(thisYear ? "EEEEMMMMd" : "EEEEMMMMdyyyy")
+            return f.string(from: date)
+        case .week:
+            guard bits.count == 2, bits[1].hasPrefix("W"), let w = Int(bits[1].dropFirst()) else { return key }
+            return "Week \(w), \(bits[0])"
+        case .month:
+            guard bits.count == 2, let y = Int(bits[0]), let m = Int(bits[1]) else { return key }
+            c.year = y; c.month = m; c.day = 1
+            guard let date = Calendar(identifier: .gregorian).date(from: c) else { return key }
+            let f = DateFormatter()
+            f.timeZone = TimeZone(identifier: "UTC")
+            f.setLocalizedDateFormatFromTemplate("MMMMyyyy")
+            return f.string(from: date)
+        }
+    }
+}
+
+extension BillingSessionRow {
+    /// "Sep 26 · 09:00–10:30" (or across days: "Sep 26 09:00 → Sep 27 01:00").
+    var timeRangeShort: String {
+        let calc = DayCalc.current
+        if calc.dayKey(from) == calc.dayKey(to) {
+            return "\(calc.format(from, "MMM d")) · \(calc.format(from, "HH:mm"))–\(calc.format(to, "HH:mm"))"
+        }
+        return "\(calc.format(from, "MMM d HH:mm")) → \(calc.format(to, "MMM d HH:mm"))"
+    }
+
+    var clockRange: String {
+        let calc = DayCalc.current
+        return "\(calc.format(from, "HH:mm"))–\(calc.format(to, "HH:mm"))"
+    }
+}
+
+extension BillingMath.SelectionSummary {
+    /// "3 · 4h 20m · 1 200 Kč"
+    var line: String {
+        var parts = ["\(count)", Fmt.durationMinutes(Double(minutes))]
+        parts += byCurrency.map { Money.format($0.1, $0.0) }
+        return parts.joined(separator: " · ")
     }
 }

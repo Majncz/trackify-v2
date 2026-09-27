@@ -149,6 +149,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .background(NoInitialTextFocus())
         .navigationTitle("Settings")
         .navigationSubtitle(model.session?.email ?? "")
         .confirmationDialog("Sign out of Trackify?", isPresented: $confirmSignOut) {
@@ -299,6 +300,27 @@ private struct DeleteAccountSheet: View {
             catch let e as APIError { error = e.status == 403 ? "Incorrect password." : e.message }
             catch { self.error = error.localizedDescription }
             busy = false
+        }
+    }
+}
+/// Opening Settings must not drop the cursor into the first text field (AppKit picks the first key view when the
+/// window becomes key). Resigns a text field's focus that appears on its own right after the form shows.
+private struct NoInitialTextFocus: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { ResetView() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    final class ResetView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard window != nil else { return }
+            for delay in [0.0, 0.1, 0.3, 0.6] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    guard let w = self?.window else { return }
+                    if let editor = w.firstResponder as? NSTextView, editor.isFieldEditor {
+                        w.makeFirstResponder(nil)
+                    }
+                }
+            }
         }
     }
 }

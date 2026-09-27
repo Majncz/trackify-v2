@@ -98,6 +98,7 @@ struct PhoneTabView: View {
         _tab = State(initialValue: t)
         var m = NavigationPath()
         if let more { m.append(more) }
+        if more == .billing, let r = BillingRoute.launchRoute { m.append(r) }
         _morePath = State(initialValue: m)
         var tp = NavigationPath()
         if race { tp.append(TeamRoute.race) }
@@ -178,6 +179,9 @@ struct PadRootView: View {
         case .team: _selection = State(initialValue: .team)
         case .more: _selection = State(initialValue: .more(more ?? .settings))
         }
+        var p = NavigationPath()
+        if more == .billing, let r = BillingRoute.launchRoute { p.append(r) }
+        _path = State(initialValue: p)
     }
 
     var body: some View {

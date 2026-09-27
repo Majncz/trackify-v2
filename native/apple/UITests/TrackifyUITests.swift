@@ -70,6 +70,21 @@ class TrackifyUITestCase: XCTestCase {
         }
     }
 
+    /// A row on the Billing screen (Sessions · Payments · Rates · AI Subscriptions).
+    @discardableResult
+    func openBilling(_ id: String) -> Bool {
+        let r = app.descendants(matching: .any).matching(identifier: "billing-\(id)").firstMatch
+        guard r.waitForExistence(timeout: 5) else { return false }
+        r.tap()
+        Thread.sleep(forTimeInterval: 0.6)
+        return true
+    }
+
+    /// Back to the Billing list: re-enter it from More on iPhone, Back on iPad.
+    func backToBilling() {
+        if hasTabBar { openMore("billing", "Billing") } else { back() }
+    }
+
     func back() {
         let b = app.navigationBars.buttons.element(boundBy: 0)
         if b.exists { b.tap(); Thread.sleep(forTimeInterval: 0.6) }
@@ -187,7 +202,7 @@ final class ScreenshotWalkTests: TrackifyUITestCase {
         } else if row.exists {
             rowMenu(row, "Details")
         }
-        if waitFor(app.buttons["taskName"], 8) {
+        if waitFor(app.buttons["renameTask"], 8) {
             shot("09-task-detail", settle: 1.5)
             scrollDown(3)
             shot("10-task-detail-more", settle: 1.2)
@@ -236,15 +251,37 @@ final class ScreenshotWalkTests: TrackifyUITestCase {
 
         openMore("billing", "Billing")
         shot("18-more-billing", settle: 2.5)
-        scrollDown(2)
-        shot("19-billing-sessions", settle: 1)
-        scrollTop()
-        for (tab, name) in [("History", "20-billing-history"), ("Rates", "21-billing-rates"), ("AI billing", "22-billing-ai")] {
-            let b = app.buttons[tab].firstMatch
-            if b.exists {
-                b.tap()
-                shot(name, settle: 2)
+        if openBilling("sessions") {
+            shot("19-billing-sessions", settle: 2)
+            let select = app.buttons["billingSelect"]
+            if select.waitForExistence(timeout: 3) && select.isEnabled {
+                select.tap()
+                let all = app.buttons["selectAllUnpaid"]
+                if all.waitForExistence(timeout: 2) { all.tap() }
+                shot("19b-billing-select", settle: 1)
+                let mark = app.buttons["billingMarkPaid"]
+                if mark.waitForExistence(timeout: 2) && mark.isEnabled {
+                    mark.tap()
+                    if waitFor(app.buttons["markPaidSubmit"], 4) { shot("19c-billing-mark-paid", settle: 1) }
+                    app.buttons["Cancel"].firstMatch.tap()
+                    waitGone(app.buttons["markPaidSubmit"])
+                }
+                let done = app.navigationBars.buttons["Done"]
+                if done.exists { done.tap() }
             }
+            backToBilling()
+        }
+        if openBilling("payments") {
+            shot("20-billing-history", settle: 1.5)
+            backToBilling()
+        }
+        if openBilling("rates") {
+            shot("21-billing-rates", settle: 1.5)
+            backToBilling()
+        }
+        if openBilling("ai") {
+            shot("22-billing-ai", settle: 2.5)
+            backToBilling()
         }
 
         openMore("chat", "AI chat")

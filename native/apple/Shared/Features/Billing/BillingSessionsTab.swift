@@ -1,694 +1,546 @@
 import SwiftUI
 import TrackifyKit
 
-// MARK: - Sessions tab (billing-page.tsx ledger panel, session-ledger.tsx, session-row.tsx)
+// MARK: - Sessions ledger (billing-page.tsx ledger panel, session-ledger.tsx, session-row.tsx)
 
-struct BillingSessionsTab: View {
-    @Environment(\.cardChrome) private var chrome
-    var store: BillingStore
-    var wide: Bool
-    var onGoRates: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            if store.billingTasks == nil {
-                if let err = store.billingTasksError {
-                    Text(err).font(.scaled(14)).foregroundStyle(Theme.destructive)
-                } else {
-                    VStack(spacing: 10) {
-                        Skeleton(height: 90)
-                        Skeleton(height: 160)
-                    }
-                }
-            } else if store.hasEnrolled {
-                sessionsCard
-                BillingActivityCalendar(store: store, onGoRates: onGoRates)
-            } else {
-                noTasksCard
-            }
-        }
-    }
-
-    private var sessionsCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if chrome == .card {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Sessions").font(.cardTitle).foregroundStyle(Theme.foreground)
-                    Text("Billable time (rates below). List is the focus — use the compact bar to select payouts.")
-                        .font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            BillingFiltersBar(store: store, wide: wide)
-            if !wide && store.selectedSessions.isEmpty && !store.unpaidInList.isEmpty && store.status != .paid {
-                Button { store.toggleAllUnpaid() } label: {
-                    Label("Select all unpaid (\(store.unpaidInList.count))", systemImage: "checkmark.circle")
-                        .font(.scaled(13, weight: .medium))
-                }
-                .buttonStyle(.borderless)
-                .foregroundStyle(Theme.foreground)
-                .accessibilityIdentifier("selectAllUnpaid")
-            }
-            ledger
-        }
-        .card()
-    }
-
-    @ViewBuilder
-    private var ledger: some View {
-        if store.sessionsLoading {
-            Skeleton(height: 160)
-        } else if let err = store.sessionsError {
-            Text(err).font(.scaled(14)).foregroundStyle(Theme.destructive)
-        } else if store.sessions.isEmpty {
-            BillingDashedBox(text: "No sessions in this range. Try another filter or enroll a task.")
-        } else {
-            VStack(spacing: 8) {
-                ForEach(BillingMath.sections(store.sessions, by: store.groupBy)) { section in
-                    BillingLedgerSection(section: section, store: store)
-                }
-            }
-            .padding(.top, 4)
-        }
-    }
-
-    private var noTasksCard: some View {
-        let shape = RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
-        return VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("No billable tasks yet").font(.cardTitle).foregroundStyle(Theme.foreground)
-                Text("Add at least one task with a rate on the Rates tab, then come back here.")
-                    .font(.scaled(14)).foregroundStyle(Theme.mutedForeground)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Button("Go to Rates", action: onGoRates).buttonStyle(.t(.primary))
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.card, in: shape)
-        .overlay(shape.strokeBorder(Theme.border, style: StrokeStyle(lineWidth: 1, dash: [5, 4])))
-    }
+/// A batch of sessions to mark as paid.
+struct MarkPaidBatch: Identifiable {
+    let id = UUID()
+    let rows: [BillingSessionRow]
 }
 
-/// Dashed, muted empty-state box (web: `border-2 border-dashed bg-muted/25 shadow-inner`).
-struct BillingDashedBox: View {
-    var text: String
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
-        Text(text)
-            .font(.scaled(14))
-            .foregroundStyle(Theme.mutedForeground)
-            .multilineTextAlignment(.center)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 36)
-            .frame(maxWidth: .infinity)
-            .background(Theme.muted.opacity(0.25), in: shape)
-            .overlay(shape.strokeBorder(Theme.border, style: StrokeStyle(lineWidth: 2, dash: [6, 4])))
-    }
-}
-
-// MARK: - Filters toolbar (billing-filters.tsx)
-
-struct BillingFiltersBar: View {
+struct BillingSessionsView: View {
+    @Environment(AppModel.self) private var model
     @Bindable var store: BillingStore
-    var wide: Bool
-    @Environment(\.cardChrome) private var chrome
+    var onGoRates: (() -> Void)? = nil
 
-    private var columns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .topLeading), count: wide ? 4 : 2)
-    }
+    @State private var markPaid: MarkPaidBatch?
+    @State private var showCalendar = false
+    #if os(iOS)
+    @State private var editMode: EditMode = .inactive
+    @Environment(\.dynamicTypeSize) private var typeSize
+    private var editing: Bool { editMode.isEditing }
+    #endif
 
-    private var periodOptions: [(BillingMath.Period, String)] { BillingMath.Period.allCases.map { ($0, $0.label) } }
-    private var statusOptions: [(BillingMath.Status, String)] { BillingMath.Status.allCases.map { ($0, $0.label) } }
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-        VStack(alignment: .leading, spacing: 10) {
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
-                BillingFilterMenu(title: "Period", options: periodOptions, selection: $store.period)
-                BillingFilterMenu(title: "Group", options: store.groupOptions,
-                                  selection: Binding(get: { store.groupFilter }, set: { store.setGroupFilter($0) }))
-                BillingFilterMenu(title: "Task", options: store.taskOptions, selection: $store.taskFilter)
-                BillingFilterMenu(title: "Status", options: statusOptions, selection: $store.status)
-            }
-            if store.period == .custom {
-                customRange
-            }
-            Rectangle().fill(Theme.border).frame(height: chrome == .plain ? 1 : 2)
-            groupByRow
-        }
-        .padding(chrome == .plain ? 0 : 10)
-        .background(chrome == .plain ? Color.clear : Theme.card, in: shape)
-        .overlay(shape.strokeBorder(chrome == .plain ? Color.clear : Theme.border, lineWidth: 2))
-        .shadow(color: .black.opacity(chrome == .plain ? 0 : 0.08), radius: 6, x: 0, y: 3)
-    }
-
-    private var customRange: some View {
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-        return HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                BillingKicker(text: "From")
-                DatePicker("From", selection: $store.customFrom, displayedComponents: .date)
-                    .labelsHidden()
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                BillingKicker(text: "To")
-                DatePicker("To", selection: $store.customTo, displayedComponents: .date)
-                    .labelsHidden()
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(8)
-        .background(Theme.muted.opacity(0.3), in: shape)
-        .overlay(shape.strokeBorder(Theme.border, style: StrokeStyle(lineWidth: 2, dash: [5, 4])))
-    }
-
-    private var groupByRow: some View {
-        HStack(spacing: 6) {
-            BillingKicker(text: "Group list by")
-            Spacer(minLength: 8)
-            ForEach(BillingMath.GroupBy.allCases, id: \.self) { g in
-                Button(g.label) { store.groupBy = g }
-                    .buttonStyle(.t(store.groupBy == g ? .secondary : .outline, .sm))
-                    .accessibilityAddTraits(store.groupBy == g ? .isSelected : [])
-            }
-        }
-    }
-}
-
-/// 11 pt uppercase muted label (web `text-[11px] uppercase tracking-wide`).
-struct BillingKicker: View {
-    var text: String
-    var body: some View {
-        Text(text)
-            .font(.label11)
-            .tracking(0.6)
-            .textCase(.uppercase)
-            .foregroundStyle(Theme.mutedForeground)
-            .lineLimit(1)
-    }
-}
-
-/// Compact select: label + menu button showing the current choice.
-struct BillingFilterMenu<V: Hashable>: View {
-    var title: String
-    var options: [(V, String)]
-    @Binding var selection: V
-
-    private var currentLabel: String {
-        options.first(where: { $0.0 == selection })?.1 ?? options.first?.1 ?? ""
-    }
+    private var sections: [BillingMath.Section] { BillingMath.sections(store.sessions, by: store.groupBy) }
+    private var selection: BillingMath.SelectionSummary { BillingMath.summary(store.selectedSessions) }
+    private var canSelect: Bool { store.status != .paid && !store.unpaidInList.isEmpty }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            BillingKicker(text: title)
-            Menu {
-                Picker(title, selection: $selection) {
-                    ForEach(options, id: \.0) { opt in
-                        Text(opt.1).tag(opt.0)
-                    }
+        platformBody
+            .task(id: store.sessionsKey) { await store.filtersChanged(model.api) }
+            .sheet(item: $markPaid) { batch in
+                MarkPaidSheet(sessions: batch.rows) {
+                    #if os(iOS)
+                    editMode = .inactive
+                    #endif
+                    Task { await store.afterPaymentChange(model.api) }
                 }
-                .pickerStyle(.inline)
-            } label: {
-                HStack(spacing: 4) {
-                    Text(currentLabel)
-                        .font(.scaled(13))
-                        .foregroundStyle(Theme.foreground)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Spacer(minLength: 4)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.scaled(10, weight: .semibold))
-                        .foregroundStyle(Theme.mutedForeground)
-                }
-                .padding(.horizontal, 10)
-                .frame(maxWidth: .infinity, minHeight: 32)
-                .background(Theme.background, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Theme.border))
-                .contentShape(Rectangle())
             }
-            .menuStyle(.button)
-            .buttonStyle(.plain)
-            .menuIndicator(.hidden)
-            .accessibilityLabel("\(title): \(currentLabel)")
+            .sheet(isPresented: $showCalendar) {
+                BillingCalendarSheet(store: store)
+            }
+    }
+
+    private func openMarkPaid(_ rows: [BillingSessionRow]) {
+        let unpaid = rows.filter { !$0.isPaid }
+        guard !unpaid.isEmpty, Set(unpaid.map(\.currency)).count == 1 else { return }
+        markPaid = MarkPaidBatch(rows: unpaid)
+    }
+
+    // MARK: Shared states
+
+    @ViewBuilder private var stateView: some View {
+        if store.billingTasks == nil, let err = store.billingTasksError {
+            ContentUnavailableView("Couldn't Load Billing", systemImage: "exclamationmark.triangle", description: Text(err))
+        } else if store.billingTasks != nil && !store.hasEnrolled {
+            ContentUnavailableView {
+                Label("No Billable Tasks", systemImage: "tag")
+            } description: {
+                Text("Give at least one task an hourly rate under Rates, then come back here.")
+            } actions: {
+                if let onGoRates { Button("Open Rates", action: onGoRates) }
+            }
+        } else if let err = store.sessionsError {
+            ContentUnavailableView("Couldn't Load Sessions", systemImage: "exclamationmark.triangle", description: Text(err))
+        } else if store.sessionsLoading || store.billingTasks == nil {
+            ProgressView()
+        } else {
+            ContentUnavailableView("No Sessions", systemImage: "clock",
+                                   description: Text("No sessions in this range. Try another filter or enroll a task."))
         }
     }
-}
 
-// MARK: - Ledger section
+    private var showsList: Bool {
+        store.hasEnrolled && !store.sessionsLoading && store.sessionsError == nil && !store.sessions.isEmpty
+    }
 
-struct BillingLedgerSection: View {
-    let section: BillingMath.Section
-    var store: BillingStore
-    @Environment(\.cardChrome) private var chrome
+    private var filterSummary: String {
+        var parts = [store.period.label.replacingOccurrences(of: "…", with: ""), store.status.label]
+        if store.groupFilter != "all" { parts.append(store.groupOptions.first { $0.0 == store.groupFilter }?.1 ?? "") }
+        if store.taskFilter != "all" { parts.append(store.taskOptions.first { $0.0 == store.taskFilter }?.1 ?? "") }
+        parts.append("by \(store.groupBy.label.lowercased())")
+        return parts.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
 
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
-        let isCollapsed = store.collapsed.contains(section.key)
-        if chrome == .plain {
-            // Phones: a plain list — day header, then rows separated by hairlines.
-            VStack(alignment: .leading, spacing: 0) {
-                header(isCollapsed: isCollapsed).padding(.vertical, 6)
-                if !isCollapsed {
-                    ForEach(section.rows) { row in
-                        Hairline()
-                        BillingSessionRowView(row: row, selected: store.selected.contains(row.id)) {
-                            store.toggle(row.id)
+    // MARK: iPhone / iPad
+
+    #if os(iOS)
+    private var platformBody: some View {
+        List(selection: $store.selected) {
+            Section {
+                if store.period == .custom {
+                    DatePicker("From", selection: $store.customFrom, displayedComponents: .date)
+                    DatePicker("To", selection: $store.customTo, in: store.customFrom..., displayedComponents: .date)
+                }
+            } header: {
+                Text(filterSummary).textCase(nil)
+            }
+            if showsList {
+                ForEach(sections) { section in
+                    Section {
+                        ForEach(section.rows) { row in
+                            NavigationLink(value: row) {
+                                BillingSessionCell(row: row, stacked: typeSize.isAccessibilitySize)
+                            }
+                            .selectionDisabled(row.isPaid)
+                            .swipeActions(edge: .leading) {
+                                if !row.isPaid {
+                                    Button { openMarkPaid([row]) } label: { Label("Mark Paid", systemImage: "checkmark.circle") }
+                                        .tint(.green)
+                                }
+                            }
+                            .contextMenu { rowMenu(row) }
                         }
+                    } header: {
+                        sectionHeader(section)
                     }
                 }
-                Hairline()
+            }
+        }
+        .listStyle(.insetGrouped)
+        .overlay { if !showsList { stateView } }
+        .environment(\.editMode, $editMode)
+        .navigationTitle("Sessions")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(editing)
+        .navigationDestination(for: BillingSessionRow.self) { row in
+            BillingSessionDetail(row: row, onMarkPaid: { openMarkPaid([row]) })
+        }
+        .toolbar(editing ? .hidden : .automatic, for: .tabBar)
+        .toolbar { iosToolbar }
+        .refreshable { await store.loadAll(model.api) }
+        .onChange(of: editMode) { _, m in if !m.isEditing { store.selected = [] } }
+        .onChange(of: store.unpaidInList.isEmpty) { _, empty in if empty { editMode = .inactive } }
+    }
+
+    @ToolbarContentBuilder private var iosToolbar: some ToolbarContent {
+        if editing {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(store.allUnpaidSelected ? "Deselect All" : "Select All") { store.toggleAllUnpaid() }
+                    .accessibilityIdentifier("selectAllUnpaid")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Done") { editMode = .inactive }.fontWeight(.semibold)
+            }
+            if !store.selectedSessions.isEmpty {
+                ToolbarItemGroup(placement: .bottomBar) {
+                    if selection.multipleCurrencies {
+                        Text("Select one currency").font(.footnote).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button { openMarkPaid(store.selectedSessions) } label: {
+                        Text("Mark as Paid (\(selection.count) · \(selection.byCurrency.map { Money.format($0.1, $0.0) }.joined(separator: " · ")))")
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(selection.multipleCurrencies)
+                    .accessibilityIdentifier("billingMarkPaid")
+                }
             }
         } else {
-            boxed(isCollapsed: isCollapsed, shape: shape)
-        }
-    }
-
-    private func boxed(isCollapsed: Bool, shape: RoundedRectangle) -> some View {
-        VStack(spacing: 0) {
-            header(isCollapsed: isCollapsed)
-            if !isCollapsed {
-                Rectangle().fill(Theme.border).frame(height: 2)
-                VStack(spacing: 8) {
-                    ForEach(section.rows) { row in
-                        BillingSessionRowView(row: row, selected: store.selected.contains(row.id)) {
-                            store.toggle(row.id)
-                        }
-                    }
-                }
-                .padding(8)
-                .background(Theme.muted.opacity(0.2))
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                BillingFilterMenu(store: store, onCalendar: { showCalendar = true })
+                Button("Select") { editMode = .active }
+                    .disabled(!canSelect || !showsList)
+                    .accessibilityIdentifier("billingSelect")
             }
         }
-        .background(Theme.card)
-        .clipShape(shape)
-        .overlay(shape.strokeBorder(Theme.border, lineWidth: 2))
-        .shadow(color: .black.opacity(0.05), radius: 1, x: 0, y: 1)
     }
 
-    private func header(isCollapsed: Bool) -> some View {
+    private func sectionHeader(_ section: BillingMath.Section) -> some View {
         let ids = section.rows.filter { !$0.isPaid }.map(\.id)
         let allSelected = !ids.isEmpty && ids.allSatisfy { store.selected.contains($0) }
-        return VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 8) {
-                Button {
-                    withAnimation(.easeOut(duration: 0.2)) { store.toggleCollapsed(section.key) }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
-                            .font(.scaled(12, weight: .semibold))
-                            .frame(width: 16)
-                        Text(section.key).font(.scaled(14, weight: .medium)).tabular()
-                    }
-                    .foregroundStyle(Theme.foreground)
-                    .frame(minHeight: 30)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(section.key), \(isCollapsed ? "collapsed" : "expanded")")
-                Spacer(minLength: 8)
-                BillingCheckbox(checked: allSelected, disabled: ids.isEmpty, label: "Select all unpaid in \(section.key)") {
-                    store.setSelected(ids, !allSelected)
-                }
-                Text("Group").font(.scaled(11)).foregroundStyle(Theme.mutedForeground)
+        let unpaid = section.unpaidByCurrency.map { Money.format($0.1, $0.0) }.joined(separator: " · ")
+        return HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(store.groupBy.title(section.key))
+                Text(Fmt.durationMinutes(Double(section.totalMinutes)) + (unpaid.isEmpty ? "" : " · \(unpaid) unpaid"))
+                    .monospacedDigit()
+                    .fontWeight(.regular)
             }
-            FlowLayout(spacing: 10, lineSpacing: 2) {
-                Text("\(Fmt.durationMinutes(Double(section.totalMinutes))) total")
-                    .font(.scaled(12)).foregroundStyle(Theme.mutedForeground).tabular()
-                ForEach(section.unpaidByCurrency, id: \.0) { entry in
-                    Text("\(Money.format(entry.1, entry.0)) unpaid")
-                        .font(.scaled(12, weight: .medium)).foregroundStyle(Theme.mutedForeground).tabular()
-                }
-            }
-            .padding(.leading, 20)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.muted.opacity(0.55))
-    }
-}
-
-// MARK: - Checkbox
-
-struct BillingCheckbox: View {
-    var checked: Bool
-    var disabled = false
-    var label: String
-    var action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(checked ? Theme.primary : Theme.background)
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .strokeBorder(checked ? Theme.primary : Theme.mutedForeground.opacity(0.6), lineWidth: 1)
-                if checked {
-                    Image(systemName: "checkmark")
-                        .font(.scaled(10, weight: .bold))
-                        .foregroundStyle(Theme.onPrimary)
-                }
-            }
-            .frame(width: 18, height: 18)
-            .frame(width: 30, height: 30)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(disabled)
-        .opacity(disabled ? 0.5 : 1)
-        .accessibilityLabel(label)
-        .accessibilityValue(checked ? "Checked" : "Unchecked")
-    }
-}
-
-// MARK: - Session row (session-row.tsx)
-
-struct BillingSessionRowView: View {
-    let row: BillingSessionRow
-    let selected: Bool
-    let onToggle: () -> Void
-    @Environment(\.cardChrome) private var chrome
-
-    private var interactive: Bool { !row.isPaid }
-    private var highlighted: Bool { interactive && selected }
-
-    private var timeRange: String {
-        let calc = DayCalc.current
-        return "\(calc.format(row.from, "MMM d, yyyy")) · \(calc.format(row.from, "HH:mm"))–\(calc.format(row.to, "HH:mm"))"
-    }
-
-    private var borderColor: Color {
-        if highlighted { return Color(hex: row.accentHex, opacity: 0.55) }
-        if row.isPaid { return Theme.mutedForeground.opacity(0.25) }
-        return Theme.border
-    }
-
-    var body: some View {
-        if chrome == .plain { plainRow } else { boxedRow }
-    }
-
-    /// Phones: a plain row; selection shows as a light accent tint.
-    private var plainRow: some View {
-        HStack(alignment: .top, spacing: 10) {
-            BillingCheckbox(checked: selected, disabled: row.isPaid,
-                            label: row.isPaid ? "Session already paid" : "Select session to include in payment",
-                            action: onToggle)
-                .padding(.top, -4)
-            info
-            Spacer(minLength: 6)
-            trailing
-        }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 4)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(highlighted ? Color(hex: row.accentHex, opacity: 0.12) : Color.clear)
-        .contentShape(Rectangle())
-        .onTapGesture { if interactive { onToggle() } }
-    }
-
-    private var boxedRow: some View {
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-        let accent = row.accentHex
-        return HStack(alignment: .top, spacing: 8) {
-            BillingCheckbox(checked: selected, disabled: row.isPaid,
-                            label: row.isPaid ? "Session already paid" : "Select session to include in payment",
-                            action: onToggle)
-                .padding(.top, -4)
-            info
-            Spacer(minLength: 6)
-            trailing
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(hex: accent, opacity: highlighted ? 0.22 : 0.12), in: shape)
-        .background(Theme.card, in: shape)
-        .overlay(shape.strokeBorder(borderColor, lineWidth: 2))
-        .overlay {
-            if highlighted {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(Color(hex: accent, opacity: 0.35), lineWidth: 1)
-                    .padding(-1)
+            Spacer()
+            if editing && !ids.isEmpty {
+                Button(allSelected ? "Deselect" : "Select") { store.setSelected(ids, !allSelected) }
+                    .font(.subheadline)
+                    .accessibilityLabel("\(allSelected ? "Deselect" : "Select") unpaid in \(store.groupBy.title(section.key))")
             }
         }
-        .shadow(color: highlighted ? Color(hex: accent, opacity: 0.2) : Color.black.opacity(0.05),
-                radius: highlighted ? 4 : 1, x: 0, y: highlighted ? 2 : 1)
-        .contentShape(shape)
-        .onTapGesture { if interactive { onToggle() } }
-        .animation(.easeOut(duration: 0.15), value: selected)
+        .textCase(nil)
     }
 
-    private var info: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            FlowLayout(spacing: 6, lineSpacing: 4) {
-                Text(row.taskName)
-                    .font(.scaled(14, weight: .medium))
-                    .foregroundStyle(Theme.foreground)
-                    .lineLimit(1)
-                if let g = row.taskGroup {
-                    AccentBadge(text: g.name, hex: row.accentHex)
-                }
-            }
-            Text(timeRange)
-                .font(.scaled(12)).foregroundStyle(Theme.mutedForeground).tabular()
-            if row.isPaid, let paidAt = row.paymentPaidAt {
-                Text("Paid \(DayCalc.current.format(paidAt, "MMM d, yyyy"))")
-                    .font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
-            }
-        }
-    }
-
-    private var trailing: some View {
-        VStack(alignment: .trailing, spacing: 6) {
-            Badge(text: Fmt.durationMinutes(Double(row.durationMinutes)), kind: .secondary, mono: true)
-            Text(Money.format(row.earnings, row.currency))
-                .font(.scaled(14, weight: .semibold))
-                .foregroundStyle(Theme.foreground)
-                .tabular()
-            Badge(text: row.isPaid ? "Paid" : "Unpaid", kind: row.isPaid ? .primary : .outline)
-        }
-        .fixedSize()
-    }
-}
-
-// MARK: - Sticky selection bar (session-ledger.tsx toolbar)
-
-struct BillingSelectionBar: View {
-    var store: BillingStore
-    var wide: Bool
-    var onMarkPaid: () -> Void
-    @State private var showHelp = false
-
-    private var hint: String {
-        switch store.status {
-        case .paid: "Switch status to Unpaid or All to select open amounts."
-        case .unpaid: "Tap unpaid rows or checkboxes. Select all selects every unpaid row in this list (tap again to clear). Mark as paid: one currency per batch."
-        case .all: "Select unpaid rows only; paid rows are read-only. Mark as paid uses one currency per batch."
-        }
-    }
-
-    var body: some View {
-        let sum = BillingMath.summary(store.selectedSessions)
-        let unpaid = store.unpaidInList.count
-        let ready = sum.count > 0 && sum.byCurrency.count == 1
-        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
-        Group {
-            if wide {
-                HStack(alignment: .center, spacing: 10) {
-                    summaryBlock(sum, unpaid: unpaid, ready: ready)
-                    buttons(unpaid: unpaid, ready: ready)
-                }
-            } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    summaryBlock(sum, unpaid: unpaid, ready: ready)
-                    HStack(spacing: 8) {
-                        Spacer(minLength: 0)
-                        buttons(unpaid: unpaid, ready: ready)
-                    }
-                }
-            }
-        }
-        .padding(10)
-        .background(Theme.card.opacity(0.9), in: shape)
-        .background(.regularMaterial, in: shape)
-        .overlay(shape.strokeBorder(Theme.border, lineWidth: 2))
-        .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
-        .frame(maxWidth: 896)
-        .frame(maxWidth: .infinity)
-    }
-
-    private func summaryBlock(_ sum: BillingMath.SelectionSummary, unpaid: Int, ready: Bool) -> some View {
-        HStack(alignment: .top, spacing: 6) {
-            Button { showHelp.toggle() } label: {
-                Image(systemName: "questionmark.circle")
-                    .font(.scaled(15))
-                    .foregroundStyle(Theme.mutedForeground)
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("How selection works")
-            .popover(isPresented: $showHelp) {
-                Text(hint)
-                    .font(.scaled(12))
-                    .foregroundStyle(Theme.foreground)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(width: 260, alignment: .leading)
-                    .padding(12)
-                    #if os(iOS)
-                    .presentationCompactAdaptation(.popover)
-                    #endif
-            }
-            VStack(alignment: .leading, spacing: 3) {
-                summaryLine(sum, unpaid: unpaid)
-                    .font(.scaled(12))
-                    .foregroundStyle(Theme.mutedForeground)
-                    .fixedSize(horizontal: false, vertical: true)
-                if sum.count > 0 && !ready {
-                    Text("Multiple currencies — narrow selection to one currency.")
-                        .font(.scaled(11))
-                        .foregroundStyle(Theme.destructive)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .padding(.top, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private func summaryLine(_ sum: BillingMath.SelectionSummary, unpaid: Int) -> Text {
-        if sum.count > 0 {
-            var t = Text("\(sum.count)").fontWeight(.semibold).foregroundColor(Theme.foreground)
-            t = t + Text(" · ").foregroundColor(Theme.mutedForeground)
-            t = t + Text(Fmt.durationMinutes(Double(sum.minutes))).foregroundColor(Theme.foreground)
-            for entry in sum.byCurrency {
-                t = t + Text(" · ").foregroundColor(Theme.mutedForeground)
-                t = t + Text(Money.format(entry.1, entry.0)).fontWeight(.semibold).foregroundColor(Theme.foreground)
-            }
-            return t.monospacedDigit()
-        }
-        if store.status == .paid {
-            return Text("Paid-only view — selection disabled.")
-        }
-        return Text("Nothing selected" + (unpaid > 0 ? " · \(unpaid) unpaid in list" : "") + ".")
-    }
-
-    @ViewBuilder
-    private func buttons(unpaid: Int, ready: Bool) -> some View {
-        if unpaid > 0 && store.status != .paid {
-            Button(store.allUnpaidSelected ? "Clear all" : "All unpaid (\(unpaid))") { store.toggleAllUnpaid() }
-                .buttonStyle(.t(.outline, .sm))
-        }
-        Button("Mark as paid…", action: onMarkPaid)
-            .buttonStyle(.t(.primary, .sm))
-            .disabled(!ready)
-            .accessibilityIdentifier("billingMarkPaid")
-    }
-}
-
-// MARK: - Activity calendar (calendar-heatmap.tsx inside the "(optional)" details)
-
-struct BillingActivityCalendar: View {
-    var store: BillingStore
-    var onGoRates: () -> Void
-    @State private var expanded = false
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
-        VStack(alignment: .leading, spacing: 0) {
+    @ViewBuilder private func rowMenu(_ row: BillingSessionRow) -> some View {
+        if !row.isPaid {
+            Button { openMarkPaid([row]) } label: { Label("Mark as Paid…", systemImage: "checkmark.circle") }
             Button {
-                withAnimation(.easeOut(duration: 0.2)) { expanded.toggle() }
-            } label: {
-                HStack(alignment: .center, spacing: 8) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        (Text("Activity calendar").font(.scaled(14, weight: .medium)).foregroundColor(Theme.foreground)
-                         + Text("  (optional)").font(.scaled(12)).foregroundColor(Theme.mutedForeground))
-                        Text("Same yearly heatmap as home · open when you want the overview")
-                            .font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
-                            .multilineTextAlignment(.leading)
-                    }
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.down")
-                        .font(.scaled(12, weight: .semibold))
-                        .foregroundStyle(Theme.mutedForeground)
-                        .rotationEffect(.degrees(expanded ? 0 : -90))
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityAddTraits(.isHeader)
-            if expanded {
-                Hairline()
-                content.padding(12)
-            }
+                editMode = .active
+                store.selected.insert(row.id)
+            } label: { Label("Select", systemImage: "checkmark.circle.badge.plus") }
         }
-        .background(expanded ? Theme.card : Theme.muted.opacity(0.2), in: shape)
-        .overlay(shape.strokeBorder(Theme.border, lineWidth: 1))
+    }
+    #endif
+
+    // MARK: Mac
+
+    #if os(macOS)
+    private var macSelection: Binding<Set<String>> {
+        Binding(get: { store.selected }, set: { ids in
+            let unpaid = Set(store.unpaidInList.map(\.id))
+            store.selected = ids.intersection(unpaid)
+        })
     }
 
-    @ViewBuilder
-    private var content: some View {
-        if store.sessionsLoading {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Billable activity").font(.cardTitle)
-                Text("Loading…").font(.scaled(13)).foregroundStyle(Theme.mutedForeground)
-                Skeleton(height: 200)
+    private var platformBody: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 12) {
+                BillingSummaryStrip(summary: store.summary)
+                Spacer(minLength: 12)
+                if store.period == .custom {
+                    DatePicker("From", selection: $store.customFrom, displayedComponents: .date)
+                        .fixedSize()
+                    DatePicker("To", selection: $store.customTo, in: store.customFrom..., displayedComponents: .date)
+                        .fixedSize()
+                }
             }
-        } else {
-            BillingCalendarBody(sessions: store.sessions, calendarEnd: store.calendarEnd, onGoRates: onGoRates) { day in
-                store.filterToDay(day)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            Divider()
+            if showsList {
+                table
+            } else {
+                stateView.frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            Divider()
+            macStatusBar
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                BillingFilterMenu(store: store, onCalendar: { showCalendar = true })
+                Button { openMarkPaid(store.selectedSessions) } label: {
+                    Label("Mark as Paid…", systemImage: "checkmark.circle")
+                }
+                .disabled(store.selectedSessions.isEmpty || selection.multipleCurrencies)
+                .help("Mark the selected sessions as paid")
+                .accessibilityIdentifier("billingMarkPaid")
             }
         }
+    }
+
+    private var table: some View {
+        Table(of: BillingSessionRow.self, selection: macSelection) {
+            TableColumn("Task") { r in
+                HStack(spacing: 6) {
+                    Circle().fill(Color(hex: r.accentHex)).frame(width: 8, height: 8)
+                    Text(r.taskName).lineLimit(1)
+                }
+                .foregroundStyle(r.isPaid ? .secondary : .primary)
+            }
+            .width(min: 140, ideal: 220)
+            TableColumn("Group") { r in
+                Text(r.taskGroup?.name ?? "—").foregroundStyle(.secondary).lineLimit(1)
+            }
+            .width(min: 70, ideal: 120)
+            TableColumn("Date") { r in
+                Text(DayCalc.current.format(r.from, "EEE, MMM d")).monospacedDigit()
+            }
+            .width(min: 80, ideal: 100)
+            TableColumn("Time") { r in Text(r.clockRange).monospacedDigit() }
+                .width(min: 80, ideal: 96)
+            TableColumn("Duration") { r in
+                Text(Fmt.durationMinutes(Double(r.durationMinutes))).monospacedDigit()
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .width(min: 60, ideal: 72)
+            TableColumn("Amount") { r in
+                Text(Money.format(r.earnings, r.currency)).monospacedDigit()
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .width(min: 80, ideal: 100)
+            TableColumn("Status") { r in
+                if r.isPaid {
+                    Text(r.paymentPaidAt.map { "Paid \(DayCalc.current.format($0, "MMM d"))" } ?? "Paid").foregroundStyle(.secondary)
+                } else {
+                    Text("Unpaid")
+                }
+            }
+            .width(min: 70, ideal: 90)
+        } rows: {
+            ForEach(sections) { section in
+                Section {
+                    ForEach(section.rows) { TableRow($0) }
+                } header: {
+                    HStack {
+                        Text(store.groupBy.title(section.key))
+                        Spacer()
+                        Text(sectionTotals(section)).foregroundStyle(.secondary).monospacedDigit()
+                    }
+                }
+            }
+        }
+        .contextMenu(forSelectionType: String.self) { ids in
+            let rows = store.sessions.filter { ids.contains($0.id) && !$0.isPaid }
+            if !rows.isEmpty {
+                Button("Mark as Paid…") { openMarkPaid(rows) }
+                    .disabled(Set(rows.map(\.currency)).count > 1)
+            }
+            if ids.count == 1, let r = store.sessions.first(where: { ids.contains($0.id) }) {
+                Button("Open Task") { NavigationState.shared.open(.task(r.taskId)) }
+            }
+        } primaryAction: { ids in
+            let rows = store.sessions.filter { ids.contains($0.id) && !$0.isPaid }
+            if !rows.isEmpty { openMarkPaid(rows) }
+        }
+    }
+
+    private func sectionTotals(_ s: BillingMath.Section) -> String {
+        let unpaid = s.unpaidByCurrency.map { Money.format($0.1, $0.0) }.joined(separator: " · ")
+        return Fmt.durationMinutes(Double(s.totalMinutes)) + (unpaid.isEmpty ? "" : " · \(unpaid) unpaid")
+    }
+
+    private var macStatusBar: some View {
+        HStack(spacing: 12) {
+            Text(statusText)
+                .foregroundStyle(selection.multipleCurrencies ? Color.red : Color.secondary)
+                .monospacedDigit()
+                .lineLimit(1)
+            Spacer()
+            if canSelect && showsList {
+                Button(store.allUnpaidSelected ? "Deselect All" : "Select All Unpaid (\(store.unpaidInList.count))") {
+                    store.toggleAllUnpaid()
+                }
+                .accessibilityIdentifier("selectAllUnpaid")
+            }
+            Button("Mark as Paid…") { openMarkPaid(store.selectedSessions) }
+                .buttonStyle(.borderedProminent)
+                .disabled(store.selectedSessions.isEmpty || selection.multipleCurrencies)
+        }
+        .controlSize(.small)
+        .font(.callout)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+
+    private var statusText: String {
+        if selection.count > 0 {
+            return selection.multipleCurrencies
+                ? "\(selection.line) — select one currency to mark as paid"
+                : "\(selection.line) selected"
+        }
+        if store.status == .paid { return "\(filterSummary) — paid sessions can't be selected" }
+        let n = store.unpaidInList.count
+        return "\(filterSummary) — \(n) unpaid session\(n == 1 ? "" : "s")"
+    }
+    #endif
+}
+
+// MARK: - Filters (billing-filters.tsx) as one toolbar menu
+
+struct BillingFilterMenu: View {
+    @Bindable var store: BillingStore
+    var onCalendar: () -> Void
+
+    private var active: Bool {
+        store.period != .thisMonth || store.status != .unpaid || store.groupFilter != "all" || store.taskFilter != "all"
+    }
+
+    var body: some View {
+        Menu {
+            Picker("Period", selection: $store.period) {
+                ForEach(BillingMath.Period.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.menu)
+            Picker("Status", selection: $store.status) {
+                ForEach(BillingMath.Status.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.menu)
+            Picker("Group", selection: Binding(get: { store.groupFilter }, set: { store.setGroupFilter($0) })) {
+                ForEach(store.groupOptions, id: \.0) { Text($0.1).tag($0.0) }
+            }
+            .pickerStyle(.menu)
+            Picker("Task", selection: $store.taskFilter) {
+                ForEach(store.taskOptions, id: \.0) { Text($0.1).tag($0.0) }
+            }
+            .pickerStyle(.menu)
+            Picker("Group By", selection: $store.groupBy) {
+                ForEach(BillingMath.GroupBy.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.menu)
+            Divider()
+            Button(action: onCalendar) { Label("Activity Calendar", systemImage: "calendar") }
+            if active {
+                Button {
+                    store.period = .thisMonth
+                    store.status = .unpaid
+                    store.setGroupFilter("all")
+                } label: { Label("Reset Filters", systemImage: "arrow.counterclockwise") }
+            }
+        } label: {
+            Label("Filter", systemImage: active ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+        }
+        .help("Filter and group sessions")
+        .accessibilityIdentifier("billingFilters")
     }
 }
 
-private struct BillingCalendarBody: View {
-    let sessions: [BillingSessionRow]
-    let calendarEnd: Date?
-    let onGoRates: () -> Void
-    let onDay: (Date) -> Void
+// MARK: - Session cell (iPhone / iPad)
+
+struct BillingSessionCell: View {
+    let row: BillingSessionRow
+    var stacked = false
+
+    var body: some View {
+        let layout = stacked ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                             : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8))
+        layout {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Circle().fill(Color(hex: row.accentHex)).frame(width: 8, height: 8)
+                        .alignmentGuide(.firstTextBaseline) { d in d[.bottom] - 1 }
+                    Text(row.taskName).lineLimit(2)
+                }
+                Text([row.clockRange, row.taskGroup?.name].compactMap { $0 }.joined(separator: " · "))
+                    .font(.subheadline).foregroundStyle(.secondary).monospacedDigit()
+                if row.isPaid {
+                    Label(row.paymentPaidAt.map { "Paid \(DayCalc.current.format($0, "MMM d"))" } ?? "Paid", systemImage: "checkmark.seal")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+            if !stacked { Spacer(minLength: 8) }
+            VStack(alignment: stacked ? .leading : .trailing, spacing: 2) {
+                Text(Money.format(row.earnings, row.currency)).monospacedDigit()
+                Text(Fmt.durationMinutes(Double(row.durationMinutes)))
+                    .font(.subheadline).foregroundStyle(.secondary).monospacedDigit()
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+// MARK: - Session detail
+
+struct BillingSessionDetail: View {
+    let row: BillingSessionRow
+    var onMarkPaid: () -> Void
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent("Task") {
+                    HStack(spacing: 6) {
+                        Circle().fill(Color(hex: row.accentHex)).frame(width: 8, height: 8)
+                        Text(row.taskName)
+                    }
+                }
+                LabeledContent("Group", value: row.taskGroup?.name ?? "Ungrouped")
+            }
+            Section {
+                LabeledContent("Session", value: BillingMath.sessionRange(from: row.from, to: row.to))
+                LabeledContent("Duration", value: Fmt.durationMinutes(Double(row.durationMinutes)))
+                LabeledContent("Rate", value: "\(Money.format(row.hourlyRate, row.currency)) / h")
+                LabeledContent("Amount", value: Money.format(row.earnings, row.currency))
+                LabeledContent("Status", value: row.isPaid
+                               ? (row.paymentPaidAt.map { "Paid \(DayCalc.current.format($0, "MMM d, yyyy · HH:mm"))" } ?? "Paid")
+                               : "Unpaid")
+            }
+            .monospacedDigit()
+            Section {
+                if !row.isPaid {
+                    Button("Mark as Paid…", action: onMarkPaid)
+                }
+                NavigationLink("Open Task", value: Route.task(row.taskId))
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle(row.taskName)
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+    }
+}
+
+// MARK: - Activity calendar (calendar-heatmap.tsx, the "(optional)" details)
+
+struct BillingCalendarSheet: View {
+    var store: BillingStore
+    @Environment(\.dismiss) private var dismiss
 
     private var blurb: String {
-        let base = "Yearly heatmap like the home dashboard—scoped by your filters. Click a day to jump the list there."
-        if let end = calendarEnd { return base + " Shown through \(DayCalc.current.format(end, "MMM d, yyyy"))." }
-        return base + " Through today for All time."
+        let base = "Billable time for the current filters. Tap a day to show just that day in Sessions."
+        if let end = store.calendarEnd { return base + " Shown through \(DayCalc.current.format(end, "MMM d, yyyy"))." }
+        return base
     }
 
     /// First session per task name decides its colour (group accent or task accent).
     private var taskColors: [String: String] {
         var m: [String: String] = [:]
-        for s in sessions where m[s.taskName] == nil { m[s.taskName] = s.accentHex }
+        for s in store.sessions where m[s.taskName] == nil { m[s.taskName] = s.accentHex }
         return m
     }
 
     var body: some View {
-        let data = YearlyCalendarData.fromBilling(sessions, calendarEndDay: calendarEnd)
-        let colors = taskColors
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Billable activity").font(.cardTitle).foregroundStyle(Theme.foreground)
-                Text(blurb)
-                    .font(.scaled(13)).foregroundStyle(Theme.mutedForeground)
-                    .fixedSize(horizontal: false, vertical: true)
+        NavigationStack {
+            Form {
+                Section {
+                    if store.sessionsLoading {
+                        ProgressView().frame(maxWidth: .infinity)
+                    } else {
+                        let data = YearlyCalendarData.fromBilling(store.sessions, calendarEndDay: store.calendarEnd)
+                        let colors = taskColors
+                        YearlyCalendarView(
+                            data: data,
+                            taskColors: colors,
+                            detail: { day, minutes, key, taskMinutes in
+                                AnyView(BillingCalendarDetail(
+                                    day: day, minutes: minutes,
+                                    earnings: data.billingDayEarnings?[key] ?? 0,
+                                    currency: data.billingDayCurrency?[key] ?? Money.defaultCurrency,
+                                    taskMinutes: taskMinutes, colors: colors))
+                            },
+                            onDayTap: { _, day in
+                                store.filterToDay(day)
+                                dismiss()
+                            })
+                        .padding(.vertical, 6)
+                    }
+                } footer: {
+                    Text(blurb)
+                }
             }
-            Button("Set up billable tasks", action: onGoRates).buttonStyle(.t(.outline, .sm))
-            YearlyCalendarView(
-                data: data,
-                taskColors: colors,
-                detail: { day, minutes, key, taskMinutes in
-                    AnyView(BillingCalendarDetail(
-                        day: day, minutes: minutes,
-                        earnings: data.billingDayEarnings?[key] ?? 0,
-                        currency: data.billingDayCurrency?[key] ?? Money.defaultCurrency,
-                        taskMinutes: taskMinutes, colors: colors))
-                },
-                onDayTap: { _, day in onDay(day) })
+            .formStyle(.grouped)
+            .navigationTitle("Activity Calendar")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
         }
+        #if os(macOS)
+        .frame(minWidth: 760, minHeight: 360)
+        #else
+        .presentationDetents([.medium, .large])
+        #endif
     }
 }
 
@@ -702,25 +554,18 @@ private struct BillingCalendarDetail: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(DayCalc.current.format(day, "EEEE, MMMM d, yyyy")).font(.scaled(14, weight: .semibold))
-                Text("Billable time (same filters as the ledger)").font(.scaled(12)).foregroundStyle(Theme.mutedForeground)
-            }
-            Hairline()
+            Text(DayCalc.current.format(day, "EEEE, MMMM d, yyyy")).font(.subheadline.weight(.semibold))
             Text("\(Fmt.heatMinutes(minutes)) · \(Money.format(earnings, currency))")
-                .font(.scaled(12, weight: .medium)).tabular()
+                .font(.footnote.weight(.medium)).monospacedDigit()
             ForEach(taskMinutes.sorted { $0.value > $1.value }, id: \.key) { entry in
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Color(hex: colors[entry.key] ?? Accent.otherHex))
-                        .frame(width: 8, height: 8)
-                    (Text(entry.key).fontWeight(.medium)
-                     + Text(" · \(Fmt.heatMinutes(entry.value))").foregroundColor(Theme.mutedForeground))
-                        .font(.scaled(12))
+                    Circle().fill(Color(hex: colors[entry.key] ?? Accent.otherHex)).frame(width: 7, height: 7)
+                    Text(entry.key).fontWeight(.medium)
+                    Text(Fmt.heatMinutes(entry.value)).foregroundStyle(.secondary)
                 }
+                .font(.footnote)
             }
-            Text("Click to filter the ledger to this day")
-                .font(.scaled(10)).foregroundStyle(Theme.mutedForeground)
+            Text("Tap to show this day in Sessions").font(.caption2).foregroundStyle(.secondary)
         }
     }
 }

@@ -55,145 +55,67 @@ struct MarkPaidSheet: View {
     }
 
     var body: some View {
-        SheetScaffold(title: "Mark as paid", onClose: { dismiss() }) {
-            VStack(alignment: .leading, spacing: 12) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Total = sum of each line below. Override amounts only when needed.")
-                            .font(.scaled(13)).foregroundStyle(Theme.mutedForeground)
-                            .fixedSize(horizontal: false, vertical: true)
-                        headerSummary
-                        linesSection
-                        detailsSection
+        NavigationStack {
+            Form {
+                Section {
+                    LabeledContent("Sessions", value: "\(sessions.count)")
+                    LabeledContent("Duration", value: Fmt.durationMinutes(Double(minutes)))
+                    LabeledContent("Total to record") {
+                        Text(Money.format(lineTotal, currency)).fontWeight(.semibold)
+                            .accessibilityIdentifier("markPaidTotal")
                     }
-                    .padding(.bottom, 4)
                 }
-                #if os(macOS)
-                .frame(minHeight: 380, idealHeight: 560, maxHeight: 720)
-                #endif
+                .monospacedDigit()
+
+                Section {
+                    ForEach(sessions) { s in
+                        MarkPaidLineRow(session: s, amount: amountBinding(s.id))
+                    }
+                    Button("Reset to Calculated Amounts") {
+                        error = nil
+                        amounts = Self.calculatedAmounts(sessions)
+                    }
+                    .disabled(sessions.isEmpty || allLinesMatchCalculated)
+                } header: {
+                    Text("Amounts")
+                } footer: {
+                    Text("Each line starts at the calculated amount. The total is the sum of the lines — change one only when needed.")
+                }
+
+                Section("Payment") {
+                    DatePicker("Paid on", selection: $paidAt, displayedComponents: [.date, .hourAndMinute])
+                    TextField("Note", text: $note, prompt: Text("Invoice #, reference…"), axis: .vertical)
+                        .lineLimit(1...4)
+                        .onChange(of: note) { _, v in
+                            if v.count > 2000 { note = String(v.prefix(2000)) }
+                        }
+                }
+
                 if let error {
-                    Text(error)
-                        .font(.scaled(12, weight: .medium))
-                        .foregroundStyle(Theme.destructive)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Theme.destructive.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
-                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.destructive.opacity(0.4)))
+                    Section { Text(error).foregroundStyle(.red) }
                 }
-                footer
             }
+            .formStyle(.grouped)
+            .navigationTitle("Mark as Paid")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }.disabled(submitting)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(submitting ? "Saving…" : "Mark Paid", action: submit)
+                        .fontWeight(.semibold)
+                        .disabled(submitting || sessions.isEmpty || amountsInvalid)
+                        .accessibilityIdentifier("markPaidSubmit")
+                }
+            }
+            .interactiveDismissDisabled(submitting)
         }
-    }
-
-    // MARK: Parts
-
-    private var headerSummary: some View {
-        let n = sessions.count
-        let line = Text("\(n)").fontWeight(.semibold).foregroundColor(Theme.foreground)
-            + Text(n == 1 ? " session" : " sessions").foregroundColor(Theme.mutedForeground)
-            + Text("  ·  ").foregroundColor(Theme.mutedForeground)
-            + Text(Fmt.durationMinutes(Double(minutes))).foregroundColor(Theme.foreground)
-        let full = line
-            + Text("  ·  ").foregroundColor(Theme.mutedForeground)
-            + Text(Money.format(lineTotal, currency)).fontWeight(.semibold).foregroundColor(Theme.foreground)
-        return full
-            .font(.scaled(14))
-            .monospacedDigit()
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.muted.opacity(0.35), in: RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.border))
-    }
-
-    private var linesSection: some View {
-        let shape = RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
-        return VStack(spacing: 0) {
-            HStack {
-                Text("Sessions").font(.scaled(13, weight: .semibold))
-                Spacer()
-                Button("Reset to calculated") {
-                    error = nil
-                    amounts = Self.calculatedAmounts(sessions)
-                }
-                .buttonStyle(.t(.ghost, .sm))
-                .disabled(sessions.isEmpty || allLinesMatchCalculated)
-                .accessibilityLabel("Reset all line amounts to calculated values")
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(Theme.muted.opacity(0.55))
-            Rectangle().fill(Theme.border).frame(height: 2)
-            VStack(spacing: 6) {
-                ForEach(sessions) { s in
-                    MarkPaidLineRow(session: s, amount: amountBinding(s.id))
-                }
-            }
-            .padding(6)
-            .background(Theme.muted.opacity(0.2))
-        }
-        .background(Theme.card)
-        .clipShape(shape)
-        .overlay(shape.strokeBorder(Theme.border, lineWidth: 2))
-    }
-
-    private var detailsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            BillingKicker(text: "Payment details")
-            HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Label("Paid on", systemImage: "calendar")
-                        .font(.scaled(12, weight: .medium))
-                    DatePicker("Paid on", selection: $paidAt, displayedComponents: .date)
-                        .labelsHidden()
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    Label("Paid at time", systemImage: "clock")
-                        .font(.scaled(12, weight: .medium))
-                    DatePicker("Paid at time", selection: $paidAt, displayedComponents: .hourAndMinute)
-                        .labelsHidden()
-                }
-                Spacer(minLength: 0)
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                (Text("Note").foregroundColor(Theme.foreground)
-                 + Text(" (optional)").fontWeight(.regular).foregroundColor(Theme.mutedForeground))
-                    .font(.scaled(12, weight: .medium))
-                TField(placeholder: "Invoice #, reference…", text: $note)
-                    .onChange(of: note) { _, v in
-                        if v.count > 2000 { note = String(v.prefix(2000)) }
-                    }
-            }
-        }
-        .padding(.top, 4)
-    }
-
-    private var footer: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            VStack(alignment: .leading, spacing: 0) {
-                Text("Total to record")
-                    .font(.scaled(10, weight: .medium))
-                    .tracking(0.6)
-                    .textCase(.uppercase)
-                    .foregroundStyle(Theme.mutedForeground)
-                Text(Money.format(lineTotal, currency))
-                    .font(.scaled(22, weight: .bold))
-                    .tracking(-0.3)
-                    .tabular()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-            }
-            Spacer(minLength: 8)
-            Button("Cancel") { dismiss() }
-                .buttonStyle(.t(.outline))
-                .disabled(submitting)
-            Button(submitting ? "Saving…" : "Mark as paid", action: submit)
-                .buttonStyle(.t(.primary))
-                .disabled(submitting || sessions.isEmpty || amountsInvalid)
-                .keyboardShortcut(.defaultAction)
-        }
-        .padding(.top, 8)
+        #if os(macOS)
+        .frame(minWidth: 520, idealWidth: 560, minHeight: 480, idealHeight: 620)
+        #endif
     }
 
     private func amountBinding(_ id: String) -> Binding<String> {
@@ -236,83 +158,50 @@ struct MarkPaidSheet: View {
     }
 }
 
-// MARK: - One line in the dialog
+// MARK: - One line in the sheet
 
 private struct MarkPaidLineRow: View {
     let session: BillingSessionRow
     @Binding var amount: String
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     private var invalid: Bool { MarkPaidSheet.parseLine(amount) == nil }
 
-    private var timeRange: String {
-        let calc = DayCalc.current
-        return "\(calc.format(session.from, "MMM d, yyyy")) · \(calc.format(session.from, "HH:mm"))–\(calc.format(session.to, "HH:mm"))"
-    }
-
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-        VStack(alignment: .trailing, spacing: 4) {
-            HStack(alignment: .center, spacing: 10) {
-                details
-                Spacer(minLength: 6)
-                amountField
+        let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+                                                  : AnyLayout(HStackLayout(alignment: .center, spacing: 10))
+        VStack(alignment: .leading, spacing: 4) {
+            layout {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Circle().fill(Color(hex: session.accentHex)).frame(width: 8, height: 8)
+                        Text(session.taskName).lineLimit(2)
+                    }
+                    Text("\(session.timeRangeShort) · \(Fmt.durationMinutes(Double(session.durationMinutes)))")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    Text("Calculated \(Money.format(session.earnings, session.currency))")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                .monospacedDigit()
+                if !typeSize.isAccessibilitySize { Spacer(minLength: 8) }
+                HStack(spacing: 6) {
+                    TextField("Amount", text: $amount, prompt: Text("0"))
+                        .labelsHidden()
+                        .multilineTextAlignment(.trailing)
+                        .monospacedDigit()
+                        #if os(iOS)
+                        .keyboardType(.decimalPad)
+                        .textFieldStyle(.roundedBorder)
+                        #endif
+                        .frame(width: 110)
+                        .accessibilityLabel("Amount for \(session.taskName) in \(Money.unitLabel(session.currency))")
+                    Text(Money.unitLabel(session.currency)).foregroundStyle(.secondary)
+                }
             }
             if invalid {
-                Text("Enter a valid amount (0 or more).")
-                    .font(.scaled(10, weight: .medium))
-                    .foregroundStyle(Theme.destructive)
+                Text("Enter a valid amount (0 or more).").font(.footnote).foregroundStyle(.red)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(Color(hex: session.accentHex, opacity: 0.06), in: shape)
-        .background(Theme.card, in: shape)
-        .overlay(shape.strokeBorder(Theme.border, lineWidth: 2))
-    }
-
-    private var details: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
-                Text(session.taskName)
-                    .font(.scaled(14, weight: .semibold))
-                    .foregroundStyle(Theme.foreground)
-                    .lineLimit(2)
-                    .layoutPriority(1)
-                if let g = session.taskGroup {
-                    AccentBadge(text: g.name, hex: session.accentHex)
-                }
-            }
-            FlowLayout(spacing: 6, lineSpacing: 3) {
-                Text(timeRange)
-                    .font(.scaled(11)).foregroundStyle(Theme.mutedForeground).tabular()
-                Badge(text: Fmt.durationMinutes(Double(session.durationMinutes)), kind: .secondary, mono: true)
-                (Text("Calc ").foregroundColor(Theme.mutedForeground)
-                 + Text(Money.format(session.earnings, session.currency)).fontWeight(.medium).foregroundColor(Theme.foreground))
-                    .font(.scaled(11))
-                    .monospacedDigit()
-            }
-        }
-    }
-
-    private var amountField: some View {
-        HStack(spacing: 6) {
-            TField(placeholder: "0", text: $amount)
-                .multilineTextAlignment(.trailing)
-                #if os(iOS)
-                .keyboardType(.decimalPad)
-                #endif
-                .frame(width: 104)
-                .overlay {
-                    if invalid {
-                        RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous)
-                            .strokeBorder(Theme.destructive, lineWidth: 1)
-                    }
-                }
-                .accessibilityLabel("Amount to record for \(session.taskName) in \(Money.unitLabel(session.currency))")
-            Text(Money.unitLabel(session.currency))
-                .font(.scaled(12, weight: .semibold))
-                .foregroundStyle(Theme.mutedForeground)
-                .tabular()
-        }
+        .padding(.vertical, 2)
     }
 }
