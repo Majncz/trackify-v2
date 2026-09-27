@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { randomBytes } from "crypto";
 import { getAuthUser, TOKEN_LIFETIME_DAYS } from "@/lib/api-auth";
-import { verifyPassword } from "@/lib/password";
+import { hashApiToken, verifyPassword } from "@/lib/password";
+import { clientIp, rateClear, rateHit, rateLimited, tooManyResponseBody, LOGIN_FAILURES, LOGIN_WINDOW_MS } from "@/lib/rate-limit";
 
 const tokenRequestSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -20,6 +21,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { email, password, deviceName } = tokenRequestSchema.parse(body);
+    const ip = clientIp(request.headers);
+    const rateKey = `login:${ip}:${email.toLowerCase()}`;
+    if (rateLimited(rateKey, LOGIN_FAILURES, LOGIN_WINDOW_MS) || rateLimited(`loginip:${ip}`, 50, LOGIN_WINDOW_MS)) {
+      return NextResponse.json(tooManyResponseBody(), { status: 429 });
+    }
 
     // Find user by email
     const user = await prisma.user.findUnique({
@@ -27,6 +33,8 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user || !user.password) {
+      rateHit(rateKey, LOGIN_WINDOW_MS);
+      rateHit(`loginip:${ip}`, LOGIN_WINDOW_MS);
       return NextResponse.json(
         { error: "Invalid email or password" },
         { status: 401 }
@@ -36,11 +44,15 @@ export async function POST(request: NextRequest) {
     // Validate password
     const isValid = await verifyPassword(password, user.password);
     if (!isValid) {
+      rateHit(rateKey, LOGIN_WINDOW_MS);
+      rateHit(`loginip:${ip}`, LOGIN_WINDOW_MS);
       return NextResponse.json(
         { error: "Invalid email or password" },
         { status: 401 }
       );
     }
+
+    rateClear(rateKey);
 
     // Generate secure token (32 bytes = 64 hex characters)
     const token = randomBytes(32).toString("hex");
@@ -51,7 +63,7 @@ export async function POST(request: NextRequest) {
 
     const apiToken = await prisma.apiToken.create({
       data: {
-        token,
+        token: hashApiToken(token),
         userId: user.id,
         expiresAt,
         ...(deviceName && { name: deviceName }),
@@ -59,7 +71,7 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({
-      token: apiToken.token,
+      token,
       expiresAt: apiToken.expiresAt.toISOString(),
       user: {
         id: user.id,
@@ -106,7 +118,7 @@ export async function DELETE(request: NextRequest) {
   // Delete the token
   await prisma.apiToken.deleteMany({
     where: {
-      token,
+      token: hashApiToken(token),
       userId: user.id,
     },
   });

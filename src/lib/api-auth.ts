@@ -1,5 +1,6 @@
 import { auth } from "./auth";
 import { prisma } from "./prisma";
+import { hashApiToken } from "./password";
 
 /** Native app tokens live this long and are renewed while in use. */
 export const TOKEN_LIFETIME_DAYS = 90;
@@ -43,7 +44,7 @@ export async function getAuthUser(request: Request) {
     const token = authHeader.slice(7);
     
     const apiToken = await prisma.apiToken.findUnique({
-      where: { token },
+      where: { token: hashApiToken(token) },
       include: { user: { select: { id: true, email: true } } },
     });
 

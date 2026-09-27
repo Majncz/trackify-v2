@@ -13,3 +13,8 @@ export async function verifyPassword(password: string, stored: string | null | u
   }
   return false;
 }
+
+/** API tokens are stored as SHA-256 hex; clients keep the raw value. */
+export function hashApiToken(raw: string) {
+  return createHash("sha256").update(raw).digest("hex");
+}

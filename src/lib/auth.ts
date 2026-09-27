@@ -2,6 +2,7 @@ import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "./prisma";
 import { verifyPassword } from "./password";
+import { clientIp, rateClear, rateHit, rateLimited, LOGIN_FAILURES, LOGIN_WINDOW_MS } from "./rate-limit";
 
 class InvalidEmail extends CredentialsSignin {
   code = "No account found with this email";
@@ -9,6 +10,10 @@ class InvalidEmail extends CredentialsSignin {
 
 class InvalidPassword extends CredentialsSignin {
   code = "Incorrect password";
+}
+
+class TooManyAttempts extends CredentialsSignin {
+  code = "Too many attempts. Please wait a few minutes and try again.";
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -24,16 +29,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         if (!credentials?.email || !credentials?.password) {
           return null;
         }
+
+        const ip = request?.headers ? clientIp(request.headers) : "unknown";
+        const rateKey = `login:${ip}:${String(credentials.email).toLowerCase()}`;
+        if (rateLimited(rateKey, LOGIN_FAILURES, LOGIN_WINDOW_MS) || rateLimited(`loginip:${ip}`, 50, LOGIN_WINDOW_MS)) {
+          throw new TooManyAttempts();
+        }
+        const fail = () => {
+          rateHit(rateKey, LOGIN_WINDOW_MS);
+          rateHit(`loginip:${ip}`, LOGIN_WINDOW_MS);
+        };
 
         const user = await prisma.user.findUnique({
           where: { email: credentials.email as string },
         });
 
         if (!user || !user.password) {
+          fail();
           throw new InvalidEmail();
         }
 
@@ -43,8 +59,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         );
 
         if (!isValid) {
+          fail();
           throw new InvalidPassword();
         }
+        rateClear(rateKey);
 
         return {
           id: user.id,

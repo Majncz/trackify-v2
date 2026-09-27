@@ -14,6 +14,7 @@ import {
   setRealtimeIo,
 } from "../src/lib/timer-runtime";
 import { verifySocketTicket } from "../src/lib/socket-ticket";
+import { hashApiToken } from "../src/lib/password";
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "0.0.0.0";
@@ -108,7 +109,7 @@ app.prepare().then(async () => {
       if (data.token) {
         try {
           const apiToken = await prisma.apiToken.findUnique({
-            where: { token: data.token },
+            where: { token: hashApiToken(String(data.token)) },
             include: { user: { select: { id: true } } },
           });
 

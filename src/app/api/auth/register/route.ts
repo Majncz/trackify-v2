@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { clientIp, rateHit, rateLimited, tooManyResponseBody } from "@/lib/rate-limit";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
@@ -12,6 +13,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { email, password } = registerSchema.parse(body);
+    const ip = clientIp(request.headers);
+    if (rateLimited(`register:${ip}`, 10, 60 * 60 * 1000)) {
+      return NextResponse.json(tooManyResponseBody(), { status: 429 });
+    }
+    rateHit(`register:${ip}`, 60 * 60 * 1000);
 
     const exists = await prisma.user.findUnique({
       where: { email },

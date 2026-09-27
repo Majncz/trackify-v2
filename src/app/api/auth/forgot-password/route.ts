@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { clientIp, rateHit, rateLimited } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
 import { sendPasswordResetEmail } from "@/lib/email";
 import crypto from "crypto";
@@ -10,6 +11,15 @@ export async function POST(request: Request) {
     if (!email) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
     }
+
+    // Quietly stop sending after a few requests (same reply, so no account probing).
+    const ip = clientIp(request.headers);
+    const emailKey = `forgot:${String(email).toLowerCase()}`;
+    if (rateLimited(`forgotip:${ip}`, 5, 60 * 60 * 1000) || rateLimited(emailKey, 3, 60 * 60 * 1000)) {
+      return NextResponse.json({ message: "If an account exists, a reset email has been sent" });
+    }
+    rateHit(`forgotip:${ip}`, 60 * 60 * 1000);
+    rateHit(emailKey, 60 * 60 * 1000);
 
     const user = await prisma.user.findUnique({
       where: { email },
