@@ -179,7 +179,7 @@ struct BillingRateEditor: View {
                             Text(task.taskGroup?.name ?? "Ungrouped")
                         }
                     }
-                 header: {
+                } header: {
                     #if os(macOS)
                     Text(task.name).font(.title3.weight(.semibold)).foregroundStyle(.primary)
                     #endif
