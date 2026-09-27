@@ -6,6 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -58,7 +59,11 @@ import co.bitterlemon.trackify.AppGraph
 import co.bitterlemon.trackify.data.RaceData
 import co.bitterlemon.trackify.ui.components.BtnVariant
 import co.bitterlemon.trackify.ui.components.FieldButton
-import co.bitterlemon.trackify.ui.components.PageHeader
+import co.bitterlemon.trackify.ui.components.ListRow
+import co.bitterlemon.trackify.ui.components.RowDivider
+import co.bitterlemon.trackify.ui.components.ScreenBar
+import androidx.compose.material.icons.outlined.Leaderboard
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import co.bitterlemon.trackify.ui.components.Segmented
 import co.bitterlemon.trackify.ui.components.Skeleton
 import co.bitterlemon.trackify.ui.components.TButton
@@ -83,36 +88,42 @@ private fun presetRange(p: RacePreset, cf: LocalDate, ct: LocalDate, today: Loca
 }
 
 @Composable
-fun TeamScreen() {
-    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
-        if (maxWidth >= 840.dp) {
-            Row(Modifier.fillMaxSize()) {
-                LazyColumn(Modifier.weight(0.42f).fillMaxHeight(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    item(key = "h") { PageHeader("Team", "Who's tracking, and how the hours stack up") }
-                    item(key = "lb") { LeaderboardCard() }
-                }
-                androidx.compose.material3.VerticalDivider(color = T.c.border)
-                LazyColumn(Modifier.weight(0.58f).fillMaxHeight(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    item(key = "vh") { PageHeader("Visualizations", "Play the hours back and watch the team race") }
-                    item(key = "race") { Visualizations() }
+fun TeamScreen(onOpenRace: () -> Unit) {
+    Column(Modifier.fillMaxSize()) {
+        ScreenBar("Team")
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            item(key = "lb") { LeaderboardCard(Modifier.widthIn(max = 720.dp)) }
+            item(key = "race") {
+                Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
+                    RowDivider()
+                    ListRow(
+                        "Race", subtitle = "Play the hours back and watch the team race",
+                        icon = Icons.Outlined.Leaderboard, onClick = onOpenRace,
+                        trailing = { Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = T.c.mutedForeground) },
+                    )
+                    RowDivider()
                 }
             }
-        } else TeamSingle()
+        }
     }
 }
 
+/** Bar-race player, full screen (pushed from Team). */
 @Composable
-private fun TeamSingle() {
-    LazyColumn(
-        Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        item(key = "h") { PageHeader("Team", "Who's tracking, and how the hours stack up", Modifier.widthIn(max = 896.dp)) }
-        item(key = "lb") { LeaderboardCard(Modifier.widthIn(max = 896.dp)) }
-        item(key = "vh") { PageHeader("Visualizations", "Play the hours back and watch the team race", Modifier.widthIn(max = 896.dp).padding(top = 8.dp)) }
-        item(key = "race") { Box(Modifier.widthIn(max = 896.dp)) { Visualizations() } }
+fun RaceScreen(onBack: () -> Unit) {
+    Column(Modifier.fillMaxSize()) {
+        ScreenBar("Race", onBack = onBack)
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            item(key = "race") { Box(Modifier.widthIn(max = 896.dp)) { Visualizations() } }
+        }
     }
 }
 
@@ -153,8 +164,8 @@ private fun Visualizations() {
     val loading = data == null && !error
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        TCard(Modifier.fillMaxWidth()) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 RacePreset.entries.forEach { p ->
                     val sel = p == preset
                     Text(

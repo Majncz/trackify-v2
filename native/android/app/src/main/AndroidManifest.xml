@@ -40,6 +40,13 @@
 
         <receiver android:name=".timer.TimerActionReceiver" android:exported="false" />
 
+        <!-- Redraw widgets right after the app is updated. -->
+        <receiver android:name=".widget.AppUpdatedReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <receiver
             android:name=".widget.SmallTimerWidgetReceiver"
             android:exported="true"

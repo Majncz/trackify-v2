@@ -18,6 +18,10 @@ fun signingValue(env: String, prop: String): String? =
 
 val releaseStoreFile = signingValue("TRACKIFY_KEYSTORE", "storeFile")
 
+// Every build gets a higher versionCode: minutes since 2026-01-01 UTC (fits Int until ~6000 AD).
+// versionName = 1.1.<code>, shown in More → About, so an installed update is easy to recognise.
+val buildNumber: Int = ((System.currentTimeMillis() / 1000L - 1_767_225_600L) / 60L).toInt()
+
 android {
     namespace = "co.bitterlemon.trackify"
     compileSdk = 37
@@ -26,8 +30,8 @@ android {
         applicationId = "co.bitterlemon.trackify"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = buildNumber
+        versionName = "1.1.$buildNumber"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

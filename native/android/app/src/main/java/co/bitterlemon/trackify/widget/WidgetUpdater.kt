@@ -24,7 +24,7 @@ object WidgetUpdater {
         }
     }
 
-    /** Redraw now and wait for it — for background actions whose process may be frozen right after. */
+    /** Redraw now (always, no dedupe) and wait for it — for background actions and app updates. */
     suspend fun updateAllNow(context: Context) {
         lastKey = WidgetSnapshot.read(context).copy(updatedAt = 0).hashCode().toString()
         runCatching { SmallTimerWidget().updateAll(context) }

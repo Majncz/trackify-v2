@@ -58,7 +58,14 @@ import co.bitterlemon.trackify.ui.auth.friendlyError
 import co.bitterlemon.trackify.ui.components.BtnSize
 import co.bitterlemon.trackify.ui.components.BtnVariant
 import co.bitterlemon.trackify.ui.components.ErrorAlert
-import co.bitterlemon.trackify.ui.components.PageHeader
+import co.bitterlemon.trackify.ui.components.ConfirmDialog
+import co.bitterlemon.trackify.ui.components.ListRow
+import co.bitterlemon.trackify.ui.components.RowDivider
+import co.bitterlemon.trackify.ui.components.ScreenBar
+import co.bitterlemon.trackify.ui.components.SectionLabel
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.DeleteForever
 import co.bitterlemon.trackify.ui.components.Segmented
 import co.bitterlemon.trackify.ui.components.TButton
 import co.bitterlemon.trackify.ui.components.TCard
@@ -67,17 +74,6 @@ import co.bitterlemon.trackify.ui.components.TInput
 import co.bitterlemon.trackify.ui.theme.T
 import co.bitterlemon.trackify.util.Format
 import kotlinx.coroutines.launch
-
-@Composable
-private fun CardTitle(icon: ImageVector, title: String, description: String? = null) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, tint = T.c.foreground, modifier = Modifier.size(16.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground)
-    }
-    if (description != null) Text(description, fontSize = 14.sp, color = T.c.mutedForeground, modifier = Modifier.padding(top = 2.dp))
-    Spacer(Modifier.height(14.dp))
-}
 
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
@@ -89,187 +85,90 @@ fun SettingsScreen(onBack: () -> Unit) {
     val server by graph.session.server.collectAsState()
     val theme by graph.session.theme.collectAsState()
     val widgetTheme by graph.session.widgetTheme.collectAsState()
-    var hidden by remember { mutableStateOf<List<Task>?>(null) }
-    var hiddenTick by remember { mutableStateOf(0) }
-    var restoring by remember { mutableStateOf<String?>(null) }
     var signingOut by remember { mutableStateOf(false) }
+    var confirmSignOut by remember { mutableStateOf(false) }
     var pwOpen by remember { mutableStateOf(false) }
     var deleteOpen by remember { mutableStateOf(false) }
-    var model by remember { mutableStateOf<ModelInfo?>(null) }
     var notifAllowed by remember { mutableStateOf(graph.notifier.canPost()) }
     var securityUnsupported by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) { graph.repo.refreshProfile(); runCatching { graph.api.model() }.onSuccess { model = it } }
-    LaunchedEffect(hiddenTick) {
-        runCatching { graph.api.tasks(hidden = true) }.onSuccess { list -> hidden = list.sortedByDescending { it.updatedAt ?: "" } }
-    }
+    LaunchedEffect(Unit) { graph.repo.refreshProfile() }
     LifecycleResumeEffect(Unit) {
         notifAllowed = graph.notifier.canPost()
         onPauseOrDispose { }
     }
 
-    LazyColumn(
-        Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        item {
-            Row(Modifier.widthIn(max = 896.dp).fillMaxWidth()) { TButton("Back", onBack, variant = BtnVariant.Ghost, icon = Icons.AutoMirrored.Outlined.ArrowBack) }
-        }
-        item { PageHeader("Settings", "Manage your account", Modifier.widthIn(max = 896.dp)) }
-        item {
-            TCard(Modifier.widthIn(max = 896.dp).fillMaxWidth()) {
-                CardTitle(Icons.Outlined.Person, "Account", "Your account information")
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(T.c.muted.copy(alpha = 0.5f)).padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Outlined.Mail, null, tint = T.c.mutedForeground, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text("Email", fontSize = 14.sp, color = T.c.mutedForeground)
-                        Text(profile?.email?.ifEmpty { null } ?: session?.email ?: "", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = T.c.foreground)
-                    }
-                }
-                Spacer(Modifier.height(16.dp))
-                DisplayNameForm(profile?.displayName ?: "")
-                Spacer(Modifier.height(16.dp))
-                TButton(if (signingOut) "Signing out..." else "Sign out", {
-                    signingOut = true
-                    scope.launch { graph.signOut() }
-                }, variant = BtnVariant.Destructive, icon = Icons.AutoMirrored.Outlined.Logout, enabled = !signingOut)
-            }
-        }
-        item {
-            TCard(Modifier.widthIn(max = 896.dp).fillMaxWidth()) {
-                CardTitle(Icons.Outlined.VisibilityOff, "Hidden Tasks", "Tasks you've hidden. Restore them to see them on your dashboard again.")
-                val list = hidden
-                when {
-                    list == null -> Text("Loading...", fontSize = 14.sp, color = T.c.mutedForeground)
-                    list.isEmpty() -> Text("No hidden tasks", fontSize = 14.sp, color = T.c.mutedForeground)
-                    else -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        list.forEach { t ->
-                            Row(
-                                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(T.c.muted.copy(alpha = 0.5f)).padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(t.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = T.c.foreground)
-                                    Text(Format.durationWords(t.events.sumOf { it.toMs - it.fromMs }), fontSize = 14.sp, color = T.c.mutedForeground)
-                                }
-                                TButton(if (restoring == t.id) "Restoring..." else "Restore", {
-                                    restoring = t.id
-                                    scope.launch {
-                                        runCatching { graph.repo.restoreTask(t.id) }
-                                        restoring = null; hiddenTick++
-                                    }
-                                }, variant = BtnVariant.Outline, size = BtnSize.Sm, icon = Icons.Outlined.RestartAlt, enabled = restoring != t.id)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        item {
-            TCard(Modifier.widthIn(max = 896.dp).fillMaxWidth()) {
-                CardTitle(Icons.Outlined.DarkMode, "Appearance", "Follow the system, or pick a theme for Trackify.")
-                Text("App", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = T.c.mutedForeground)
-                Segmented(listOf("system" to "System", "light" to "Light", "dark" to "Dark"), theme, { v -> scope.launch { graph.session.setTheme(v) } }, Modifier.fillMaxWidth())
-                Spacer(Modifier.height(12.dp))
-                Text("Home-screen widgets", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = T.c.mutedForeground)
-                Segmented(
-                    listOf("system" to "System", "light" to "Light", "dark" to "Dark"), widgetTheme,
-                    { v -> scope.launch { graph.session.setWidgetTheme(v); graph.syncSurfacesNow() } },
-                    Modifier.fillMaxWidth(),
-                )
-            }
-        }
-        item {
-            TCard(Modifier.widthIn(max = 896.dp).fillMaxWidth()) {
-                CardTitle(Icons.Outlined.Notifications, "Notifications", "A silent, ongoing notification shows the running timer with Stop and Switch.")
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(if (notifAllowed) "Allowed" else "Turned off", fontSize = 14.sp, color = if (notifAllowed) T.c.foreground else T.c.mutedForeground, modifier = Modifier.weight(1f))
-                    TButton("Open system settings", {
-                        runCatching {
-                            context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                        }
-                    }, variant = BtnVariant.Outline, size = BtnSize.Sm)
-                }
-            }
-        }
-        item {
-            TCard(Modifier.widthIn(max = 896.dp).fillMaxWidth()) {
-                CardTitle(Icons.Outlined.Widgets, "Widgets & Quick Settings", "Start and stop without opening the app.")
-                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TButton("Add quick-start widget", { pinWidget(context, co.bitterlemon.trackify.widget.SmallTimerWidgetReceiver::class.java) }, variant = BtnVariant.Outline, size = BtnSize.Sm)
-                    TButton("Add tasks widget", { pinWidget(context, co.bitterlemon.trackify.widget.LargeTimerWidgetReceiver::class.java) }, variant = BtnVariant.Outline, size = BtnSize.Sm)
-                    if (android.os.Build.VERSION.SDK_INT >= 33) {
-                        TButton("Add Quick Settings tile", { requestTile(context) }, variant = BtnVariant.Outline, size = BtnSize.Sm)
-                    }
-                }
-            }
-        }
-        if (!securityUnsupported) {
+    Column(Modifier.fillMaxSize()) {
+        ScreenBar("Settings", onBack = onBack)
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
             item {
-                TCard(Modifier.widthIn(max = 896.dp).fillMaxWidth()) {
-                    CardTitle(Icons.Outlined.Lock, "Security")
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TButton("Change password", { pwOpen = true }, variant = BtnVariant.Outline)
-                        TButton("Delete account", { deleteOpen = true }, variant = BtnVariant.DestructiveGhost)
+                Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
+                    SectionLabel("Account")
+                    ListRow(profile?.email?.ifEmpty { null } ?: session?.email ?: "", subtitle = "Email", icon = Icons.Outlined.Mail)
+                    Box(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) { DisplayNameForm(profile?.displayName ?: "") }
+
+                    SectionLabel("Appearance")
+                    Column(Modifier.padding(horizontal = 20.dp)) {
+                        Text("App", fontSize = 14.sp, color = T.c.foreground)
+                        Spacer(Modifier.height(6.dp))
+                        Segmented(listOf("system" to "System", "light" to "Light", "dark" to "Dark"), theme, { v -> scope.launch { graph.session.setTheme(v) } }, Modifier.fillMaxWidth())
+                        Spacer(Modifier.height(14.dp))
+                        Text("Home-screen widgets", fontSize = 14.sp, color = T.c.foreground)
+                        Spacer(Modifier.height(6.dp))
+                        Segmented(
+                            listOf("system" to "System", "light" to "Light", "dark" to "Dark"), widgetTheme,
+                            { v -> scope.launch { graph.session.setWidgetTheme(v); graph.syncSurfacesNow() } },
+                            Modifier.fillMaxWidth(),
+                        )
                     }
+
+                    SectionLabel("Notifications")
+                    ListRow(
+                        "Timer notification",
+                        subtitle = if (notifAllowed) "On · shows the running timer with Stop and Switch" else "Off · tap to allow in system settings",
+                        icon = Icons.Outlined.Notifications,
+                        onClick = {
+                            runCatching {
+                                context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            }
+                        },
+                        trailing = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, tint = T.c.mutedForeground, modifier = Modifier.size(18.dp)) },
+                    )
+
+                    if (!securityUnsupported) {
+                        SectionLabel("Security")
+                        ListRow("Change password", icon = Icons.Outlined.Lock, onClick = { pwOpen = true })
+                        ListRow("Delete account", icon = Icons.Outlined.DeleteForever, destructive = true, onClick = { deleteOpen = true })
+                    }
+
+                    SectionLabel("Server")
+                    ListRow(server, subtitle = "To use another server, sign out and open Advanced on the login screen.", icon = Icons.Outlined.Dns)
+
+                    Spacer(Modifier.height(12.dp))
+                    RowDivider()
+                    ListRow(
+                        if (signingOut) "Signing out…" else "Sign out", icon = Icons.AutoMirrored.Outlined.Logout, destructive = true,
+                        onClick = { if (!signingOut) confirmSignOut = true },
+                    )
+                    RowDivider()
                 }
-            }
-        }
-        item {
-            TCard(Modifier.widthIn(max = 896.dp).fillMaxWidth()) {
-                CardTitle(Icons.Outlined.Dns, "Server", "Trackify syncs with this server. To use another one, sign out and open Advanced on the login screen.")
-                Text(server, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = T.c.foreground)
-            }
-        }
-        item {
-            TCard(Modifier.widthIn(max = 896.dp).fillMaxWidth()) {
-                CardTitle(Icons.Outlined.Info, "About")
-                AboutRow("App version", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-                model?.let { m ->
-                    m.gitShaShort?.let { AboutRow("Server build", it) }
-                    m.model?.let { AboutRow("AI model", it) }
-                }
-                AboutRow("Signed in as", session?.email ?: "")
             }
         }
     }
 
+    if (confirmSignOut) {
+        ConfirmDialog(
+            "Sign out?", "Your data stays on the server. Widgets and the notification stop until you sign in again.", "Sign out",
+            onConfirm = { signingOut = true; scope.launch { graph.signOut() } },
+            onDismiss = { confirmSignOut = false },
+        )
+    }
     if (pwOpen) ChangePasswordDialog(onDismiss = { pwOpen = false }, onUnsupported = { securityUnsupported = true; pwOpen = false })
     if (deleteOpen) DeleteAccountDialog(onDismiss = { deleteOpen = false }, onUnsupported = { securityUnsupported = true; deleteOpen = false })
-}
-
-private fun pinWidget(context: android.content.Context, receiver: Class<*>) {
-    val mgr = android.appwidget.AppWidgetManager.getInstance(context)
-    if (mgr.isRequestPinAppWidgetSupported) {
-        mgr.requestPinAppWidget(android.content.ComponentName(context, receiver), null, null)
-    } else {
-        android.widget.Toast.makeText(context, "Long-press your home screen and pick Widgets → Trackify.", android.widget.Toast.LENGTH_LONG).show()
-    }
-}
-
-private fun requestTile(context: android.content.Context) {
-    if (android.os.Build.VERSION.SDK_INT < 33) return
-    val sbm = context.getSystemService(android.app.StatusBarManager::class.java) ?: return
-    sbm.requestAddTileService(
-        android.content.ComponentName(context, co.bitterlemon.trackify.tile.TimerTileService::class.java),
-        "Trackify",
-        android.graphics.drawable.Icon.createWithResource(context, co.bitterlemon.trackify.R.drawable.ic_stat_timer),
-        context.mainExecutor,
-    ) { }
-}
-
-@Composable
-private fun AboutRow(k: String, v: String) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Text(k, fontSize = 14.sp, color = T.c.mutedForeground, modifier = Modifier.weight(1f))
-        Text(v, fontSize = 14.sp, color = T.c.foreground)
-    }
 }
 
 @Composable
@@ -287,7 +186,7 @@ private fun DisplayNameForm(initial: String) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TInput(name, { name = it.take(40); status = "idle"; error = null }, Modifier.weight(1f), placeholder = "How others see you")
             Spacer(Modifier.width(8.dp))
-            TButton(if (status == "saving") "Saving..." else "Save name", {
+            TButton(if (status == "saving") "Saving…" else "Save", {
                 status = "saving"
                 scope.launch {
                     try {

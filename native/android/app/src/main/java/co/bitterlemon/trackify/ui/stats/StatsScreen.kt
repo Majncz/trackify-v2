@@ -29,6 +29,8 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -72,7 +74,13 @@ import co.bitterlemon.trackify.ui.components.BtnSize
 import co.bitterlemon.trackify.ui.components.BtnVariant
 import co.bitterlemon.trackify.ui.components.Chip
 import co.bitterlemon.trackify.ui.components.DateField
-import co.bitterlemon.trackify.ui.components.PageHeader
+import co.bitterlemon.trackify.ui.components.ActionSheet
+import co.bitterlemon.trackify.ui.components.ListRow
+import co.bitterlemon.trackify.ui.components.RowDivider
+import co.bitterlemon.trackify.ui.components.ScreenBar
+import co.bitterlemon.trackify.ui.components.SectionLabel
+import co.bitterlemon.trackify.ui.components.Segmented
+import co.bitterlemon.trackify.ui.components.SheetAction
 import co.bitterlemon.trackify.ui.components.Skeleton
 import co.bitterlemon.trackify.ui.components.TButton
 import co.bitterlemon.trackify.ui.components.TCard
@@ -136,20 +144,23 @@ fun StatsScreen() {
         }
     }
 
+    Column(Modifier.fillMaxSize()) {
+    ScreenBar("Stats") {
+        IconButton({ rangeName = if (range == StatsRange.Custom) StatsRange.Week.name else StatsRange.Custom.name }) {
+            Icon(Icons.Outlined.DateRange, "Custom range", tint = if (range == StatsRange.Custom) T.c.foreground else T.c.mutedForeground)
+        }
+    }
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        item(key = "h") { PageHeader("Stats", "Analyse your tracked time", Modifier.widthIn(max = 896.dp)) }
         item(key = "ranges") {
-            Column(Modifier.widthIn(max = 896.dp).fillMaxWidth()) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StatsRange.entries.forEach { r ->
-                        TButton(r.label, { rangeName = r.name }, size = BtnSize.Sm, variant = if (r == range) BtnVariant.Default else BtnVariant.Outline)
-                    }
-                }
+            Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 16.dp)) {
+                Segmented(
+                    listOf(StatsRange.Today to "Today", StatsRange.Week to "Week", StatsRange.Month to "Month", StatsRange.AllTime to "All"),
+                    range, { rangeName = it.name }, Modifier.fillMaxWidth(),
+                )
                 if (range == StatsRange.Custom) {
                     Spacer(Modifier.height(10.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -163,31 +174,32 @@ fun StatsScreen() {
         val res = result
         if (res == null) {
             item(key = "sk") {
-                Column(Modifier.widthIn(max = 896.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { Skeleton(Modifier.weight(1f).height(96.dp)); Skeleton(Modifier.weight(1f).height(96.dp)) }
-                    Skeleton(Modifier.fillMaxWidth().height(176.dp))
+                Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Skeleton(Modifier.fillMaxWidth(0.6f).height(40.dp))
+                    Skeleton(Modifier.fillMaxWidth().height(200.dp))
                     Skeleton(Modifier.fillMaxWidth().height(128.dp))
                 }
             }
             return@LazyColumn
         }
-        item(key = "cards") {
-            Row(Modifier.widthIn(max = 896.dp).fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard("Total Tracked", Format.fmtMs(res.totalMs), null, Modifier.weight(1f).fillMaxHeight())
-                StatCard("Daily Average", Format.fmtMs(res.dailyAvgMs), "per active day", Modifier.weight(1f).fillMaxHeight())
+        item(key = "totals") {
+            Row(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("Total", fontSize = 13.sp, color = T.c.mutedForeground)
+                    Text(Format.fmtMs(res.totalMs), fontSize = 28.sp, fontWeight = FontWeight.Bold, color = T.c.foreground, style = Tabular, maxLines = 1)
+                }
+                Column(Modifier.weight(1f)) {
+                    Text("Daily average", fontSize = 13.sp, color = T.c.mutedForeground)
+                    Text(Format.fmtMs(res.dailyAvgMs), fontSize = 28.sp, fontWeight = FontWeight.Bold, color = T.c.foreground, style = Tabular, maxLines = 1)
+                }
             }
         }
         if (res.trend.any { it.total > 0 }) {
             item(key = "trend") {
-                TCard(Modifier.widthIn(max = 896.dp).fillMaxWidth()) {
-                    Text("Daily breakdown", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = T.c.foreground)
-                    Spacer(Modifier.height(10.dp))
-                    Box(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).border(1.dp, T.c.border.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
-                            .background(T.c.muted.copy(alpha = 0.2f)).padding(8.dp),
-                    ) { BreakdownChart(res) }
+                Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    BreakdownChart(res)
                     Spacer(Modifier.height(8.dp))
-                    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)) {
+                    FlowRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         res.series.forEach { s ->
                             if (s.name == "Other" && res.trend.none { it.values.last() > 0 }) return@forEach
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -201,26 +213,22 @@ fun StatsScreen() {
             }
         }
         if (res.top.isNotEmpty()) {
+            item(key = "top-h") { SectionLabel("Top tasks", Modifier.widthIn(max = 720.dp)) }
             item(key = "top") {
-                TCard(Modifier.widthIn(max = 896.dp).fillMaxWidth()) {
-                    Text("Top tasks", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = T.c.foreground)
-                    Spacer(Modifier.height(12.dp))
+                Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 20.dp)) {
                     res.top.forEachIndexed { i, (t, ms) ->
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
-                            Text("${i + 1}", fontSize = 12.sp, color = T.c.mutedForeground, modifier = Modifier.width(16.dp))
-                            Spacer(Modifier.width(10.dp))
-                            Column(Modifier.weight(1f)) {
-                                Row {
-                                    Text(t.name, fontSize = 14.sp, color = T.c.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                                    Text(Format.fmtMs(ms), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = T.c.foreground, style = Tabular)
-                                }
-                                Spacer(Modifier.height(4.dp))
-                                Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(T.c.muted)) {
-                                    Box(
-                                        Modifier.fillMaxWidth(if (res.totalMs > 0) ms.toFloat() / res.totalMs else 0f).height(6.dp).clip(RoundedCornerShape(3.dp))
-                                            .background(hexColor(co.bitterlemon.trackify.util.Accents.TASK_COLORS[i % 6]).copy(alpha = 0.88f)),
-                                    )
-                                }
+                        Column(Modifier.padding(vertical = 8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(t.name, fontSize = 15.sp, color = T.c.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                Spacer(Modifier.width(8.dp))
+                                Text(Format.fmtMs(ms), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = T.c.foreground, style = Tabular)
+                            }
+                            Spacer(Modifier.height(6.dp))
+                            Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(T.c.muted)) {
+                                Box(
+                                    Modifier.fillMaxWidth(if (res.totalMs > 0) ms.toFloat() / res.totalMs else 0f).height(4.dp).clip(RoundedCornerShape(2.dp))
+                                        .background(hexColor(co.bitterlemon.trackify.util.Accents.TASK_COLORS[i % 6]).copy(alpha = 0.88f)),
+                                )
                             }
                         }
                     }
@@ -228,18 +236,22 @@ fun StatsScreen() {
             }
         }
         item(key = "groups") {
-            GroupsCard(
+            GroupsSection(
                 res, onCopy = { text -> clipboard.setText(AnnotatedString(text)) },
                 onEdit = { editGroup = it },
                 onDelete = { g -> scope.launch { runCatching { graph.api.deleteGroup(g.id) }; graph.repo.refreshGroups(); graph.repo.requestRefresh(0) } },
                 onCreate = { createOpen = true },
             )
         }
-        item(key = "create") {
-            Row(Modifier.widthIn(max = 896.dp).fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TButton("Create a group from tasks", { createOpen = true }, icon = Icons.Outlined.Add)
+        if (!tasks.isNullOrEmpty()) {
+            item(key = "activity-h") { SectionLabel("Activity", Modifier.widthIn(max = 720.dp)) }
+            item(key = "activity") {
+                Box(Modifier.widthIn(max = 720.dp).padding(horizontal = 16.dp)) {
+                    co.bitterlemon.trackify.ui.home.TimeSpentCard(tasks!!, timer.running?.taskId, timer.running?.startTime)
+                }
             }
         }
+    }
     }
 
     if (createOpen) GroupDialog(null, tasks ?: emptyList(), result?.taskMsInRange ?: emptyMap()) { createOpen = false }
@@ -376,88 +388,43 @@ private fun ChartTooltip(res: StatsResult, row: TrendRow, anchor: IntOffset, onD
 }
 
 @Composable
-private fun GroupsCard(res: StatsResult, onCopy: (String) -> Unit, onEdit: (Group) -> Unit, onDelete: (Group) -> Unit, onCreate: () -> Unit) {
+private fun GroupsSection(res: StatsResult, onCopy: (String) -> Unit, onEdit: (Group) -> Unit, onDelete: (Group) -> Unit, onCreate: () -> Unit) {
     val groups = res.groups
-    TCard(Modifier.widthIn(max = 896.dp).fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Saved groups", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, modifier = Modifier.weight(1f))
-            if (groups.size >= 2) TButton("Copy all", { onCopy(groups.joinToString("\n\n") { StatsData.groupText(it) }) }, variant = BtnVariant.Outline, size = BtnSize.Sm, icon = Icons.Outlined.ContentCopy)
-        }
-        Spacer(Modifier.height(12.dp))
-        val withTime = groups.filter { it.ms > 0 }
-        val maxMs = withTime.maxOfOrNull { it.ms } ?: 0L
-        if (withTime.size >= 2 && maxMs > 0) {
-            Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).border(1.dp, T.c.border.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
-                    .background(T.c.muted.copy(alpha = 0.2f)).padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                withTime.sortedByDescending { it.ms }.forEach { g ->
-                    Column {
-                        Text(g.group.name, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = T.c.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Spacer(Modifier.height(4.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.weight(1f).height(8.dp).clip(RoundedCornerShape(50)).background(T.c.muted)) {
-                                Box(Modifier.fillMaxWidth(g.ms.toFloat() / maxMs).height(8.dp).clip(RoundedCornerShape(50)).background(hexColor(g.group.accent).copy(alpha = 0.85f)))
-                            }
-                            Text(Format.fmtMs(g.ms), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = T.c.foreground, style = Tabular, modifier = Modifier.width(80.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End)
-                        }
-                    }
-                }
+    var menuFor by remember { mutableStateOf<co.bitterlemon.trackify.util.GroupRow?>(null) }
+    Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Groups", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = T.c.mutedForeground, modifier = Modifier.weight(1f))
+            if (groups.size >= 2) IconButton({ onCopy(groups.joinToString("\n\n") { StatsData.groupText(it) }) }) {
+                Icon(Icons.Outlined.ContentCopy, "Copy all groups", tint = T.c.mutedForeground, modifier = Modifier.size(20.dp))
             }
-            Spacer(Modifier.height(16.dp))
+            IconButton(onCreate) { Icon(Icons.Outlined.Add, "Create a group from tasks", tint = T.c.foreground) }
         }
         if (groups.isEmpty()) {
-            Column(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("No saved groups yet.", fontSize = 14.sp, color = T.c.mutedForeground)
-                Spacer(Modifier.height(16.dp))
-                TButton("Create a group from tasks", onCreate, icon = Icons.Outlined.Add)
+            Text("No saved groups yet. Tap + to group tasks together.", fontSize = 14.sp, color = T.c.mutedForeground, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+        }
+        groups.forEach { g ->
+            val members = when {
+                g.group.taskIds.isEmpty() -> "No tasks"
+                g.members.isEmpty() && g.orphanIds.isNotEmpty() -> "${g.orphanIds.size} missing task${if (g.orphanIds.size != 1) "s" else ""}"
+                else -> g.members.joinToString(" · ") { (t, ms) -> t.name + (if (t.hidden) " (hidden)" else "") + " " + Format.fmtMs(ms) } +
+                    (if (g.orphanIds.isNotEmpty()) " · ${g.orphanIds.size} removed" else "")
             }
-        } else {
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).border(1.dp, T.c.border.copy(alpha = 0.8f), RoundedCornerShape(8.dp))) {
-                Row(Modifier.fillMaxWidth().background(T.c.muted.copy(alpha = 0.35f)).padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    Text("Group", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = T.c.mutedForeground, modifier = Modifier.weight(1f))
-                    Text("Total", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = T.c.mutedForeground)
-                }
-                groups.forEachIndexed { gi, g ->
-                    if (gi > 0) HorizontalDivider(color = T.c.border.copy(alpha = 0.5f))
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(8.dp).clip(RoundedCornerShape(50)).background(hexColor(g.group.accent)))
-                            Spacer(Modifier.width(8.dp))
-                            Text(g.group.name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, maxLines = 2, modifier = Modifier.weight(1f))
-                            Text(Format.fmtMs(g.ms), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, style = Tabular)
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        when {
-                            g.group.taskIds.isEmpty() -> Text("—", color = T.c.mutedForeground, fontSize = 13.sp)
-                            g.members.isEmpty() && g.orphanIds.isNotEmpty() ->
-                                Text("${g.orphanIds.size} missing task${if (g.orphanIds.size != 1) "s" else ""}", fontSize = 12.sp, color = if (T.c.dark) androidx.compose.ui.graphics.Color(0xFFFBBF24) else androidx.compose.ui.graphics.Color(0xFFB45309))
-                            else -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                g.members.forEachIndexed { mi, (t, ms) ->
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(t.name + if (t.hidden) " (hidden)" else "", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = T.c.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1.2f))
-                                        Spacer(Modifier.width(8.dp))
-                                        Box(Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(2.dp)).background(T.c.muted)) {
-                                            Box(Modifier.fillMaxWidth(if (g.ms > 0) (ms.toFloat() / g.ms).coerceIn(0f, 1f) else 0f).height(6.dp).clip(RoundedCornerShape(2.dp)).background(hexColor(co.bitterlemon.trackify.util.Accents.TASK_COLORS[mi % 6]).copy(alpha = 0.85f)))
-                                        }
-                                        Text(Format.fmtMs(ms), fontSize = 12.sp, color = T.c.mutedForeground, style = Tabular, modifier = Modifier.width(68.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End)
-                                    }
-                                }
-                                g.orphanIds.forEach { oid ->
-                                    Text("Removed · ${oid.take(8)}…", fontSize = 12.sp, color = if (T.c.dark) androidx.compose.ui.graphics.Color(0xFFFCD34D) else androidx.compose.ui.graphics.Color(0xFF92400E))
-                                }
-                            }
-                        }
-                        if (g.members.isNotEmpty() && g.ms == 0L) Text("No tracked time", fontSize = 11.sp, color = T.c.mutedForeground)
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            IconButton({ onCopy(StatsData.groupText(g)) }) { Icon(Icons.Outlined.ContentCopy, "Copy", tint = T.c.foreground, modifier = Modifier.size(18.dp)) }
-                            IconButton({ onEdit(g.group) }) { Icon(Icons.Outlined.Edit, "Edit", tint = T.c.foreground, modifier = Modifier.size(18.dp)) }
-                            IconButton({ onDelete(g.group) }) { Icon(Icons.Outlined.Delete, "Delete", tint = T.c.destructive, modifier = Modifier.size(18.dp)) }
-                        }
-                    }
-                }
-            }
+            ListRow(
+                g.group.name, subtitle = members, onClick = { onEdit(g.group) },
+                trailing = {
+                    Text(Format.fmtMs(g.ms), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = T.c.foreground, style = Tabular)
+                    IconButton({ menuFor = g }) { Icon(Icons.Outlined.MoreVert, "More for ${g.group.name}", tint = T.c.mutedForeground) }
+                },
+                modifier = Modifier.padding(end = 0.dp),
+            )
+            RowDivider(inset = 20.dp)
+        }
+    }
+    menuFor?.let { g ->
+        ActionSheet(g.group.name, onDismiss = { menuFor = null }) {
+            SheetAction(Icons.Outlined.Edit, "Edit", { menuFor = null; onEdit(g.group) })
+            SheetAction(Icons.Outlined.ContentCopy, "Copy summary", { menuFor = null; onCopy(StatsData.groupText(g)) })
+            SheetAction(Icons.Outlined.Delete, "Delete", { menuFor = null; onDelete(g.group) }, destructive = true)
         }
     }
 }

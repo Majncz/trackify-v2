@@ -97,7 +97,7 @@ private fun tabTitle(c: Conversation): String {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ChatScreen() {
+fun ChatScreen(onBack: () -> Unit) {
     val graph = AppGraph.get(LocalContext.current)
     val vm: ChatVm = viewModel { ChatVm(graph) }
     var confirmDelete by remember { mutableStateOf<Conversation?>(null) }
@@ -111,6 +111,9 @@ fun ChatScreen() {
     LaunchedEffect(vm.conversations.size) { if (vm.conversations.isNotEmpty()) tabsState.scrollToItem(vm.conversations.size) }
 
     Column(Modifier.fillMaxSize().imePadding()) {
+        co.bitterlemon.trackify.ui.components.ScreenBar("AI chat", onBack = onBack) {
+            IconButton({ vm.newConversation() }) { Icon(Icons.Outlined.Add, "New conversation", tint = T.c.foreground) }
+        }
         // Conversation tabs (oldest first, auto-scrolled to the end)
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             LazyRow(Modifier.weight(1f), state = tabsState, contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -127,7 +130,6 @@ fun ChatScreen() {
                     )
                 }
             }
-            IconButton({ vm.newConversation() }) { Icon(Icons.Outlined.Add, "New conversation", tint = T.c.foreground) }
         }
         HorizontalDivider(color = T.c.border)
 

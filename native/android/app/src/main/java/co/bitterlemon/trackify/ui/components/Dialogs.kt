@@ -35,9 +35,25 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import co.bitterlemon.trackify.ui.theme.T
 
-/** shadcn-style dialog: centred card, title, close X, content, right-aligned footer. */
+/** True on phones (compact width): dialogs become bottom sheets. */
+@Composable
+fun isCompactWidth(): Boolean = LocalConfiguration.current.screenWidthDp < 600
+
+/**
+ * Trackify dialog. On phones it is a Material bottom sheet (drag handle, title, content, footer);
+ * on tablets, or with [sheet] = false (confirmations, pickers), a centred card.
+ */
 @Composable
 fun TDialog(
     title: String,
@@ -46,9 +62,14 @@ fun TDialog(
     maxWidth: Dp = 512.dp,
     dismissOnOutside: Boolean = true,
     scrollable: Boolean = true,
+    sheet: Boolean = true,
     footer: (@Composable RowScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    if (sheet && isCompactWidth()) {
+        TSheet(title, onDismiss, description, scrollable, footer, content)
+        return
+    }
     val screenH = LocalConfiguration.current.screenHeightDp.dp
     Dialog(
         onDismissRequest = onDismiss,
@@ -93,6 +114,91 @@ fun TDialog(
     }
 }
 
+@Composable
+private fun TSheet(
+    title: String,
+    onDismiss: () -> Unit,
+    description: String?,
+    scrollable: Boolean,
+    footer: (@Composable RowScope.() -> Unit)?,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = state,
+        // Sheets holding sliders/lists (non-scrollable) must not steal horizontal drags.
+        sheetGesturesEnabled = scrollable,
+        containerColor = T.c.card,
+        contentColor = T.c.foreground,
+        tonalElevation = 0.dp,
+        scrimColor = Color.Black.copy(alpha = 0.4f),
+        dragHandle = {
+            Box(Modifier.padding(top = 10.dp, bottom = 6.dp).size(width = 36.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(T.c.mutedForeground.copy(alpha = 0.4f)))
+        },
+    ) {
+        Column(Modifier.fillMaxWidth().imePadding()) {
+            Text(title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 6.dp))
+            if (description != null) {
+                Text(description, fontSize = 14.sp, color = T.c.mutedForeground, modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp))
+            }
+            Column(
+                Modifier
+                    .weight(1f, fill = false)
+                    .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                content = content,
+            )
+            if (footer != null) {
+                androidx.compose.foundation.layout.FlowRow(
+                    Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 16.dp, top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically,
+                ) { footer(this) }
+            } else Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+/** Plain action sheet: a title and full-width rows (row menus). */
+@Composable
+fun ActionSheet(title: String?, onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = state,
+        containerColor = T.c.card,
+        contentColor = T.c.foreground,
+        tonalElevation = 0.dp,
+        scrimColor = Color.Black.copy(alpha = 0.4f),
+        dragHandle = {
+            Box(Modifier.padding(top = 10.dp, bottom = 6.dp).size(width = 36.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(T.c.mutedForeground.copy(alpha = 0.4f)))
+        },
+    ) {
+        Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+            if (title != null) {
+                Text(title, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = T.c.mutedForeground, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+            }
+            content()
+        }
+    }
+}
+
+/** One row of an [ActionSheet]. */
+@Composable
+fun SheetAction(icon: ImageVector, label: String, onClick: () -> Unit, destructive: Boolean = false) {
+    val color = if (destructive) T.c.destructive else T.c.foreground
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = color, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(20.dp))
+        Text(label, fontSize = 16.sp, color = color)
+    }
+}
+
 /** Simple confirm dialog (web `confirm()` / AlertDialog). */
 @Composable
 fun ConfirmDialog(
@@ -107,6 +213,7 @@ fun ConfirmDialog(
         title = title,
         onDismiss = onDismiss,
         maxWidth = 420.dp,
+        sheet = false,
         footer = {
             TButton("Cancel", onDismiss, variant = BtnVariant.Outline)
             TButton(confirmLabel, { onConfirm(); onDismiss() }, variant = if (destructive) BtnVariant.Destructive else BtnVariant.Default)

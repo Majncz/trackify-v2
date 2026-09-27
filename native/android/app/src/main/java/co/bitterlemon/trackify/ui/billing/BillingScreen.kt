@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Close
@@ -71,7 +72,6 @@ import co.bitterlemon.trackify.ui.components.BtnSize
 import co.bitterlemon.trackify.ui.components.BtnVariant
 import co.bitterlemon.trackify.ui.components.CardShape
 import co.bitterlemon.trackify.ui.components.DateField
-import co.bitterlemon.trackify.ui.components.PageHeader
 import co.bitterlemon.trackify.ui.components.Segmented
 import co.bitterlemon.trackify.ui.components.Skeleton
 import co.bitterlemon.trackify.ui.components.TBadge
@@ -100,10 +100,9 @@ fun billingRange(p: BillingPeriod, cf: LocalDate, ct: LocalDate, today: LocalDat
     BillingPeriod.Custom -> Time.startOfDay(cf) to Time.endOfDay(ct)
 }
 
-private const val GUIDE_KEY = "billing-guide-dismissed"
 
 @Composable
-fun BillingScreen() {
+fun BillingScreen(onBack: () -> Unit) {
     val graph = AppGraph.get(LocalContext.current)
     val context = LocalContext.current
     val billingTasks by graph.repo.billingTasks.collectAsState()
@@ -113,8 +112,7 @@ fun BillingScreen() {
     var summary by remember { mutableStateOf<BillingSummary?>(null) }
     var summaryError by remember { mutableStateOf(false) }
     var summaryTick by remember { mutableStateOf(0) }
-    val prefs = remember { context.getSharedPreferences("billing", Context.MODE_PRIVATE) }
-    var guideVisible by remember { mutableStateOf(!prefs.getBoolean(GUIDE_KEY, false)) }
+    var guideVisible by remember { mutableStateOf(false) }
 
     // Sessions filters (hoisted so the heatmap can drive them)
     val s = rememberSessionsState()
@@ -125,15 +123,18 @@ fun BillingScreen() {
     }
     val refreshAll: () -> Unit = { summaryTick++; s.reloadTick++ }
 
+    Column(Modifier.fillMaxSize()) {
+    co.bitterlemon.trackify.ui.components.ScreenBar("Billing", onBack = onBack) {
+        androidx.compose.material3.IconButton({ guideVisible = !guideVisible }) {
+            androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Info, "How billing works", tint = if (guideVisible) T.c.foreground else T.c.mutedForeground)
+        }
+    }
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        item(key = "h") {
-            PageHeader("Billing", "Rates on tasks, billable sessions, and marking them paid—same chart style as Stats where it helps.", Modifier.widthIn(max = 896.dp))
-        }
         item(key = "summary") { SummaryBar(summary, summaryError) }
         val hasEnrolled = !billingTasks.isNullOrEmpty()
         if (billingTasks != null && !hasEnrolled) {
@@ -148,7 +149,7 @@ fun BillingScreen() {
         }
         if (guideVisible) {
             item(key = "guide") {
-                BillingGuide(onOpenRates = { tabName = BillingTab.Rates.name }, onDismiss = { prefs.edit().putBoolean(GUIDE_KEY, true).apply(); guideVisible = false })
+                BillingGuide(onOpenRates = { tabName = BillingTab.Rates.name }, onDismiss = { guideVisible = false })
             }
         }
         item(key = "tabs") {
@@ -160,6 +161,7 @@ fun BillingScreen() {
             BillingTab.Rates -> item(key = "rates") { RatesTab(onChanged = refreshAll) }
             BillingTab.Ai -> item(key = "ai") { AiBillingTab() }
         }
+    }
     }
 
     if (s.markOpen) {
@@ -176,15 +178,13 @@ private fun SummaryBar(summary: BillingSummary?, error: Boolean) {
             summary == null -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { repeat(2) { Skeleton(Modifier.weight(1f).height(64.dp)) } }
             summary.byCurrency.isEmpty() -> Text("Enroll tasks in billing to see earnings summary.", fontSize = 14.sp, color = T.c.mutedForeground)
             else -> summary.byCurrency.entries.sortedBy { it.key }.forEach { (cur, t) ->
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SummaryCard("Unpaid ($cur)", Format.money(t.unpaidTotal, cur), true, Modifier.weight(1f).fillMaxHeight())
-                        SummaryCard("This week", Format.money(t.thisWeekTotal, cur), false, Modifier.weight(1f).fillMaxHeight())
-                    }
-                    Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SummaryCard("This month", Format.money(t.thisMonthTotal, cur), false, Modifier.weight(1f).fillMaxHeight())
-                        SummaryCard("All time paid", Format.money(t.allTimePaidTotal, cur), false, Modifier.weight(1f).fillMaxHeight())
-                    }
+                Column(Modifier.padding(horizontal = 4.dp)) {
+                    Text("Unpaid · $cur", fontSize = 13.sp, color = T.c.mutedForeground)
+                    Text(Format.money(t.unpaidTotal, cur), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = T.c.foreground, style = Tabular, maxLines = 1)
+                    Text(
+                        "This week ${Format.money(t.thisWeekTotal, cur)} · This month ${Format.money(t.thisMonthTotal, cur)} · Paid ${Format.money(t.allTimePaidTotal, cur)}",
+                        fontSize = 13.sp, color = T.c.mutedForeground, style = Tabular,
+                    )
                 }
             }
         }

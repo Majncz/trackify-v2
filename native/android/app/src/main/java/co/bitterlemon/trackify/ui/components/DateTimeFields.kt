@@ -72,7 +72,7 @@ fun TimeField(value: LocalTime, onChange: (LocalTime) -> Unit, modifier: Modifie
     if (open) {
         val state = rememberTimePickerState(value.hour, value.minute, is24Hour = true)
         TDialog(
-            "Pick a time", { open = false }, maxWidth = 380.dp,
+            "Pick a time", { open = false }, maxWidth = 380.dp, sheet = false,
             footer = {
                 TButton("Cancel", { open = false }, variant = BtnVariant.Outline)
                 TButton("OK", { onChange(LocalTime.of(state.hour, state.minute)); open = false })

@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -96,7 +97,12 @@ class AppGraph(private val context: Context) {
     fun start() {
         engine.ensureUser(session.session.value?.userId)
         // Cached tasks can be large (every event); parse off the main thread.
-        scope.launch(kotlinx.coroutines.Dispatchers.IO) { repo.loadCache() }
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            repo.loadCache()
+            // Every process start (first launch after an update included) redraws the widgets with this build.
+            syncSurfaces()
+            WidgetUpdater.updateAllNow(context)
+        }
         observeEffects()
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
@@ -175,7 +181,11 @@ class AppGraph(private val context: Context) {
         WidgetUpdater.updateAllNow(context)
     }
 
-    suspend fun signIn(email: String, password: String): Result<Unit> = runCatching {
+    // Runs in the app scope: storing the session swaps the login screen out right away, which cancels the
+    // caller's scope — the rest of sign-in (persisting the token, first data load) must still finish.
+    suspend fun signIn(email: String, password: String): Result<Unit> = scope.async { signInInternal(email, password) }.await()
+
+    private suspend fun signInInternal(email: String, password: String): Result<Unit> = runCatching {
         val device = "Android · ${Build.MANUFACTURER} ${Build.MODEL}".take(60)
         val res = api.login(email.trim(), password, device)
         val newSession = Session(res.token, res.user.id, res.user.email)

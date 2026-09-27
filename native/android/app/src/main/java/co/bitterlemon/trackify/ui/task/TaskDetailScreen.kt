@@ -73,6 +73,12 @@ import co.bitterlemon.trackify.ui.components.BadgeVariant
 import co.bitterlemon.trackify.ui.components.BtnSize
 import co.bitterlemon.trackify.ui.components.BtnVariant
 import co.bitterlemon.trackify.ui.components.ConfirmDialog
+import co.bitterlemon.trackify.ui.components.ListRow
+import co.bitterlemon.trackify.ui.components.RowDivider
+import co.bitterlemon.trackify.ui.components.ScreenBar
+import co.bitterlemon.trackify.ui.components.SectionLabel
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
 import co.bitterlemon.trackify.ui.components.ControlShape
 import co.bitterlemon.trackify.ui.components.DateField
 import co.bitterlemon.trackify.ui.components.EmptyState
@@ -114,55 +120,53 @@ fun TaskDetailScreen(id: String, onBack: () -> Unit, onOpenBilling: () -> Unit =
 
     LaunchedEffect(id) { billingError = graph.repo.refreshBillingTasks().isFailure && graph.repo.billingTasks.value == null }
 
+    Column(Modifier.fillMaxSize()) {
+    ScreenBar(null, onBack = onBack)
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(bottom = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        item {
-            Row(Modifier.widthIn(max = 896.dp).fillMaxWidth()) {
-                TButton("Back", onBack, variant = BtnVariant.Ghost, icon = Icons.AutoMirrored.Outlined.ArrowBack)
-            }
-        }
         if (tasks == null) {
-            item { Skeleton(Modifier.widthIn(max = 896.dp).fillMaxWidth().height(200.dp)) }
+            item { Skeleton(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(20.dp).height(200.dp)) }
             return@LazyColumn
         }
         if (task == null) {
-            item { TCard(Modifier.widthIn(max = 896.dp).fillMaxWidth()) { EmptyState("Task not found") } }
+            item { EmptyState("Task not found", Modifier.widthIn(max = 720.dp)) }
             return@LazyColumn
         }
-        item {
+        item(key = "head") {
             val running = timer.running?.taskId == task.id
-            TCard(Modifier.widthIn(max = 896.dp).fillMaxWidth(), padding = PaddingValues(20.dp)) {
-                Row(verticalAlignment = Alignment.Top) {
-                    Column(Modifier.weight(1f)) { EditableName(task) }
-                    Spacer(Modifier.width(8.dp))
-                    TButton(if (hiding) "Hiding..." else "Hide", { confirmHide = true }, variant = BtnVariant.Outline, size = BtnSize.Sm, icon = Icons.Outlined.VisibilityOff, enabled = !hiding)
+            val now = co.bitterlemon.trackify.ui.team.rememberTicker(running)
+            val live = if (running) maxOf(0L, now - timer.running!!.startTime) else 0L
+            Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 20.dp)) {
+                EditableName(task)
+                task.taskGroup?.let {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                        co.bitterlemon.trackify.ui.components.AccentDot(hexColor(it.accent), 8.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(it.name, fontSize = 14.sp, color = T.c.mutedForeground)
+                    }
                 }
-                task.taskGroup?.let { Spacer(Modifier.height(8.dp)); AccentBadge(it.name, hexColor(it.accent)) }
-                Spacer(Modifier.height(16.dp))
-                val now = co.bitterlemon.trackify.ui.team.rememberTicker(running)
-                val live = if (running) maxOf(0L, now - timer.running!!.startTime) else 0L
-                Text("Total Time", fontSize = 14.sp, color = T.c.mutedForeground)
-                Text(Format.durationWords(task.events.sumOf { it.toMs - it.fromMs } + live), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = T.c.foreground, style = Tabular)
-                Spacer(Modifier.height(12.dp))
-                Text("Tracking Sessions", fontSize = 14.sp, color = T.c.mutedForeground)
-                Text("${task.events.size}", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground)
-                Spacer(Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (running) TButton("Stop", { graph.engine.stop() }, variant = BtnVariant.Destructive, size = BtnSize.Sm, icon = Icons.Outlined.Stop)
-                    else TButton("Start", { graph.engine.start(task.id) }, size = BtnSize.Sm, icon = Icons.Outlined.PlayArrow)
-                    TButton("Log past time", { logOpen = true }, variant = BtnVariant.Outline, size = BtnSize.Sm, icon = Icons.Outlined.Add)
+                Row(Modifier.fillMaxWidth().padding(top = 20.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Total", fontSize = 13.sp, color = T.c.mutedForeground)
+                        Text(Format.durationWords(task.events.sumOf { it.toMs - it.fromMs } + live), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = T.c.foreground, style = Tabular)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("Sessions", fontSize = 13.sp, color = T.c.mutedForeground)
+                        Text("${task.events.size}", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = T.c.foreground, style = Tabular)
+                    }
                 }
-                if (task.events.isNotEmpty()) {
-                    Spacer(Modifier.height(20.dp))
-                    EntriesHeader(task.events.size)
+                Row(Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (running) TButton("Stop", { graph.engine.stop() }, Modifier.weight(1f), variant = BtnVariant.Destructive, size = BtnSize.Lg, icon = Icons.Outlined.Stop)
+                    else TButton("Start", { graph.engine.start(task.id) }, Modifier.weight(1f), size = BtnSize.Lg, icon = Icons.Outlined.PlayArrow)
+                    TButton("Log past time", { logOpen = true }, Modifier.weight(1f), variant = BtnVariant.Outline, size = BtnSize.Lg, icon = Icons.Outlined.Add)
                 }
             }
         }
         if (task.events.isNotEmpty()) {
+            item(key = "entries-h") { SectionLabel("Time entries · tap one to edit", Modifier.widthIn(max = 720.dp)) }
             val groups = groupByDay(task.events)
             val shown = if (showAll) groups else groups.take(5)
             items(shown, key = { it.date.toEpochDay() }) { g ->
@@ -170,18 +174,27 @@ fun TaskDetailScreen(id: String, onBack: () -> Unit, onOpenBilling: () -> Unit =
             }
             if (groups.size > 5) {
                 item {
-                    TButton(if (showAll) "Show Less" else "Show ${groups.size - 5} More Days", { showAll = !showAll }, variant = BtnVariant.Ghost, modifier = Modifier.widthIn(max = 896.dp).fillMaxWidth())
+                    TButton(if (showAll) "Show fewer days" else "Show ${groups.size - 5} more days", { showAll = !showAll }, variant = BtnVariant.Ghost, modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 12.dp))
                 }
             }
         }
-        item {
-            BillingPanel(task, billingTasks, billingError, onOpenBilling)
+        item(key = "billing-h") { SectionLabel("Billing", Modifier.widthIn(max = 720.dp)) }
+        item(key = "billing") {
+            Box(Modifier.widthIn(max = 720.dp).padding(horizontal = 20.dp)) { BillingPanel(task, billingTasks, billingError, onOpenBilling) }
         }
+        item(key = "hide") {
+            Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(top = 16.dp)) {
+                RowDivider()
+                ListRow(if (hiding) "Hiding…" else "Hide task", subtitle = "Restore it any time from More → Hidden tasks", icon = Icons.Outlined.VisibilityOff, destructive = true, onClick = { if (!hiding) confirmHide = true })
+                RowDivider()
+            }
+        }
+    }
     }
 
     if (confirmHide && task != null) {
         ConfirmDialog(
-            "Hide task?", "Hide this task? You can restore it from Settings.", "Hide",
+            "Hide task?", "Hide this task? You can restore it from More → Hidden tasks.", "Hide",
             onConfirm = {
                 hiding = true
                 scope.launch {
@@ -224,34 +237,28 @@ private fun DayCard(g: DayGroup, onEdit: (Event) -> Unit) {
     val label = when (g.date) {
         today -> "Today"
         today.minusDays(1) -> "Yesterday"
-        else -> Time.format(g.date, "EEEE, MMMM d, yyyy")
+        else -> Time.format(g.date, "EEE d MMM yyyy")
     }
-    Column(Modifier.widthIn(max = 896.dp).fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
+    Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 4.dp)) {
             Text(label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, modifier = Modifier.weight(1f))
-            Text("${Format.durationWords(g.totalMs)} total", fontSize = 12.sp, color = T.c.mutedForeground)
+            Text(Format.durationWords(g.totalMs), fontSize = 14.sp, color = T.c.mutedForeground, style = Tabular)
         }
-        Spacer(Modifier.height(8.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            g.events.forEach { e ->
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-                        .background(T.c.muted.copy(alpha = 0.5f))
-                        .border(1.dp, T.c.border.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                        .clickable(onClickLabel = "Edit entry") { onEdit(e) }
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Outlined.Schedule, null, tint = T.c.mutedForeground, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(10.dp))
-                    Text("${Time.format(e.fromMs, "h:mm a")} → ${Time.format(e.toMs, "h:mm a")}", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = T.c.foreground, modifier = Modifier.weight(1f))
-                    if (e.paymentRecordId != null) {
-                        TBadge("Paid", variant = BadgeVariant.Secondary); Spacer(Modifier.width(6.dp))
-                    }
-                    TBadge(Format.durationWords(e.toMs - e.fromMs), variant = BadgeVariant.Outline, mono = true)
+        g.events.forEach { e ->
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                    .clickable(onClickLabel = "Edit entry") { onEdit(e) }
+                    .padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("${Time.clock(e.fromMs)} – ${Time.clock(e.toMs)}", fontSize = 16.sp, color = T.c.foreground, style = Tabular, modifier = Modifier.weight(1f))
+                if (e.paymentRecordId != null) {
+                    TBadge("Paid", variant = BadgeVariant.Secondary); Spacer(Modifier.width(8.dp))
                 }
+                Text(Format.durationWords(e.toMs - e.fromMs), fontSize = 15.sp, color = T.c.mutedForeground, style = Tabular)
             }
         }
+        RowDivider(Modifier.padding(top = 4.dp), inset = 20.dp)
     }
 }
 
@@ -282,7 +289,7 @@ private fun EditableName(task: Task) {
         LaunchedEffect(Unit) { focus.requestFocus() }
         BasicTextField(
             value, { value = it.take(100) },
-            textStyle = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground),
+            textStyle = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground),
             singleLine = true,
             cursorBrush = SolidColor(T.c.foreground),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -294,7 +301,7 @@ private fun EditableName(task: Task) {
         )
     } else {
         Row(Modifier.clickable(onClickLabel = "Rename task") { editing = true }, verticalAlignment = Alignment.CenterVertically) {
-            Text(task.name, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, modifier = Modifier.weight(1f, fill = false))
+            Text(task.name, fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, modifier = Modifier.weight(1f, fill = false))
             Spacer(Modifier.width(6.dp))
             Icon(Icons.Outlined.Edit, null, tint = T.c.mutedForeground, modifier = Modifier.size(15.dp))
         }
@@ -311,38 +318,20 @@ private fun BillingPanel(task: Task, billingTasks: List<co.bitterlemon.trackify.
         return
     }
     val billing = billingTasks.firstOrNull { it.taskId == task.id }
-    Row(Modifier.widthIn(max = 896.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(T.c.card)) {
-        TCard(
-            Modifier.fillMaxWidth(),
-            background = accent.copy(alpha = if (billing != null) 0.04f else 0.06f),
-            padding = PaddingValues(0.dp),
-        ) {
-            Row(Modifier.height(androidx.compose.foundation.layout.IntrinsicSize.Min)) {
-                androidx.compose.foundation.layout.Box(Modifier.width(3.dp).fillMaxHeight().background(accent))
-                Column(Modifier.weight(1f).padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.Top) {
-                        Column(Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Outlined.MonetizationOn, null, tint = T.c.primary, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("Billing & rates", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground)
-                            }
-                            Text("Same settings as Billing → Rates. Changes apply to unpaid sessions on the Sessions tab.", fontSize = 12.sp, color = T.c.mutedForeground)
-                        }
-                        TButton("Open Billing", onOpenBilling, variant = BtnVariant.Ghost, size = BtnSize.Sm, icon = Icons.AutoMirrored.Outlined.OpenInNew)
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        GroupOrUngroupedBadge(task); BillingStatusBadge(billing != null)
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    BillingStatsRow(task, billing)
-                    Spacer(Modifier.height(12.dp))
-                    BillingRateControls(task, billing) {}
-                }
+    Column(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                GroupOrUngroupedBadge(task); BillingStatusBadge(billing != null)
             }
+            TButton("Open Billing", onOpenBilling, variant = BtnVariant.Ghost, size = BtnSize.Sm, icon = Icons.AutoMirrored.Outlined.OpenInNew)
         }
+        Spacer(Modifier.height(12.dp))
+        BillingStatsRow(task, billing)
+        Spacer(Modifier.height(12.dp))
+        BillingRateControls(task, billing) {}
+        Text("Same settings as Billing → Rates. Changes apply to unpaid sessions.", fontSize = 12.sp, color = T.c.mutedForeground, modifier = Modifier.padding(top = 8.dp))
     }
+    @Suppress("UNUSED_VARIABLE") val unusedAccent = accent
 }
 
 /** Native extra: edit or delete a time entry (PUT / DELETE /api/events/:id). */

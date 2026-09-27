@@ -31,10 +31,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -235,8 +237,11 @@ fun TInput(
     minLines: Int = 1,
     trailing: @Composable (() -> Unit)? = null,
     suffix: String? = null,
+    autoFocus: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val requester = remember { androidx.compose.ui.focus.FocusRequester() }
+    if (autoFocus) androidx.compose.runtime.LaunchedEffect(Unit) { kotlinx.coroutines.delay(150); runCatching { requester.requestFocus() } }
     Column(modifier) {
         if (label != null) {
             Text(label, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = T.c.foreground)
@@ -245,7 +250,7 @@ fun TInput(
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
-            modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
+            modifier = Modifier.fillMaxWidth().then(if (autoFocus) Modifier.focusRequester(requester) else Modifier).onFocusChanged { focused = it.isFocused },
             singleLine = singleLine,
             minLines = minLines,
             maxLines = if (singleLine) 1 else 8,
@@ -457,4 +462,82 @@ fun Pulsing(active: Boolean, content: @Composable (Float) -> Unit) {
 @Composable
 fun SurfaceBlock(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Surface(modifier, color = T.c.card, shape = CardShape, border = BorderStroke(1.dp, T.c.border), content = content)
+}
+
+/** Plain top bar for every screen: optional back arrow, title, trailing actions. No subtitle, no hero. */
+@Composable
+fun ScreenBar(
+    title: String?,
+    onBack: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    actions: @Composable RowScope.() -> Unit = {},
+) {
+    CappedFontScale {
+        Row(
+            modifier.fillMaxWidth().height(64.dp).padding(start = if (onBack != null) 4.dp else 20.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (onBack != null) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back", tint = T.c.foreground)
+                }
+                Spacer(Modifier.width(4.dp))
+            }
+            Text(
+                title ?: "", fontSize = if (onBack != null) 20.sp else 24.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+            )
+            actions()
+        }
+    }
+}
+
+/** Full-width list row (≥ 56 dp): optional leading icon, title + optional subtitle, optional trailing content. */
+@Composable
+fun ListRow(
+    title: String,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    icon: ImageVector? = null,
+    destructive: Boolean = false,
+    onClick: (() -> Unit)? = null,
+    trailing: (@Composable RowScope.() -> Unit)? = null,
+) {
+    val color = if (destructive) T.c.destructive else T.c.foreground
+    Row(
+        modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+            .padding(horizontal = 20.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icon != null) {
+            Icon(icon, null, tint = if (destructive) T.c.destructive else T.c.mutedForeground, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(20.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = 16.sp, color = color, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (subtitle != null) Text(subtitle, fontSize = 13.sp, color = T.c.mutedForeground, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        if (trailing != null) {
+            Spacer(Modifier.width(12.dp))
+            trailing()
+        }
+    }
+}
+
+/** Small section label above a group of rows. */
+@Composable
+fun SectionLabel(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text, modifier = modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 6.dp),
+        fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = T.c.mutedForeground,
+    )
+}
+
+/** Hairline between rows/sections. */
+@Composable
+fun RowDivider(modifier: Modifier = Modifier, inset: Dp = 0.dp) {
+    androidx.compose.material3.HorizontalDivider(modifier.padding(start = inset), color = T.c.border)
 }

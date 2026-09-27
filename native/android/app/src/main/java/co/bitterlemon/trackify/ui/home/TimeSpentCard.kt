@@ -120,13 +120,10 @@ fun TimeSpentCard(tasks: List<Task>, liveTaskId: String?, liveStart: Long?) {
     val yearScroll = rememberScrollState(Int.MAX_VALUE)
     val scope = rememberCoroutineScope()
 
-    TCard(Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Time Spent", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, modifier = Modifier.weight(1f))
-            TButton("Weekly", { mode = "weekly" }, size = BtnSize.Sm, variant = if (mode == "weekly") BtnVariant.Default else BtnVariant.Outline)
-            Spacer(Modifier.width(8.dp))
-            TButton("Yearly", { mode = "yearly" }, size = BtnSize.Sm, variant = if (mode == "yearly") BtnVariant.Default else BtnVariant.Outline)
-        }
+    Column(Modifier.fillMaxWidth()) {
+        co.bitterlemon.trackify.ui.components.Segmented(
+            listOf("weekly" to "Weekly", "yearly" to "Yearly"), mode, { mode = it }, Modifier.fillMaxWidth(),
+        )
         val m = model
         Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             if (mode == "weekly") {

@@ -1,36 +1,48 @@
 package co.bitterlemon.trackify.ui.home
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Stop
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -46,41 +58,59 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import android.content.pm.PackageManager
 import co.bitterlemon.trackify.AppGraph
 import co.bitterlemon.trackify.data.Task
 import co.bitterlemon.trackify.data.TaskSort
 import co.bitterlemon.trackify.timer.TimerUi
 import co.bitterlemon.trackify.ui.auth.friendlyError
-import co.bitterlemon.trackify.ui.components.BtnSize
+import co.bitterlemon.trackify.ui.components.AccentDot
+import co.bitterlemon.trackify.ui.components.ActionSheet
 import co.bitterlemon.trackify.ui.components.BtnVariant
-import co.bitterlemon.trackify.ui.components.CardShape
+import co.bitterlemon.trackify.ui.components.ConfirmDialog
+import co.bitterlemon.trackify.ui.components.ConnectionDot
 import co.bitterlemon.trackify.ui.components.ErrorAlert
-import co.bitterlemon.trackify.ui.components.GroupPill
-import co.bitterlemon.trackify.ui.components.PageHeader
 import co.bitterlemon.trackify.ui.components.Pulsing
+import co.bitterlemon.trackify.ui.components.RowDivider
+import co.bitterlemon.trackify.ui.components.SheetAction
 import co.bitterlemon.trackify.ui.components.Skeleton
 import co.bitterlemon.trackify.ui.components.TButton
-import co.bitterlemon.trackify.ui.components.TCard
 import co.bitterlemon.trackify.ui.components.TDialog
 import co.bitterlemon.trackify.ui.components.TInput
-import co.bitterlemon.trackify.ui.team.LeaderboardCard
 import co.bitterlemon.trackify.ui.team.rememberTicker
 import co.bitterlemon.trackify.ui.theme.MonoDigits
 import co.bitterlemon.trackify.ui.theme.T
+import co.bitterlemon.trackify.ui.theme.Tabular
 import co.bitterlemon.trackify.ui.theme.hexColor
 import co.bitterlemon.trackify.util.Format
+import co.bitterlemon.trackify.util.Time
 import kotlinx.coroutines.launch
 
+/** Time of [task] inside today (local), including the live stretch when it runs. */
+private fun todayMs(task: Task, runningStart: Long?, now: Long): Long {
+    val dayStart = Time.startOfDay(Time.today())
+    var ms = task.events.sumOf { Time.overlap(it.fromMs, it.toMs, dayStart, now) }
+    if (runningStart != null) ms += maxOf(0L, now - maxOf(runningStart, dayStart))
+    return ms
+}
+
+/**
+ * Timer (home): what's running, a search-to-start field and the task list. Tap a row to start/switch;
+ * the row menu has Log past time, Details and Hide.
+ */
 @Composable
 fun HomeScreen(onOpenTask: (String) -> Unit) {
     val context = LocalContext.current
@@ -88,13 +118,18 @@ fun HomeScreen(onOpenTask: (String) -> Unit) {
     val tasksOrNull by graph.repo.tasks.collectAsState()
     val tasksError by graph.repo.tasksError.collectAsState()
     val timer by graph.engine.ui.collectAsState()
+    val status by graph.socket.status.collectAsState()
     val scope = rememberCoroutineScope()
+    val focus = LocalFocusManager.current
     var saveError by remember { mutableStateOf<String?>(null) }
     var newTaskOpen by remember { mutableStateOf(false) }
     var fixOpen by remember { mutableStateOf(false) }
     var logFor by remember { mutableStateOf<Task?>(null) }
-    var expanded by rememberSaveable { mutableStateOf(false) }
+    var menuFor by remember { mutableStateOf<Task?>(null) }
+    var hideFor by remember { mutableStateOf<Task?>(null) }
+    var query by rememberSaveable { mutableStateOf("") }
     var refreshing by remember { mutableStateOf(false) }
+    var creating by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { graph.engine.errors.collect { saveError = it } }
 
@@ -105,131 +140,166 @@ fun HomeScreen(onOpenTask: (String) -> Unit) {
         ) notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
+    val tasks = tasksOrNull ?: emptyList()
+    val running = timer.running
+    val now = rememberTicker(true, if (running != null) 1000 else 30_000)
+    val sorted = remember(tasks, running?.taskId) { TaskSort.home(tasks, running?.taskId) }
+    val q = query.trim()
+    val shown = if (q.isEmpty()) sorted else sorted.filter { t ->
+        t.name.contains(q, ignoreCase = true) || t.taskGroup?.name?.contains(q, ignoreCase = true) == true
+    }
+    val exactMatch = q.isNotEmpty() && tasks.any { it.name.equals(q, ignoreCase = true) }
+    val todayTotal = tasks.sumOf { t -> todayMs(t, running?.startTime?.takeIf { running.taskId == t.id }, now) }
+
     fun start(id: String) {
         graph.engine.start(id)
         ensureNotificationPermission()
     }
 
-    val tasks = tasksOrNull ?: emptyList()
-    val running = timer.running
-    val sorted = remember(tasks, running?.taskId) { TaskSort.home(tasks, running?.taskId) }
+    fun tap(t: Task) {
+        if (running?.taskId == t.id) graph.engine.stop() else start(t.id)
+        if (query.isNotEmpty()) {
+            query = ""; focus.clearFocus()
+        }
+    }
 
-    PullToRefreshBox(
-        isRefreshing = refreshing,
-        onRefresh = {
-            refreshing = true
-            scope.launch { graph.engine.refreshTruth(); graph.repo.refreshAll(); refreshing = false }
-        },
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        BoxWithConstraints(Modifier.fillMaxSize()) {
-            // Expanded width: two panes (work on the left, team on the right).
-            val twoPane = maxWidth >= 840.dp
-            val listWidth = if (twoPane) maxWidth * 0.6f else maxWidth
-            val columns = when {
-                listWidth < 360.dp -> 1
-                listWidth < 840.dp -> 2
-                listWidth < 1100.dp -> 3
-                else -> 4
+    fun createAndStart(name: String) {
+        if (name.isBlank() || creating) return
+        creating = true
+        scope.launch {
+            try {
+                val t = graph.repo.createTask(name.trim())
+                start(t.id)
+                query = ""; focus.clearFocus()
+            } catch (e: Exception) {
+                saveError = friendlyError(e, "Failed to create task")
             }
-            Row(Modifier.fillMaxSize()) {
+            creating = false
+        }
+    }
+
+    fun go() {
+        val first = shown.firstOrNull()
+        when {
+            q.isEmpty() -> focus.clearFocus()
+            exactMatch -> tap(tasks.first { it.name.equals(q, ignoreCase = true) })
+            first != null -> tap(first)
+            else -> createAndStart(q)
+        }
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        // Compact header: today's total (live), connection dot, new task.
+        Row(
+            Modifier.fillMaxWidth().height(64.dp).padding(start = 20.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Today", fontSize = 20.sp, color = T.c.mutedForeground)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                if (tasksOrNull == null) "—" else Format.durationWords(todayTotal).let { if (todayTotal < 60_000) "0m" else it },
+                fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, style = Tabular,
+            )
+            Spacer(Modifier.width(10.dp))
+            ConnectionDot(status)
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = { newTaskOpen = true }) {
+                Icon(Icons.Outlined.Add, "New task", tint = T.c.foreground)
+            }
+        }
+
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = {
+                refreshing = true
+                scope.launch { graph.engine.refreshTruth(); graph.repo.refreshAll(); refreshing = false }
+            },
+            modifier = Modifier.fillMaxSize(),
+        ) {
             LazyColumn(
-                Modifier.weight(if (twoPane) 0.6f else 1f).fillMaxHeight(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                item(key = "header") {
-                    PageHeader("Dashboard", "Track your time efficiently", Modifier.widthIn(max = 896.dp)) {
-                        TButton("New Task", { newTaskOpen = true }, icon = Icons.Outlined.Add)
-                    }
-                }
-                saveError?.let { msg ->
-                    item(key = "save-error") { ErrorAlert("Failed to save", msg, onDismiss = { saveError = null }, modifier = Modifier.widthIn(max = 896.dp)) }
-                }
                 if (running != null) {
                     item(key = "running") {
-                        RunningBanner(timer, tasks.firstOrNull { it.id == running.taskId }, onClock = { fixOpen = true }, onStop = { graph.engine.stop() })
+                        RunningCard(
+                            timer, tasks.firstOrNull { it.id == running.taskId }, now,
+                            onClock = { fixOpen = true }, onStop = { graph.engine.stop() },
+                            onName = { onOpenTask(running.taskId) },
+                        )
                     }
                 }
-                if (!twoPane) item(key = "leaderboard") { LeaderboardCard(Modifier.widthIn(max = 896.dp)) }
-                item(key = "tasks-title") {
-                    Text(
-                        if (tasksOrNull == null) "Tasks" else "Tasks (${tasks.size})", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground,
-                        modifier = Modifier.widthIn(max = 896.dp).fillMaxWidth(),
-                    )
+                item(key = "search") {
+                    SearchField(query, { query = it.take(100) }, onGo = { go() })
+                }
+                saveError?.let { msg ->
+                    item(key = "save-error") {
+                        ErrorAlert("Couldn't save", msg, onDismiss = { saveError = null }, modifier = Modifier.widthIn(max = 720.dp).padding(horizontal = 16.dp, vertical = 4.dp))
+                    }
                 }
                 when {
-                    tasksOrNull == null && tasksError != null -> item {
-                        ErrorAlert("Couldn't load tasks", tasksError, modifier = Modifier.widthIn(max = 896.dp))
+                    tasksOrNull == null && tasksError != null -> item(key = "err") {
+                        ErrorAlert("Couldn't load tasks", tasksError, modifier = Modifier.widthIn(max = 720.dp).padding(16.dp))
                     }
-                    tasksOrNull == null -> item {
-                        Column(Modifier.widthIn(max = 896.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            repeat(2) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    repeat(columns) { Skeleton(Modifier.weight(1f).height(118.dp)) }
-                                }
-                            }
+                    tasksOrNull == null -> items(6, key = { "sk$it" }) {
+                        Row(Modifier.widthIn(max = 720.dp).fillMaxWidth().height(60.dp).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Skeleton(Modifier.size(10.dp))
+                            Spacer(Modifier.width(16.dp))
+                            Skeleton(Modifier.weight(1f).height(16.dp))
+                            Spacer(Modifier.width(48.dp))
                         }
                     }
-                    tasks.isEmpty() -> item {
-                        TCard(Modifier.widthIn(max = 896.dp).fillMaxWidth(), padding = PaddingValues(vertical = 32.dp, horizontal = 16.dp)) {
-                            Text(
-                                "No tasks yet. Click \"New Task\" to get started!", color = T.c.mutedForeground, fontSize = 14.sp,
-                                modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            )
-                        }
+                    tasks.isEmpty() && q.isEmpty() -> item(key = "empty") {
+                        Text(
+                            "No tasks yet. Type a name above to create one and start it.",
+                            color = T.c.mutedForeground, fontSize = 15.sp,
+                            modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 20.dp, vertical = 32.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
                     }
                     else -> {
-                        val maxVisible = columns * 2
-                        val shown = if (expanded) sorted else sorted.take(maxVisible)
-                        shown.chunked(columns).forEach { rowTasks ->
-                            item(key = "row-" + rowTasks.first().id) {
-                                Row(Modifier.widthIn(max = 896.dp).fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    rowTasks.forEach { t ->
-                                        TaskCard(
-                                            t, timer, Modifier.weight(1f).fillMaxHeight(),
-                                            onStart = { start(t.id) }, onStop = { graph.engine.stop() },
-                                            onLog = { logFor = t }, onOpen = { onOpenTask(t.id) },
-                                        )
-                                    }
-                                    repeat(columns - rowTasks.size) { Spacer(Modifier.weight(1f)) }
-                                }
-                            }
+                        items(shown, key = { it.id }) { t ->
+                            val isRunning = running?.taskId == t.id
+                            TaskRow(
+                                t, isRunning,
+                                pending = (isRunning && timer.pending) || t.id in timer.savingTaskIds,
+                                todayMs = todayMs(t, running?.startTime?.takeIf { isRunning }, now),
+                                onTap = { tap(t) }, onMenu = { focus.clearFocus(); menuFor = t },
+                            )
                         }
-                        if (sorted.size > maxVisible) {
-                            item(key = "expand") {
-                                TButton(
-                                    if (expanded) "Show Less" else "Show All (${sorted.size - maxVisible} more)",
-                                    { expanded = !expanded }, variant = BtnVariant.Outline,
-                                    icon = if (expanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
-                                )
-                            }
+                        if (q.isNotEmpty() && !exactMatch) item(key = "create") {
+                            CreateRow(q, creating) { createAndStart(q) }
                         }
                     }
                 }
-                if (tasks.isNotEmpty()) {
-                    item(key = "time-spent") {
-                        Box(Modifier.widthIn(max = 896.dp)) {
-                            TimeSpentCard(tasks, running?.taskId, running?.startTime)
-                        }
-                    }
-                }
-            }
-            if (twoPane) {
-                androidx.compose.material3.VerticalDivider(color = T.c.border)
-                LazyColumn(
-                    Modifier.weight(0.4f).fillMaxHeight(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    item(key = "leaderboard") { LeaderboardCard(Modifier.fillMaxWidth()) }
-                }
-            }
             }
         }
     }
 
+    menuFor?.let { t ->
+        ActionSheet(t.name, onDismiss = { menuFor = null }) {
+            SheetAction(Icons.Outlined.History, "Log past time", { menuFor = null; logFor = t })
+            SheetAction(Icons.Outlined.Info, "Details", { menuFor = null; onOpenTask(t.id) })
+            SheetAction(Icons.Outlined.VisibilityOff, "Hide", { menuFor = null; hideFor = t }, destructive = true)
+        }
+    }
+    hideFor?.let { t ->
+        ConfirmDialog(
+            "Hide task?", "Hide \"${t.name}\"? You can restore it from More → Hidden tasks.", "Hide",
+            onConfirm = {
+                scope.launch {
+                    try {
+                        if (timer.running?.taskId == t.id) graph.engine.stop()
+                        graph.repo.hideTask(t.id)
+                    } catch (e: Exception) {
+                        saveError = friendlyError(e, "Couldn't hide the task")
+                    }
+                }
+            },
+            onDismiss = { hideFor = null },
+        )
+    }
     if (newTaskOpen) NewTaskDialog(onDismiss = { newTaskOpen = false })
     if (fixOpen && running != null) FixSessionDialog(running.startTime, tasks, onDismiss = { fixOpen = false })
     if (fixOpen && running == null) fixOpen = false
@@ -237,89 +307,161 @@ fun HomeScreen(onOpenTask: (String) -> Unit) {
 }
 
 @Composable
-private fun RunningBanner(timer: TimerUi, task: Task?, onClock: () -> Unit, onStop: () -> Unit) {
+private fun RunningCard(timer: TimerUi, task: Task?, now: Long, onClock: () -> Unit, onStop: () -> Unit, onName: () -> Unit) {
     val r = timer.running ?: return
-    val now = rememberTicker(true, 250)
-    run {
-        TCard(
-            Modifier.widthIn(max = 896.dp).fillMaxWidth(),
-            border = T.c.primary,
-            background = T.c.primary.copy(alpha = 0.05f),
+    val elapsed = maxOf(0L, now - r.startTime)
+    Column(
+        Modifier
+            .widthIn(max = 720.dp)
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(T.c.muted)
+            .padding(start = 20.dp, end = 16.dp, top = 16.dp, bottom = 16.dp),
+    ) {
+        Row(
+            Modifier.clip(RoundedCornerShape(6.dp)).clickable(onClickLabel = "Open task", onClick = onName),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Pending sync is a calm caption; the card and Stop stay usable (offline works).
-            Pulsing(timer.pending) { a ->
-                Text(if (timer.pending) "Syncing..." else "Currently tracking", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = T.c.primary, modifier = Modifier.alpha(a))
+            AccentDot(hexColor(task?.accent ?: "#22C55E"), 10.dp)
+            Spacer(Modifier.width(10.dp))
+            Text(task?.name ?: "…", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            task?.taskGroup?.let {
+                Text("  ·  ${it.name}", fontSize = 14.sp, color = T.c.mutedForeground, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(task?.name ?: "…", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                task?.taskGroup?.let {
-                    Spacer(Modifier.width(8.dp)); GroupPill(it.name, hexColor(it.accent))
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-            androidx.compose.foundation.layout.FlowRow(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                itemVerticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    Format.duration(maxOf(0L, now - r.startTime)),
-                    style = MonoDigits, fontSize = 36.sp, fontWeight = FontWeight.Bold, color = T.c.foreground,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClickLabel = "Fix this session", role = Role.Button, onClick = onClock)
-                        .semantics { contentDescription = "Elapsed ${Format.durationWords(now - r.startTime, true)}. Tap to fix this session" }
-                        .padding(horizontal = 4.dp),
-                )
-                TButton("Stop", onStop, variant = BtnVariant.Destructive, icon = Icons.Outlined.Stop)
-            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "since ${co.bitterlemon.trackify.util.Time.clock(r.startTime)} · tap the clock to fix",
-                fontSize = 13.sp, color = T.c.mutedForeground,
+                Format.duration(elapsed),
+                style = MonoDigits, fontSize = 40.sp, fontWeight = FontWeight.Bold, color = T.c.foreground,
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClickLabel = "Fix this session", role = Role.Button, onClick = onClock)
+                    .semantics { contentDescription = "Elapsed ${Format.durationWords(elapsed, true)}. Tap to fix this session" }
+                    .padding(vertical = 6.dp),
+            )
+            Spacer(Modifier.width(12.dp))
+            Row(
+                Modifier
+                    .heightIn(min = 48.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(T.c.destructive)
+                    .clickable(role = Role.Button, onClickLabel = "Stop", onClick = onStop)
+                    .padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Outlined.Stop, null, tint = T.c.onDestructive, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Stop", color = T.c.onDestructive, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        Pulsing(timer.pending) { a ->
+            Text(
+                if (timer.pending) "Syncing…" else "Since ${Time.clock(r.startTime)} · tap the time to fix it",
+                fontSize = 13.sp, color = T.c.mutedForeground, modifier = Modifier.alpha(a),
             )
         }
     }
 }
 
 @Composable
-private fun TaskCard(task: Task, timer: TimerUi, modifier: Modifier, onStart: () -> Unit, onStop: () -> Unit, onLog: () -> Unit, onOpen: () -> Unit) {
-    val isActive = timer.running?.taskId == task.id
-    val savingThis = task.id in timer.savingTaskIds
-    val pending = (isActive && timer.pending) || savingThis
-    val now = rememberTicker(isActive)
-    val live = if (isActive) maxOf(0L, now - timer.running!!.startTime) else 0L
-    val total = task.events.sumOf { maxOf(0L, it.toMs - it.fromMs) } + live
-    Pulsing(pending) { a ->
-        val ringColor = if (pending) T.c.yellowRing else T.c.primary
-        Box(
-            modifier
-                .then(if (isActive || savingThis) Modifier.border(2.dp, ringColor.copy(alpha = ringColor.alpha * a), RoundedCornerShape(15.dp)).padding(3.dp) else Modifier.padding(3.dp))
+private fun SearchField(value: String, onChange: (String) -> Unit, onGo: () -> Unit) {
+    BasicTextField(
+        value = value,
+        onValueChange = onChange,
+        singleLine = true,
+        textStyle = TextStyle(fontSize = 16.sp, color = T.c.foreground),
+        cursorBrush = SolidColor(T.c.foreground),
+        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Go),
+        keyboardActions = KeyboardActions(onGo = { onGo() }),
+        modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        decorationBox = { inner ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .border(1.dp, T.c.border, RoundedCornerShape(24.dp))
+                    .padding(start = 16.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Outlined.Search, null, tint = T.c.mutedForeground, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(12.dp))
+                Box(Modifier.weight(1f)) {
+                    if (value.isEmpty()) Text("Start a task…", color = T.c.mutedForeground, fontSize = 16.sp, maxLines = 1)
+                    inner()
+                }
+                if (value.isNotEmpty()) {
+                    IconButton(onClick = { onChange("") }) { Icon(Icons.Outlined.Close, "Clear", tint = T.c.mutedForeground, modifier = Modifier.size(20.dp)) }
+                } else Spacer(Modifier.width(12.dp))
+            }
+        },
+    )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TaskRow(task: Task, isRunning: Boolean, pending: Boolean, todayMs: Long, onTap: () -> Unit, onMenu: () -> Unit) {
+    Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 60.dp)
+                .background(if (isRunning) T.c.muted.copy(alpha = 0.6f) else androidx.compose.ui.graphics.Color.Transparent)
+                .combinedClickable(
+                    onClick = onTap, onLongClick = onMenu, role = Role.Button,
+                    onClickLabel = if (isRunning) "Stop" else "Start", onLongClickLabel = "More actions",
+                )
+                .padding(start = 20.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            TCard(Modifier.fillMaxWidth().fillMaxHeight(), padding = PaddingValues(14.dp), onClick = onOpen) {
-                Row(verticalAlignment = Alignment.Top) {
-                    Text(task.name, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = T.c.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                }
-                task.taskGroup?.let {
-                    Spacer(Modifier.height(4.dp))
-                    GroupPill(it.name, hexColor(it.accent), Modifier.widthIn(max = 176.dp))
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(if (savingThis && !isActive) "Saving..." else "Total: ${Format.durationWords(total)}", fontSize = 13.sp, color = T.c.mutedForeground, maxLines = 1)
-                Spacer(Modifier.height(12.dp).weight(1f))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (isActive) {
-                        TButton(
-                            "Stop", onStop,
-                            Modifier.weight(1f), variant = BtnVariant.Destructive, size = BtnSize.Sm, icon = Icons.Outlined.Stop,
-                        )
-                    } else {
-                        TButton("Start", onStart, Modifier.weight(1f), size = BtnSize.Sm, icon = Icons.Outlined.PlayArrow, contentDescription = "Start ${task.name}")
-                    }
-                    TButton(null, onLog, variant = BtnVariant.Outline, size = BtnSize.Sm, icon = Icons.Outlined.Add, contentDescription = "Add past time to ${task.name}", modifier = Modifier.width(40.dp))
+            AccentDot(hexColor(task.accent), 10.dp)
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                Text(
+                    task.name, fontSize = 16.sp, fontWeight = if (isRunning) FontWeight.SemiBold else FontWeight.Normal,
+                    color = T.c.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                task.taskGroup?.let { Text(it.name, fontSize = 13.sp, color = T.c.mutedForeground, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            }
+            if (todayMs >= 60_000) {
+                Spacer(Modifier.width(8.dp))
+                Text(Format.durationWords(todayMs), fontSize = 14.sp, color = T.c.mutedForeground, style = Tabular, maxLines = 1)
+            }
+            Spacer(Modifier.width(12.dp))
+            Pulsing(pending) { a ->
+                Box(
+                    Modifier.size(36.dp).alpha(a).clip(CircleShape)
+                        .then(if (isRunning) Modifier.background(T.c.foreground) else Modifier.border(1.dp, T.c.border, CircleShape)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        if (isRunning) Icons.Outlined.Stop else Icons.Outlined.PlayArrow, null,
+                        tint = if (isRunning) T.c.background else T.c.foreground, modifier = Modifier.size(20.dp),
+                    )
                 }
             }
+            IconButton(onClick = onMenu) { Icon(Icons.Outlined.MoreVert, "More for ${task.name}", tint = T.c.mutedForeground) }
         }
+        RowDivider(inset = 46.dp)
+    }
+}
+
+@Composable
+private fun CreateRow(name: String, creating: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.widthIn(max = 720.dp).fillMaxWidth().heightIn(min = 60.dp)
+            .clickable(enabled = !creating, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Outlined.Add, null, tint = T.c.foreground, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(12.dp))
+        Text(
+            if (creating) "Creating…" else "Create \u201c$name\u201d and start", fontSize = 16.sp, fontWeight = FontWeight.Medium,
+            color = T.c.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -345,16 +487,14 @@ fun NewTaskDialog(onDismiss: () -> Unit, onCreated: (Task) -> Unit = {}) {
         }
     }
     TDialog(
-        "Create New Task", onDismiss,
+        "New task", onDismiss,
         footer = {
             TButton("Cancel", onDismiss, variant = BtnVariant.Outline)
-            TButton(if (creating) "Creating..." else "Create Task", { create() }, enabled = name.isNotBlank() && !creating)
+            TButton(if (creating) "Creating…" else "Create task", { create() }, enabled = name.isNotBlank() && !creating)
         },
     ) {
-        TInput(name, { name = it.take(100) }, placeholder = "Enter task name...", onIme = { create() })
+        TInput(name, { name = it.take(100) }, placeholder = "Task name", onIme = { create() }, autoFocus = true)
         error?.let { Spacer(Modifier.height(8.dp)); Text(it, color = T.c.destructive, fontSize = 14.sp) }
     }
 }
 
-@Suppress("unused")
-private val unusedShape = CardShape

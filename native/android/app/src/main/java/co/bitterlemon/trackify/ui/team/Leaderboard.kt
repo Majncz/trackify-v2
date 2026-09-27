@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -174,131 +175,97 @@ fun LeaderboardCard(modifier: Modifier = Modifier) {
     val yourTotal = if (range == LbRange.Day && current) (stats?.todayTotal ?: 0L) + liveYou else (yourRow?.todayMs ?: 0L) + liveYou
     val allTime = (stats?.grandTotal ?: 0L) + liveAll
 
-    val title = if (current) when (range) {
-        LbRange.Week -> "This week’s leaderboard"
-        LbRange.Month -> "This month’s leaderboard"
-        LbRange.Day -> "Today’s leaderboard"
-    } else "Leaderboard"
-    val subtitle = if (current) {
-        if (anyoneLive) "Live times, updating as people track"
-        else if (range == LbRange.Day) "Who’s grinding the most today" else "Who’s grinding the most this ${range.noun}"
-    } else "How the grind looked that ${range.noun}"
-
     fun pick(d: LocalDate) {
         dayKey = (if (d.isAfter(today)) today else d).toString()
     }
 
-    TCard(modifier.fillMaxWidth()) {
-        Text(title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground)
-        Text(subtitle, fontSize = 12.sp, color = T.c.mutedForeground)
-        Spacer(Modifier.height(10.dp))
-        co.bitterlemon.trackify.ui.components.CappedFontScale(1.15f) { Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { pick(Period.step(range, day, -1)) }, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, "Previous ${range.noun}", tint = T.c.foreground)
-            }
-            Row(
-                Modifier.weight(1f).height(36.dp).clip(RoundedCornerShape(8.dp)).border(1.dp, T.c.border, RoundedCornerShape(8.dp)),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    Modifier.size(36.dp).clickable(onClickLabel = Period.label(range, day, current)) { picker = true },
-                    contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Outlined.CalendarToday, Period.label(range, day, current), tint = T.c.mutedForeground, modifier = Modifier.size(15.dp)) }
-                Box(Modifier.width(1.dp).height(36.dp).background(T.c.border))
-                Row(Modifier.weight(1f).padding(3.dp)) {
-                    LbRange.entries.forEach { r ->
-                        val sel = r == range
-                        Box(
-                            Modifier.weight(1f).height(30.dp).clip(RoundedCornerShape(5.dp))
-                                .background(if (sel) T.c.muted else Color.Transparent)
-                                .clickable { rangeKey = r.name },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(r.label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = if (sel) T.c.foreground else T.c.mutedForeground)
-                        }
-                    }
+    Column(modifier.fillMaxWidth()) {
+        co.bitterlemon.trackify.ui.components.Segmented(
+            LbRange.entries.map { it to when (it) { LbRange.Day -> "Day"; LbRange.Week -> "Week"; LbRange.Month -> "Month" } },
+            range, { rangeKey = it.name }, Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        )
+        co.bitterlemon.trackify.ui.components.CappedFontScale(1.15f) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { pick(Period.step(range, day, -1)) }) {
+                    Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, "Previous ${range.noun}", tint = T.c.foreground)
+                }
+                Row(
+                    Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(8.dp)).clickable(onClickLabel = "Pick a date") { picker = true },
+                    horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(Period.label(range, day, current), fontSize = 16.sp, fontWeight = FontWeight.Medium, color = T.c.foreground)
+                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.Outlined.CalendarToday, null, tint = T.c.mutedForeground, modifier = Modifier.size(16.dp))
+                }
+                IconButton(onClick = { pick(Period.step(range, day, 1)) }, enabled = !current) {
+                    Icon(
+                        Icons.AutoMirrored.Outlined.KeyboardArrowRight, "Next ${range.noun}",
+                        tint = if (current) T.c.mutedForeground.copy(alpha = 0.4f) else T.c.foreground,
+                    )
                 }
             }
-            IconButton(onClick = { pick(Period.step(range, day, 1)) }, enabled = !current, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    Icons.AutoMirrored.Outlined.KeyboardArrowRight, "Next ${range.noun}",
-                    tint = if (current) T.c.mutedForeground.copy(alpha = 0.4f) else T.c.foreground,
-                )
-            }
-        } }
-        if (!current) {
-            Text(Period.label(range, day, false), fontSize = 12.sp, color = T.c.mutedForeground, modifier = Modifier.padding(top = 6.dp, start = 4.dp))
         }
-        Spacer(Modifier.height(10.dp))
         if (loading && data == null) {
-            Skeleton(Modifier.fillMaxWidth(0.5f).height(18.dp))
-            Spacer(Modifier.height(8.dp))
-            Skeleton(Modifier.fillMaxWidth().height(30.dp))
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                repeat(3) { Skeleton(Modifier.fillMaxWidth().height(24.dp)) }
+            }
         } else if (rows.isEmpty()) {
-            Text("Nobody logged time that ${range.noun}.", fontSize = 14.sp, color = T.c.mutedForeground)
+            Text("Nobody logged time that ${range.noun}.", fontSize = 15.sp, color = T.c.mutedForeground, modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp))
         } else {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                rows.forEachIndexed { index, row ->
-                    val isLive = current && row.startTime != null
-                    val live = if (isLive) Time.liveRangeMs(row.startTime!!, now, bStart, bEnd) else 0L
-                    val sessionMs = if (isLive) maxOf(0L, now - row.startTime!!) else 0L
-                    val isYou = row.userId == myId
-                    val bg = when {
-                        isLive -> T.c.emerald.copy(alpha = 0.10f)
-                        isYou -> T.c.primary.copy(alpha = 0.05f)
-                        else -> Color.Transparent
-                    }
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(bg)
-                            .then(if (isLive) Modifier.border(1.dp, T.c.emerald.copy(alpha = 0.25f), RoundedCornerShape(8.dp)) else Modifier)
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        val rc = Accents.rankColor(index + 1)
-                        Text(
-                            "${index + 1}", modifier = Modifier.width(22.dp), fontSize = 14.sp, fontWeight = FontWeight.Bold,
-                            color = rc?.let { hexColor(it) } ?: T.c.foreground, style = co.bitterlemon.trackify.ui.theme.Tabular,
-                        )
-                        Column(Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (isLive) {
-                                    LivePing(); Spacer(Modifier.width(6.dp))
-                                }
-                                Text(
-                                    row.name + if (isYou) " · you" else "", fontSize = 14.sp, fontWeight = FontWeight.Medium,
-                                    color = T.c.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                            if (isLive && row.taskName != null) {
-                                Text(
-                                    "Live · ${row.taskName}" + if (sessionMs > 0) " · ${Format.durationWords(sessionMs)} this stretch" else "",
-                                    fontSize = 12.sp, fontWeight = FontWeight.Medium,
-                                    color = if (T.c.dark) Color(0xFF34D399) else Color(0xFF047857), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                )
+            rows.forEachIndexed { index, row ->
+                val isLive = current && row.startTime != null
+                val live = if (isLive) Time.liveRangeMs(row.startTime!!, now, bStart, bEnd) else 0L
+                val sessionMs = if (isLive) maxOf(0L, now - row.startTime!!) else 0L
+                val isYou = row.userId == myId
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 60.dp)
+                        .background(if (isYou) T.c.muted.copy(alpha = 0.6f) else Color.Transparent)
+                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val rc = Accents.rankColor(index + 1)
+                    Text(
+                        "${index + 1}", modifier = Modifier.width(28.dp), fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                        color = rc?.let { hexColor(it) } ?: T.c.mutedForeground, style = co.bitterlemon.trackify.ui.theme.Tabular,
+                    )
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                row.name + if (isYou) " (you)" else "", fontSize = 16.sp, fontWeight = FontWeight.Medium,
+                                color = T.c.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+                            )
+                            if (isLive) {
+                                Spacer(Modifier.width(8.dp)); LivePing()
                             }
                         }
-                        Text(Format.durationWords(row.todayMs + live), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, style = co.bitterlemon.trackify.ui.theme.Tabular)
+                        if (isLive && row.taskName != null) {
+                            Text(
+                                row.taskName + if (sessionMs > 0) " · ${Format.durationWords(sessionMs)}" else "",
+                                fontSize = 13.sp,
+                                color = if (T.c.dark) Color(0xFF34D399) else Color(0xFF047857), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
+                    Spacer(Modifier.width(8.dp))
+                    Text(Format.durationWords(row.todayMs + live), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, style = co.bitterlemon.trackify.ui.theme.Tabular)
                 }
+                HorizontalDivider(Modifier.padding(start = 48.dp), color = T.c.border)
             }
         }
-        Spacer(Modifier.height(12.dp))
-        HorizontalDivider(color = T.c.border)
-        Spacer(Modifier.height(10.dp))
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp), verticalAlignment = Alignment.Bottom) {
             Column(Modifier.weight(1f)) {
                 Text(
                     when (range) {
-                        LbRange.Week -> if (current) "Your week" else "You that week"
-                        LbRange.Month -> if (current) "Your month" else "You that month"
-                        LbRange.Day -> if (current) "Your today" else "You that day"
-                    }, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = T.c.mutedForeground,
+                        LbRange.Week -> if (current) "You this week" else "You that week"
+                        LbRange.Month -> if (current) "You this month" else "You that month"
+                        LbRange.Day -> if (current) "You today" else "You that day"
+                    }, fontSize = 13.sp, color = T.c.mutedForeground,
                 )
-                Text(Format.durationWords(yourTotal), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = T.c.foreground, style = co.bitterlemon.trackify.ui.theme.Tabular)
+                Text(Format.durationWords(yourTotal), fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, style = co.bitterlemon.trackify.ui.theme.Tabular)
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text("All time", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = T.c.mutedForeground)
-                Text(if (stats == null) "—" else Format.durationWords(allTime), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = T.c.foreground, style = co.bitterlemon.trackify.ui.theme.Tabular)
+                Text("All time", fontSize = 13.sp, color = T.c.mutedForeground)
+                Text(if (stats == null) "—" else Format.durationWords(allTime), fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, style = co.bitterlemon.trackify.ui.theme.Tabular)
             }
         }
     }
