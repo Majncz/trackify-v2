@@ -172,6 +172,8 @@ struct SettingsView: View {
             }
         }
         .onAppear { if let p = model.profile, savedName.isEmpty { name = p.displayName; savedName = p.displayName } }
+        // AppKit puts the first text field in focus when the window shows; Settings shouldn't open typing.
+        .onAppear { DispatchQueue.main.async { NSApp.keyWindow?.makeFirstResponder(nil) } }
         .onChange(of: model.profile) { _, p in
             if let p, !savingName, name == savedName { name = p.displayName; savedName = p.displayName }
         }
