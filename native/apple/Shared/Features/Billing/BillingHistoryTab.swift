@@ -73,6 +73,7 @@ struct BillingPaymentsView: View {
                 Section(month.title) {
                     ForEach(month.items) { p in
                         NavigationLink(value: p) { BillingPaymentCell(payment: p) }
+                            .accessibilityIdentifier("paymentRow")
                             .swipeActions {
                                 Button("Reopen", role: .destructive) { pendingReopen = p }
                             }
@@ -240,9 +241,9 @@ struct BillingPaymentDetail: View {
                 Button("Reopen Payment…", role: .destructive, action: onReopen)
                     .disabled(busy)
                     .accessibilityIdentifier("reopenPayment")
-            } footer: {
+            } footer: { Group {
                 Text("Reopening deletes this payment; its sessions become unpaid again.")
-            }
+            }.billingFooter() }
         }
         .formStyle(.grouped)
         .navigationTitle(Money.format(payment.totalAmount, payment.currency))

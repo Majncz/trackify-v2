@@ -78,9 +78,9 @@ struct MarkPaidSheet: View {
                     .disabled(sessions.isEmpty || allLinesMatchCalculated)
                 } header: {
                     Text("Amounts")
-                } footer: {
+                } footer: { Group {
                     Text("Each line starts at the calculated amount. The total is the sum of the lines — change one only when needed.")
-                }
+                }.billingFooter() }
 
                 Section("Payment") {
                     DatePicker("Paid on", selection: $paidAt, displayedComponents: [.date, .hourAndMinute])

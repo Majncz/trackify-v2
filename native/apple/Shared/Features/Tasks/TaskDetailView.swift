@@ -311,13 +311,13 @@ struct TaskBillingSection: View {
             if let error { Text(error).foregroundStyle(.red) }
         } header: {
             Text("Billing")
-        } footer: {
+        } footer: { Group {
             if ready {
                 Text(billing != nil
                      ? "Rate changes apply to unpaid sessions. Paid sessions keep the amount recorded with their payment."
                      : "Give this task an hourly rate to include its time in Billing sessions and payments.")
             }
-        }
+        }.billingFooter() }
     }
 
     private func rateField(text: Binding<String>, currency: String) -> some View {

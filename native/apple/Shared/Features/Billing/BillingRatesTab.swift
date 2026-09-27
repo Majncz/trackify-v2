@@ -55,9 +55,9 @@ struct BillingRatesView: View {
                     }
                 } header: {
                     Text("Billing")
-                } footer: {
+                } footer: { Group {
                     Text("Only these tasks appear under Sessions. Tap a task to change its rate or currency.")
-                }
+                }.billingFooter() }
                 if !notBilling.isEmpty {
                     Section("Not Billing") {
                         ForEach(notBilling) { t in link(t) }

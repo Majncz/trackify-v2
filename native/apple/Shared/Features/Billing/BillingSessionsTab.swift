@@ -239,12 +239,6 @@ struct BillingSessionsView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 BillingFilterMenu(store: store, onCalendar: { showCalendar = true })
-                Button { openMarkPaid(store.selectedSessions) } label: {
-                    Label("Mark as Paid…", systemImage: "checkmark.circle")
-                }
-                .disabled(store.selectedSessions.isEmpty || selection.multipleCurrencies)
-                .help("Mark the selected sessions as paid")
-                .accessibilityIdentifier("billingMarkPaid")
             }
         }
     }
@@ -335,6 +329,8 @@ struct BillingSessionsView: View {
             }
             Button("Mark as Paid…") { openMarkPaid(store.selectedSessions) }
                 .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("billingMarkPaid")
                 .disabled(store.selectedSessions.isEmpty || selection.multipleCurrencies)
         }
         .controlSize(.small)
@@ -525,9 +521,9 @@ struct BillingCalendarSheet: View {
                             })
                         .padding(.vertical, 6)
                     }
-                } footer: {
+                } footer: { Group {
                     Text(blurb)
-                }
+                }.billingFooter() }
             }
             .formStyle(.grouped)
             .navigationTitle("Activity Calendar")

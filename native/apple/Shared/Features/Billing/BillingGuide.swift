@@ -16,9 +16,9 @@ struct BillingGuideSheet: View {
                     step(3, "Review sessions", "Sessions lists billable time. Filter by period, group, task and status, and group the list by day, week or month.")
                     step(4, "Mark as paid", "Select unpaid sessions (one currency per batch) and mark them paid. Amounts can be adjusted per line. Payments keeps the history; reopen a payment to make its sessions unpaid again.")
                     step(5, "AI subscriptions", "Record AI tool subscriptions to see what they cost next to the time they helped with.")
-                } footer: {
+                } footer: { Group {
                     Text("Rates changes apply to unpaid sessions; paid sessions keep the amount recorded with their payment.")
-                }
+                }.billingFooter() }
                 Section {
                     Button("Open Rates", action: onOpenRates)
                 }

@@ -132,9 +132,9 @@ struct AIBillingView: View {
             }
         } header: {
             Text("Summary")
-        } footer: {
+        } footer: { Group {
             Text("Each entry is a budget line; totals simply add up. Timer time that overlaps several windows is credited to the earliest-starting one. Mark an entry depleted when its credits run out early.")
-        }
+        }.billingFooter() }
         .monospacedDigit()
 
         if let missing = analytics?.fxMissingCurrencies, !missing.isEmpty {
@@ -252,6 +252,7 @@ struct AIBillingView: View {
 
     private func entryRow(_ p: AIPeriod) -> some View {
         NavigationLink(value: AIPeriodRoute(id: p.id)) { AIPeriodCell(period: p) }
+            .accessibilityIdentifier("aiEntry")
             .swipeActions {
                 Button(role: .destructive) { deleteTarget = p } label: { Label("Delete", systemImage: "trash") }
                 if p.depletedAt == nil && isActive(p) {

@@ -102,9 +102,9 @@ struct AIBillingEditor: View {
                             ForEach(presets) { Text($0.name).tag($0.id) }
                         }
                         .disabled(editing != nil)
-                    } footer: {
+                    } footer: { Group {
                         if editing == nil { Text("A preset fills in the name.") }
-                    }
+                    }.billingFooter() }
                 }
 
                 Section {
@@ -114,9 +114,9 @@ struct AIBillingEditor: View {
                     urlField
                 } header: {
                     Text("Subscription")
-                } footer: {
+                } footer: { Group {
                     Text("Email: the mailbox or login the subscription is on. Link: billing portal, plans page or customer login.")
-                }
+                }.billingFooter() }
 
                 Section {
                     Picker("How you pay", selection: Binding(get: { kind }, set: { next in
@@ -139,20 +139,20 @@ struct AIBillingEditor: View {
                     }
                 } header: {
                     Text("Price")
-                } footer: {
+                } footer: { Group {
                     Text(isRecurring
                          ? "Each calendar month in the window adds one charge to the totals. Charts group recurring spend by calendar month."
                          : "One-time coverage ends with the calendar period you pick (weeks run Monday–Sunday), unless you set a different end date.")
-                }
+                }.billingFooter() }
 
                 Section {
                     DatePicker("Starts on", selection: $startDate, displayedComponents: .date)
                     if isRecurring { recurringEnd } else { purchaseEnd }
                 } header: {
                     Text("Period")
-                } footer: {
+                } footer: { Group {
                     Text("Whole calendar days: from the start of the first day through the end of the last. If credits run out early, mark the entry depleted instead.")
-                }
+                }.billingFooter() }
 
                 Section {
                     TextField("Note", text: Binding(get: { note }, set: { note = String($0.prefix(2000)) }),

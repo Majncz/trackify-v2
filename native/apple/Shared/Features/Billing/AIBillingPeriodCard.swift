@@ -117,9 +117,9 @@ struct AIPeriodDetail: View {
                     }
                 } header: {
                     Text("Usage")
-                } footer: {
+                } footer: { Group {
                     Text("Overlap hours: timer time credited to this entry (the earliest-starting entry wins when windows overlap). Paid billable earnings: paid billing sessions inside this window — final once it has ended or is depleted.")
-                }
+                }.billingFooter() }
                 .monospacedDigit()
             }
 

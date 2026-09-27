@@ -273,14 +273,37 @@ final class ScreenshotWalkTests: TrackifyUITestCase {
         }
         if openBilling("payments") {
             shot("20-billing-history", settle: 1.5)
+            let payment = app.descendants(matching: .any).matching(identifier: "paymentRow").firstMatch
+            if payment.waitForExistence(timeout: 3) {
+                payment.tap()
+                if waitFor(app.buttons["reopenPayment"], 4) { shot("20b-billing-payment", settle: 1) }
+            }
             backToBilling()
         }
         if openBilling("rates") {
             shot("21-billing-rates", settle: 1.5)
+            let rate = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'rate-'")).firstMatch
+            if rate.waitForExistence(timeout: 3) {
+                rate.tap()
+                if waitFor(app.textFields["hourlyRate"], 4) { shot("21b-billing-rate-editor", settle: 1) }
+            }
             backToBilling()
         }
         if openBilling("ai") {
             shot("22-billing-ai", settle: 2.5)
+            let add = app.buttons["addAIBilling"]
+            if add.exists {
+                add.tap()
+                if waitFor(app.buttons["aiSave"], 4) { shot("22b-billing-ai-editor", settle: 1) }
+                app.buttons["Cancel"].firstMatch.tap()
+                waitGone(app.buttons["aiSave"])
+            }
+            scrollDown(4)
+            let entry = app.descendants(matching: .any).matching(identifier: "aiEntry").firstMatch
+            if entry.waitForExistence(timeout: 3) {
+                entry.tap()
+                shot("22c-billing-ai-entry", settle: 1.5)
+            }
             backToBilling()
         }
 

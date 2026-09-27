@@ -45,9 +45,9 @@ struct BillingView: View {
                     }
                 } header: {
                     Text("Set up billing first")
-                } footer: {
+                } footer: { Group {
                     Text("Pick which tasks get an hourly rate. Their tracked time then shows up under Sessions, ready to mark as paid.")
-                }
+                }.billingFooter() }
             }
             Section {
                 ForEach(BillingRoute.allCases) { r in
@@ -213,5 +213,16 @@ struct BillingSummaryStrip: View {
             Text(label).foregroundStyle(.secondary)
             Text(value)
         }
+    }
+}
+
+extension View {
+    /// Form section footers: the Mac's grouped form centers wrapped footers, so pin them leading like System Settings.
+    func billingFooter() -> some View {
+        #if os(macOS)
+        self.font(.callout).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+        #else
+        self
+        #endif
     }
 }
