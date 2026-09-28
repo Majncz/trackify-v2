@@ -323,7 +323,7 @@ private fun Large(context: Context, snap: WidgetSnapshotData, team: TeamSnapshot
     val h = LocalSize.current.height.value
     val fs = fontScale(context)
     val taskRowH = if (fs > 1.15f) 40 else 36
-    val teamRowH = if (fs > 1.15f) 46 else 42
+    val teamRowH = teamRowHeight(fs)
     val heroH = if (r != null) (22 + 17) * fs + 52 else (18 + 42) * fs
     val headerH = 22 + 4
     var avail = h - 32 - heroH - 21 - headerH

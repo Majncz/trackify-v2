@@ -76,7 +76,8 @@ co.bitterlemon.trackify
 │                                sync loop + 404 fallback), TimerSyncWorker (replay when offline),
 │                                TimerRefreshWorker (15-minute truth check while running), TimerNotifier,
 │                                TimerActionReceiver, QuickPickerActivity ("Switch…")
-├── widget/                      WidgetSnapshot (the shared snapshot, NATIVE_SPEC §6), Glance small and large widgets
+├── widget/                      WidgetSnapshot (the shared snapshot, NATIVE_SPEC §6), TeamSnapshot, WidgetKit
+│                                (palette + building blocks), Timer / Timer and tasks / Team today widgets
 ├── tile/                        Quick Settings tile
 ├── util/                        Format, Accents (colour algorithms), Time, SessionRange, ChartData, StatsData,
 │                                Race, Shortcuts
@@ -117,12 +118,25 @@ disconnects.
 
 - **Ongoing notification:** chronometer, **Stop** and **Switch…** actions, and `setRequestPromotedOngoing(true)`.
   The app asks for `POST_NOTIFICATIONS` the first time you start a timer.
-- **Widgets:** "Timer" (2×1 to 4×2) and "Timer and tasks" (4×2 and up, a task list from 4×3). Glance, launcher corner
-  radius, wallpaper colours via `GlanceTheme` (Settings → Appearance can force light or dark), `SizeMode.Responsive`
-  with a layout per size. Running: task, live clock (a `Chronometer`, sized in dp) and a big Stop; idle: one-tap resume
-  of the last task plus start chips/rows. Whole tiles and rows are the tap targets. Picker previews: `previewLayout`
-  (Android 12–14) and generated Glance previews (Android 15+, published once per build). Actions redraw synchronously
-  (`AppGraph.syncSurfacesNow()` → `WidgetUpdater.updateAllNow`).
+- **Widgets** (Glance, look of the Mac widgets): a plain neutral card (white, or near-black in dark mode; Settings →
+  Appearance → Widgets can force light or dark, "System" follows dark mode without wallpaper tint), the launcher's
+  corner radius, colour dots, muted secondary text and a soft red Stop. `SizeMode.Exact` with a layout per size.
+  - "Timer": 2×1 (task, clock, round Stop / resume), 4×1 (task, Since, clock, Stop pill / today's total and two
+    starts), 2×2 (task, Since, big clock, Stop / Not tracking, total, three starts), 4×2 (timer left, "Switch to" rows
+    right).
+  - "Timer and tasks": the same, and from 4×3 the Mac large layout: timer, divider, "Tasks · Today" rows (dot, name,
+    today's time, ▶; the running row has a red stop) and, when tall enough, "Team · today".
+  - "Team today": the team total and a row per member (initial, name, today's hours, green dot and current task
+    while tracking), sorted by hours; tapping opens the Team tab. Data: the Team tab's `GET /api/presence?range=day`,
+    kept in `files/widget_team.json` and refreshed on the app's presence signal (timer ops, socket
+    `presence:changed` while the app or timer service is up), on foreground, when the system updates the widget and
+    every 30 minutes (`TeamRefreshWorker`) — only while a widget that shows the team is placed.
+  - Taps are optimistic: the action changes local state, redraws every widget and waits until they have composed the
+    new state (`WidgetUpdater.redrawAndWait`, so a freeze right after can't leave a stale widget), then returns; an
+    expedited `TimerSyncWorker` sends the op. The broadcast never waits for the network, so a second tap is never
+    queued behind the first. Measured on the emulator with 1.5 s extra network latency: Stop visible 60–100 ms after
+    the tap (was 6.3 s when tapped 2 s after a Start, up to 8 s plus a background ANR at 10 s).
+  - Picker previews: `previewLayout` (Android 12–14) and generated Glance previews (Android 15+).
 - **Quick Settings tile:** stops the running timer, or starts the last task.
 - **Dynamic shortcuts:** the 4 most recent tasks, plus Stop while a timer runs.
 - Settings → **Widgets & Quick Settings** can pin the widgets and add the tile in one tap.

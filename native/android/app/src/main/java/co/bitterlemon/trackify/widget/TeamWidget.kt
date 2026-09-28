@@ -166,7 +166,7 @@ internal fun TeamContent(context: Context, snap: WidgetSnapshotData, team: TeamS
                     }
                 }
                 else -> {
-                    val rowH = if (fs > 1.15f) 46 else 42
+                    val rowH = teamRowHeight(fs)
                     // Big total on top (Mac "Not tracking" style), then the members.
                     Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Txt("Team · today", P.muted, 13, FontWeight.Medium, modifier = GlanceModifier.defaultWeight())
@@ -231,3 +231,6 @@ abstract class TeamAwareReceiver : GlanceAppWidgetReceiver() {
 class TeamWidgetReceiver : TeamAwareReceiver() {
     override val glanceAppWidget: GlanceAppWidget = TeamWidget()
 }
+
+/** A member row holds two text lines (name, current task): grow it with the font scale. */
+internal fun teamRowHeight(fontScale: Float): Int = maxOf(42, kotlin.math.ceil(35 * fontScale + 8).toInt())
