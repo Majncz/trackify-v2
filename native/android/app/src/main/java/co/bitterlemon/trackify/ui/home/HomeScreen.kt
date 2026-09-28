@@ -291,7 +291,8 @@ fun HomeScreen(onOpenTask: (String) -> Unit) {
                                 modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
                             )
                         }
-                        items(shown, key = { it.id }) { t ->
+                        // The running task is the card above; it only shows in the list while searching.
+                        items(if (q.isEmpty() && running != null) shown.filter { it.id != running.taskId } else shown, key = { it.id }) { t ->
                             val isRunning = running?.taskId == t.id
                             TaskRow(
                                 t, isRunning,
@@ -370,9 +371,9 @@ private fun RunningCard(timer: TimerUi, task: Task?, now: Long, onClock: () -> U
     ) {
         Row(
             Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Open task", onClick = onName).padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.Top,
         ) {
-            AccentDot(hexColor(task?.accent ?: "#22C55E"), 12.dp)
+            AccentDot(hexColor(task?.accent ?: "#22C55E"), 12.dp, Modifier.padding(top = 7.dp))
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f, fill = false)) {
                 Text(task?.name ?: "…", fontSize = 18.sp, fontWeight = FontWeight.Medium, color = on, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -380,7 +381,10 @@ private fun RunningCard(timer: TimerUi, task: Task?, now: Long, onClock: () -> U
             }
         }
         // The clock is a display number: it scales with the card width, not with the font-size setting.
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // Short screens: the Stop button sits beside the clock instead of below it.
+        val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 700
+        Row(verticalAlignment = Alignment.CenterVertically) {
+        BoxWithConstraints(Modifier.weight(1f)) {
             val size = (maxWidth.value / 4.9f).coerceAtMost(72f)
             CappedFontScale(1f) {
                 Text(
@@ -394,6 +398,15 @@ private fun RunningCard(timer: TimerUi, task: Task?, now: Long, onClock: () -> U
                         .padding(vertical = 2.dp),
                 )
             }
+        }
+        if (compact) {
+            Spacer(Modifier.width(12.dp))
+            FilledIconButton(
+                onClick = onStop,
+                colors = IconButtonDefaults.filledIconButtonColors(containerColor = cs.primary, contentColor = cs.onPrimary),
+                modifier = Modifier.size(64.dp),
+            ) { Icon(Icons.Filled.Stop, "Stop", modifier = Modifier.size(28.dp)) }
+        }
         }
         Pulsing(timer.pending) { a ->
             Row(
@@ -410,6 +423,7 @@ private fun RunningCard(timer: TimerUi, task: Task?, now: Long, onClock: () -> U
                 }
             }
         }
+        if (!compact) {
         Spacer(Modifier.height(12.dp))
         Row(
             Modifier
@@ -424,6 +438,7 @@ private fun RunningCard(timer: TimerUi, task: Task?, now: Long, onClock: () -> U
             Icon(Icons.Filled.Stop, null, tint = cs.onPrimary, modifier = Modifier.size(24.dp))
             Spacer(Modifier.width(8.dp))
             Text("Stop", color = cs.onPrimary, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+        }
         }
     }
 }
