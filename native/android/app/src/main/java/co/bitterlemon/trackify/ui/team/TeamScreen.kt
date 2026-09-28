@@ -210,8 +210,7 @@ private fun Visualizations() {
             Segmented(listOf(30_000L to "30s", 60_000L to "1 min", 120_000L to "2 min"), durationMs, { durationMs = it }, Modifier.width(220.dp), compact = true)
             Slider(
                 value = playhead, onValueChange = { playhead = (Math.round(it * 1000) / 1000f); playing = false },
-                enabled = !loading && !error,
-                colors = SliderDefaults.colors(thumbColor = T.c.primary, activeTrackColor = T.c.primary, inactiveTrackColor = T.c.muted),
+                enabled = !loading && !error
             )
         }
         when {

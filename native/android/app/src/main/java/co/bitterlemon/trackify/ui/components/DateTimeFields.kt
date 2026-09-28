@@ -80,12 +80,6 @@ fun TimeField(value: LocalTime, onChange: (LocalTime) -> Unit, modifier: Modifie
         ) {
             TimePicker(
                 state, Modifier.fillMaxWidth(),
-                colors = TimePickerDefaults.colors(
-                    clockDialColor = T.c.muted, selectorColor = T.c.primary,
-                    timeSelectorSelectedContainerColor = T.c.primary, timeSelectorSelectedContentColor = T.c.onPrimary,
-                    timeSelectorUnselectedContainerColor = T.c.muted, timeSelectorUnselectedContentColor = T.c.foreground,
-                    clockDialSelectedContentColor = T.c.onPrimary, clockDialUnselectedContentColor = T.c.foreground,
-                ),
             )
         }
     }

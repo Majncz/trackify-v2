@@ -259,7 +259,7 @@ fun SessionsScreen(onBack: () -> Unit, onOpenRates: () -> Unit) {
                     BDateField(ct, { customTo = it.toString() }, "To", minDate = cf)
                 }
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.End) {
-                    TextButton({ sheet = null }) { Text("Done", color = T.c.foreground) }
+                    TextButton({ sheet = null }) { Text("Done") }
                 }
             }
         }
@@ -345,7 +345,7 @@ private fun SectionHeader(
 }
 
 @Composable
-private fun checkColors() = CheckboxDefaults.colors(checkedColor = T.c.foreground, checkmarkColor = T.c.background, uncheckedColor = T.c.mutedForeground)
+private fun checkColors() = CheckboxDefaults.colors()
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

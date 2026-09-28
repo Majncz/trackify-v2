@@ -180,7 +180,6 @@ fun GroupDialog(editing: Group?, tasks: List<Task>, msInRange: Map<String, Long>
                 ) {
                     Checkbox(
                         t.id in selected, { selected = if (it) selected + t.id else selected - t.id }, enabled = ok,
-                        colors = CheckboxDefaults.colors(checkedColor = T.c.primary, checkmarkColor = T.c.onPrimary),
                     )
                     Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                         Text(t.name, fontSize = 14.sp, color = T.c.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))

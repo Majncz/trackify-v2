@@ -214,10 +214,6 @@ fun AiSubscriptionsScreen(onBack: () -> Unit) {
                                             SegmentedButton(
                                                 chartMonthly == m, { chartMonthly = m }, SegmentedButtonDefaults.itemShape(i, 2),
                                                 icon = {},
-                                                colors = SegmentedButtonDefaults.colors(
-                                                    activeContainerColor = T.c.muted, activeContentColor = T.c.foreground, activeBorderColor = T.c.border,
-                                                    inactiveContainerColor = Color.Transparent, inactiveContentColor = T.c.mutedForeground, inactiveBorderColor = T.c.border,
-                                                ),
                                             ) { Text(l, fontSize = 13.sp, maxLines = 1) }
                                         }
                                     }
@@ -519,10 +515,6 @@ private fun PeriodFormSheet(editing: AiPeriod?, presets: List<AiPreset>, onDismi
                 SegmentedButton(
                     kind == k, { if (kind != k) { kind = k; cadence = "monthly"; hasEnd = false; purchaseComputed = true; endDate = startDate } },
                     SegmentedButtonDefaults.itemShape(i, 2),
-                    colors = SegmentedButtonDefaults.colors(
-                        activeContainerColor = T.c.muted, activeContentColor = T.c.foreground, activeBorderColor = T.c.border,
-                        inactiveContainerColor = Color.Transparent, inactiveContentColor = T.c.mutedForeground, inactiveBorderColor = T.c.border,
-                    ),
                 ) { Text(l, maxLines = 1) }
             }
         }
@@ -571,7 +563,7 @@ private fun PeriodFormSheet(editing: AiPeriod?, presets: List<AiPreset>, onDismi
 @Composable
 private fun CheckRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Checkbox) { onChange(!checked) }, verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(checked, onChange, colors = CheckboxDefaults.colors(checkedColor = T.c.foreground, checkmarkColor = T.c.background, uncheckedColor = T.c.mutedForeground))
+        Checkbox(checked, onChange)
         Text(label, fontSize = 15.sp, color = T.c.foreground)
     }
 }

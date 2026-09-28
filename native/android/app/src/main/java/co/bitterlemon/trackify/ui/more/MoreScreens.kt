@@ -177,12 +177,12 @@ fun WidgetsScreen(onBack: () -> Unit) {
                     )
                     SectionLabel("Home screen")
                     ListRow(
-                        "Timer", subtitle = "The running timer with Stop, or resume your last task in one tap. Resize it from 2×1 to 4×2",
+                        "Timer", subtitle = "The running timer with Stop, or resume your last task in one tap",
                         icon = Icons.Outlined.SmartDisplay, onClick = { pinWidget(context, co.bitterlemon.trackify.widget.SmallTimerWidgetReceiver::class.java) },
                         trailing = { AddChip() },
                     )
                     ListRow(
-                        "Timer and tasks", subtitle = "The running timer, today's total and your recent tasks: tap one to start or switch",
+                        "Timer and tasks", subtitle = "The running timer and your recent tasks: tap one to switch",
                         icon = Icons.Outlined.ViewAgenda, onClick = { pinWidget(context, co.bitterlemon.trackify.widget.LargeTimerWidgetReceiver::class.java) },
                         trailing = { AddChip() },
                     )

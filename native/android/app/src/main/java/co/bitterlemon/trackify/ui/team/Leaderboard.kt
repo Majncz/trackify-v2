@@ -114,7 +114,7 @@ object Period {
 fun rememberTicker(active: Boolean, periodMs: Long = 1000): Long {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    LaunchedEffect(active, owner) {
+    LaunchedEffect(active, owner, periodMs) {
         now = System.currentTimeMillis()
         if (!active) return@LaunchedEffect
         owner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
@@ -305,19 +305,12 @@ fun LocalDatePickerDialog(initial: LocalDate, onDismiss: () -> Unit, maxDate: Lo
         confirmButton = {
             TextButton(onClick = {
                 state.selectedDateMillis?.let { onPick(java.time.Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()) } ?: onDismiss()
-            }) { Text("OK", color = T.c.foreground) }
+            }) { Text("OK") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = T.c.mutedForeground) } },
-        colors = DatePickerDefaults.colors(containerColor = T.c.card),
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     ) {
         DatePicker(
             state, showModeToggle = false,
-            colors = DatePickerDefaults.colors(
-                containerColor = T.c.card,
-                selectedDayContainerColor = T.c.primary, selectedDayContentColor = T.c.onPrimary,
-                todayDateBorderColor = T.c.foreground, todayContentColor = T.c.foreground,
-                selectedYearContainerColor = T.c.primary, selectedYearContentColor = T.c.onPrimary,
-            ),
         )
     }
 }

@@ -202,7 +202,7 @@ fun <K> ChoiceSheet(
                     Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(role = Role.RadioButton) { onSelect(k) }.padding(horizontal = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    RadioButton(k == selected, { onSelect(k) }, colors = RadioButtonDefaults.colors(selectedColor = T.c.foreground, unselectedColor = T.c.mutedForeground))
+                    RadioButton(k == selected, { onSelect(k) })
                     Spacer(Modifier.width(8.dp))
                     Text(label, fontSize = 16.sp, color = T.c.foreground)
                 }
@@ -258,12 +258,6 @@ fun BField(
         enabled = enabled,
         supportingText = supporting?.let { { Text(it) } },
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = T.c.foreground, unfocusedBorderColor = T.c.border,
-            focusedLabelColor = T.c.foreground, unfocusedLabelColor = T.c.mutedForeground,
-            cursorColor = T.c.foreground, errorBorderColor = T.c.destructive, errorLabelColor = T.c.destructive,
-            errorSupportingTextColor = T.c.destructive,
-        ),
     )
 }
 
@@ -302,10 +296,6 @@ fun <K> BDropdown(value: K, options: List<Pair<K, String>>, onChange: (K) -> Uni
             label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
             trailingIcon = { androidx.compose.material3.ExposedDropdownMenuDefaults.TrailingIcon(open) },
             modifier = Modifier.fillMaxWidth().menuAnchor(androidx.compose.material3.ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = T.c.foreground, unfocusedBorderColor = T.c.border,
-                focusedLabelColor = T.c.foreground, unfocusedLabelColor = T.c.mutedForeground,
-            ),
         )
         ExposedDropdownMenu(open, { open = false }, containerColor = T.c.card) {
             options.forEach { (k, l) ->
@@ -338,11 +328,6 @@ private fun PickerField(text: String, label: String, icon: androidx.compose.ui.g
             label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
             trailingIcon = { Icon(icon, null) },
             textStyle = androidx.compose.material3.LocalTextStyle.current.merge(co.bitterlemon.trackify.ui.theme.Tabular),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = T.c.foreground, unfocusedBorderColor = T.c.border,
-                focusedLabelColor = T.c.foreground, unfocusedLabelColor = T.c.mutedForeground,
-                unfocusedTrailingIconColor = T.c.mutedForeground,
-            ),
         )
         // Covers the field (below the floating label) so a tap opens the picker instead of focusing text.
         Box(Modifier.matchParentSize().padding(top = 8.dp).clip(RoundedCornerShape(4.dp)).clickable(role = Role.Button, onClickLabel = label, onClick = onClick))
@@ -367,18 +352,11 @@ fun BTimeField(value: java.time.LocalTime, onChange: (java.time.LocalTime) -> Un
         val state = androidx.compose.material3.rememberTimePickerState(value.hour, value.minute, is24Hour = true)
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { open = false },
-            containerColor = T.c.card,
-            confirmButton = { androidx.compose.material3.TextButton({ onChange(java.time.LocalTime.of(state.hour, state.minute)); open = false }) { Text("OK", color = T.c.foreground) } },
-            dismissButton = { androidx.compose.material3.TextButton({ open = false }) { Text("Cancel", color = T.c.foreground) } },
+            confirmButton = { androidx.compose.material3.TextButton({ onChange(java.time.LocalTime.of(state.hour, state.minute)); open = false }) { Text("OK") } },
+            dismissButton = { androidx.compose.material3.TextButton({ open = false }) { Text("Cancel") } },
             text = {
                 androidx.compose.material3.TimePicker(
                     state,
-                    colors = androidx.compose.material3.TimePickerDefaults.colors(
-                        clockDialColor = T.c.muted, selectorColor = T.c.primary,
-                        timeSelectorSelectedContainerColor = T.c.primary, timeSelectorSelectedContentColor = T.c.onPrimary,
-                        timeSelectorUnselectedContainerColor = T.c.muted, timeSelectorUnselectedContentColor = T.c.foreground,
-                        clockDialSelectedContentColor = T.c.onPrimary, clockDialUnselectedContentColor = T.c.foreground,
-                    ),
                 )
             },
         )

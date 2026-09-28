@@ -1,5 +1,9 @@
 package co.bitterlemon.trackify.ui.billing
 
+import androidx.compose.ui.draw.clip
+
+import androidx.compose.foundation.background
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -119,7 +123,7 @@ private fun Chevron() = Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, nul
 
 @Composable
 private fun Summary(summary: BillingSummary?, error: Boolean) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         when {
             summary == null && error -> Text("Couldn't load the billing summary.", fontSize = 15.sp, color = T.c.destructive)
             summary == null -> {
@@ -129,10 +133,18 @@ private fun Summary(summary: BillingSummary?, error: Boolean) {
             }
             summary.byCurrency.isEmpty() -> Text("Enroll tasks in billing to see earnings summary.", fontSize = 15.sp, color = T.c.mutedForeground)
             else -> summary.byCurrency.entries.sortedBy { it.key }.forEachIndexed { i, (cur, t) ->
-                if (i > 0) Spacer(Modifier.height(16.dp))
-                Text("Unpaid · $cur", fontSize = 14.sp, color = T.c.mutedForeground)
-                Text(Format.money(t.unpaidTotal, cur), fontSize = 34.sp, lineHeight = 40.sp, fontWeight = FontWeight.Bold, color = T.c.foreground, style = Tabular)
-                SupportingParts(listOf("This week ${Format.money(t.thisWeekTotal, cur)}", "This month ${Format.money(t.thisMonthTotal, cur)}", "Paid ${Format.money(t.allTimePaidTotal, cur)}"))
+                if (i > 0) Spacer(Modifier.height(12.dp))
+                // Material 3 filled card per currency.
+                Column(
+                    Modifier.fillMaxWidth()
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+                        .background(androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainer)
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                ) {
+                    Text("Unpaid · $cur", fontSize = 14.sp, color = T.c.mutedForeground)
+                    Text(Format.money(t.unpaidTotal, cur), fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Medium, color = T.c.foreground, style = Tabular)
+                    SupportingParts(listOf("This week ${Format.money(t.thisWeekTotal, cur)}", "This month ${Format.money(t.thisMonthTotal, cur)}", "Paid ${Format.money(t.allTimePaidTotal, cur)}"))
+                }
             }
         }
     }
@@ -143,7 +155,7 @@ private fun Summary(summary: BillingSummary?, error: Boolean) {
 private fun BillingGuideSheet(onOpenRates: () -> Unit, onDismiss: () -> Unit) {
     FormSheet("How billing works", onDismiss, footer = {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End) {
-            androidx.compose.material3.TextButton(onOpenRates) { Text("Open Rates", color = T.c.foreground) }
+            androidx.compose.material3.TextButton(onOpenRates) { Text("Open Rates") }
         }
     }) {
         Text("You don't log time here — billing only reads what you track and handles the money steps.", fontSize = 15.sp, color = T.c.mutedForeground)

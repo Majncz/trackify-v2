@@ -194,7 +194,8 @@ fun StatsScreen() {
         if (res.trend.any { it.total > 0 }) {
             item(key = "trend") {
                 Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    BreakdownChart(res)
+                    // Axis labels are part of the graphic: they must not overlap at large font sizes.
+                    co.bitterlemon.trackify.ui.components.CappedFontScale(1f) { BreakdownChart(res) }
                     Spacer(Modifier.height(8.dp))
                     FlowRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         res.series.forEach { s ->
