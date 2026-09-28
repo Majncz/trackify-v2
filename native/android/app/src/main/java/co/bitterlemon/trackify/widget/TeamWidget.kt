@@ -65,18 +65,21 @@ private fun MemberRow(m: TeamMember, me: Boolean, height: Int, now: Long, short:
     Row(GlanceModifier.fillMaxWidth().height(height.dp), verticalAlignment = Alignment.CenterVertically) {
         Avatar(m)
         Spacer(GlanceModifier.width(10.dp))
+        // Name and hours on the first line; the current task gets the full width of the second.
         Column(GlanceModifier.defaultWeight()) {
-            Txt(if (short) firstName(m.name) else m.name, P.fg, 14, if (me) FontWeight.Bold else FontWeight.Normal)
+            Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Txt(if (short) firstName(m.name) else m.name, P.fg, 14, if (me) FontWeight.Bold else FontWeight.Normal, modifier = GlanceModifier.defaultWeight())
+                Spacer(GlanceModifier.width(8.dp))
+                Txt(hm(m.todayLive(now)), if (m.live) P.fg else P.muted, 13, if (m.live) FontWeight.Medium else FontWeight.Normal)
+            }
             if (m.live) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     DotP(P.live, 6.dp)
                     Spacer(GlanceModifier.width(5.dp))
-                    Txt(m.taskName ?: "Tracking", P.muted, 12)
+                    Txt(m.taskName ?: "Tracking", P.muted, 12, modifier = GlanceModifier.defaultWeight())
                 }
             }
         }
-        Spacer(GlanceModifier.width(8.dp))
-        Txt(hm(m.todayLive(now)), if (m.live) P.fg else P.muted, 13, if (m.live) FontWeight.Medium else FontWeight.Normal)
     }
 }
 

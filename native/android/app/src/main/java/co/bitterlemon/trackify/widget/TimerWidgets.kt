@@ -180,7 +180,7 @@ private fun BarNarrow(context: Context, snap: WidgetSnapshotData) {
         Card(padding = 14.dp) {
             Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
                 Column(GlanceModifier.defaultWeight().clickable(openApp(context))) {
-                    TaskTitle(r, 13)
+                    TaskTitle(r, 13, maxLines = if (fontScale(context) > 1.15f) 1 else 2)
                     Clock(r.startTime, 26f)
                 }
                 Spacer(GlanceModifier.width(8.dp))
