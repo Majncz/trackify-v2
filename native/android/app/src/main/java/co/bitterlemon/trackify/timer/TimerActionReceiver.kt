@@ -31,13 +31,12 @@ class TimerActionReceiver : BroadcastReceiver() {
             ACTION_START -> intent.getStringExtra(EXTRA_TASK)?.let { graph.engine.start(it) }
             ACTION_TOGGLE -> graph.engine.toggle(intent.getStringExtra(EXTRA_TASK))
         }
-        // Keep the process alive briefly so the op usually reaches the server right away;
-        // if not, the persisted queue + TimerSyncWorker replay it later.
+        // Redraw every surface now and hand the network part to an expedited job (never block the broadcast on
+        // the network: the next tap would queue behind it).
         val pending = goAsync()
         graph.scope.launch {
             try {
-                kotlinx.coroutines.withTimeoutOrNull(8_000) { graph.engine.drain(8_000) }
-                graph.syncSurfacesNow()
+                graph.afterExternalTap()
             } finally {
                 pending.finish()
             }

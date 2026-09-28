@@ -103,6 +103,10 @@ class AppGraph(private val context: Context) {
             syncSurfaces()
             WidgetUpdater.updateAllNow(context)
             runCatching { co.bitterlemon.trackify.widget.WidgetPreviews.publish(context) }
+            if (co.bitterlemon.trackify.widget.TeamSnapshot.anyTeamWidget(context)) {
+                co.bitterlemon.trackify.widget.TeamRefreshWorker.ensure(context)
+                co.bitterlemon.trackify.widget.TeamSnapshot.refresh(context, minGapMs = 60_000)
+            }
         }
         observeEffects()
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
@@ -132,6 +136,7 @@ class AppGraph(private val context: Context) {
         scope.launch {
             engine.refreshTruth()
             repo.refreshAll()
+            co.bitterlemon.trackify.widget.TeamSnapshot.refresh(context)
             session.session.value?.let { s ->
                 repo.profile.value?.id?.let { id -> if (id != s.userId) session.updateUserId(id) }
             }
@@ -150,6 +155,10 @@ class AppGraph(private val context: Context) {
 
     @OptIn(FlowPreview::class)
     private fun observeEffects() {
+        // Team widgets follow the app's presence signal (timer ops, socket presence events, task syncs).
+        scope.launch { repo.presenceSignal.collect { scope.launch { co.bitterlemon.trackify.widget.TeamSnapshot.refresh(context) } } }
+        // A rejected timer op: the engine re-adopts the server state; say why on the widgets for a moment.
+        scope.launch { engine.errors.collect { WidgetSnapshot.setNotice(it); syncSurfaces() } }
         scope.launch {
             combine(engine.ui, repo.tasks, session.session) { ui, tasks, s -> Triple(ui, tasks, s) }
                 .debounce(150)
@@ -168,7 +177,10 @@ class AppGraph(private val context: Context) {
     fun syncSurfaces() {
         val s = session.session.value
         val ui = engine.ui.value
-        val snap = WidgetSnapshot.build(s != null, session.server.value, s?.userId, ui.running, ui.pending, repo.tasks.value, session.widgetTheme.value)
+        val snap = WidgetSnapshot.build(
+            s != null, session.server.value, s?.userId, ui.running, ui.pending, repo.tasks.value, session.widgetTheme.value,
+            prev = WidgetSnapshot.read(context),
+        )
         WidgetSnapshot.write(context, snap)
         notifier.update(snap)
         WidgetUpdater.updateAll(context)
@@ -180,6 +192,17 @@ class AppGraph(private val context: Context) {
     suspend fun syncSurfacesNow() {
         syncSurfaces()
         WidgetUpdater.updateAllNow(context)
+    }
+
+    /**
+     * A timer tap outside the app (widget, notification): show the new state on every surface right away and
+     * wait until the widgets have drawn it, then let an expedited job send the op. Never waits for the network,
+     * so the broadcast finishes quickly and the next tap isn't queued behind this one.
+     */
+    suspend fun afterExternalTap() {
+        syncSurfaces()
+        WidgetUpdater.redrawAndWait(context)
+        if (engine.persisted.value.queue.isNotEmpty()) TimerSyncWorker.expedite(context)
     }
 
     // Runs in the app scope: storing the session swaps the login screen out right away, which cancels the
@@ -217,6 +240,7 @@ class AppGraph(private val context: Context) {
         engine.clear()
         repo.clear()
         co.bitterlemon.trackify.ui.team.PresenceCache.map.clear()
+        co.bitterlemon.trackify.widget.TeamSnapshot.clear(context)
         socket.disconnect()
         notifier.cancel()
         TimerSyncWorker.cancel(context)

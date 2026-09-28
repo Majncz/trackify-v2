@@ -67,6 +67,16 @@
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_large_info" />
         </receiver>
 
+        <receiver
+            android:name=".widget.TeamWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_team_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_team_info" />
+        </receiver>
+
         <service
             android:name=".tile.TimerTileService"
             android:exported="true"

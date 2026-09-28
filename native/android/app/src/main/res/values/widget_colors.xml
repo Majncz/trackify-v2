@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home-screen widgets: a plain neutral card like the Apple widgets (white in light mode, near-black in dark). -->
+<resources>
+    <color name="w_bg">#FFFFFF</color>
+    <color name="w_fg">#1D1D1F</color>
+    <color name="w_muted">#86868B</color>
+    <color name="w_line">#E8E8ED</color>
+    <color name="w_soft">#F2F2F5</color>
+    <color name="w_stop_bg">#FFE3E1</color>
+    <color name="w_stop_fg">#F2362B</color>
+    <color name="w_live">#28B84F</color>
+</resources>

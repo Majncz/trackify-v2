@@ -35,8 +35,22 @@ class TimerSyncWorker(context: Context, params: WorkerParameters) : CoroutineWor
             WorkManager.getInstance(context).enqueueUniqueWork(NAME, ExistingWorkPolicy.KEEP, req)
         }
 
+        /**
+         * Send the queue now, for taps outside the app (widgets). The tap redraws and returns at once; this job
+         * keeps the process running (not frozen) while the request goes out. Expedited on Android 12+, where
+         * it needs no notification.
+         */
+        fun expedite(context: Context) {
+            val b = OneTimeWorkRequestBuilder<TimerSyncWorker>()
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.SECONDS)
+            if (android.os.Build.VERSION.SDK_INT >= 31) b.setExpedited(androidx.work.OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+            WorkManager.getInstance(context).enqueueUniqueWork("$NAME-now", ExistingWorkPolicy.APPEND_OR_REPLACE, b.build())
+        }
+
         fun cancel(context: Context) {
             WorkManager.getInstance(context).cancelUniqueWork(NAME)
+            WorkManager.getInstance(context).cancelUniqueWork("$NAME-now")
         }
     }
 }

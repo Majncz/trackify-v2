@@ -31,7 +31,12 @@ data class WidgetSnapshotData(
     val day: String = "",
     /** Widget appearance: "system" | "light" | "dark". */
     val theme: String = "system",
+    /** Last "couldn't save" message from the timer queue, shown briefly on the widgets. */
+    val notice: String? = null,
+    val noticeAt: Long = 0,
 ) {
+    fun noticeNow(now: Long): String? = notice?.takeIf { now - noticeAt in 0..90_000 }
+
     fun todayTotalLive(now: Long): Long {
         val r = running ?: return todayTotalMs
         val today = Time.today()
@@ -49,7 +54,25 @@ object WidgetSnapshot {
         return _flow
     }
 
-    fun build(signedIn: Boolean, server: String, userId: String?, running: Running?, pending: Boolean, tasks: List<Task>?, theme: String = "system"): WidgetSnapshotData {
+    @Volatile private var notice: Pair<String, Long>? = null
+
+    /** Remember a timer error for the widgets (the next build shows it). */
+    fun setNotice(message: String) {
+        notice = message to System.currentTimeMillis()
+    }
+
+    fun build(signedIn: Boolean, server: String, userId: String?, running: Running?, pending: Boolean, tasks: List<Task>?, theme: String = "system", prev: WidgetSnapshotData? = null): WidgetSnapshotData {
+        val n = notice
+        // Cold start: the tasks cache is still loading. Keep the last snapshot's lists and only move the timer,
+        // so a widget tap can redraw right away without waiting for (or wiping) the task list.
+        if (tasks == null && signedIn && prev != null && prev.signedIn && prev.userId == userId && prev.day == Time.today().toString()) {
+            val t = running?.let { r -> prev.tasks.firstOrNull { it.id == r.taskId } }
+            return prev.copy(
+                updatedAt = System.currentTimeMillis(), theme = theme, notice = n?.first, noticeAt = n?.second ?: 0,
+                running = running?.let { SnapshotRunning(it.taskId, t?.name ?: prev.running?.takeIf { p -> p.taskId == it.taskId }?.taskName ?: "Task", t?.accentHex ?: "#22c55e", it.startTime, pending) },
+                lastTaskId = running?.taskId ?: prev.lastTaskId,
+            )
+        }
         val list = tasks ?: emptyList()
         val today = Time.today()
         val dayStart = Time.startOfDay(today)
@@ -72,6 +95,8 @@ object WidgetSnapshot {
             },
             lastTaskId = TaskSort.lastUsed(list)?.id ?: sorted.firstOrNull()?.id,
             day = today.toString(),
+            notice = n?.first,
+            noticeAt = n?.second ?: 0,
         )
     }
 
