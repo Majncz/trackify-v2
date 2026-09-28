@@ -1,10 +1,6 @@
 name: native-apple
+# Manual only. Apple builds run on Taryk's Mac (lanes/native/bin/macbuild), never here on push.
 on:
-  push:
-    branches: [lane/native]
-    paths:
-      - native/apple/**
-      - .github/workflows/native-apple.yml
   workflow_dispatch:
     inputs:
       shots:
