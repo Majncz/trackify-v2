@@ -52,6 +52,8 @@ struct BreakdownChartCard: View {
                     }
                 }
             }
+            // Empty days draw no bar; keep them on the axis so a week shows all 7 days.
+            .chartXScale(domain: rows.map(\.label))
             .chartXSelection(value: $selected)
             .chartYAxis {
                 AxisMarks(position: .leading) { v in
