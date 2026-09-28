@@ -92,7 +92,7 @@ class QuickPickerActivity : ComponentActivity() {
                                     Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
                                         .background(if (running) T.c.emerald.copy(alpha = 0.1f) else T.c.card)
                                         .clickable {
-                                            if (running) graph.engine.stop() else graph.engine.start(t.id)
+                                            TimerTap.tap(this@QuickPickerActivity, if (running) TimerTap.Op.STOP else TimerTap.Op.START, t.id)
                                             finish()
                                         }
                                         .padding(horizontal = 10.dp, vertical = 12.dp),

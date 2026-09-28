@@ -38,7 +38,12 @@ import kotlinx.coroutines.withTimeoutOrNull
 /** Manual DI container. One per process; widgets, tile, receivers and the worker use it too. */
 class AppGraph(private val context: Context) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    val session = SessionStore(context).also { it.loadBlocking() }
+
+    // Loading the session reads DataStore and decrypts the token with the Keystore: tens to hundreds of ms on a
+    // cold process. Widget / tile / notification taps don't need it (the widget snapshot says who is signed in),
+    // so it loads on first use — in the app, or in the background after a tap.
+    private val sessionLazy = lazy { SessionStore(context).also { it.loadBlocking() } }
+    val session: SessionStore by sessionLazy
 
     /** Set when a 401 signed us out, so the login screen can say why. */
     private val _sessionExpired = MutableStateFlow(false)
@@ -60,7 +65,8 @@ class AppGraph(private val context: Context) {
         userId = { session.session.value?.userId },
         onUnauthorized = { handleUnauthorized() },
         onOpApplied = { repo.requestRefresh() },
-        scheduleBackgroundSync = { pending -> if (pending) TimerSyncWorker.schedule(context) },
+        // WorkManager is initialised on demand: never on the tap path.
+        scheduleBackgroundSync = { pending -> if (pending) scope.launch { runCatching { TimerSyncWorker.schedule(context) } } },
     )
 
     val socket = SocketManager(object : SocketListener {
@@ -89,18 +95,31 @@ class AppGraph(private val context: Context) {
         }
     }).also { socketRef = it }
 
-    val notifier = TimerNotifier(context)
+    val notifier by lazy { TimerNotifier(context) }
 
     @Volatile var foreground = false
         private set
 
     fun start() {
-        engine.ensureUser(session.session.value?.userId)
-        // Cached tasks can be large (every event); parse off the main thread.
+        // Everything heavy runs in the background, after a timer tap that started this process has redrawn the
+        // widgets (the tap competes for the same few CPU cores on a cold start).
         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            co.bitterlemon.trackify.timer.TimerTap.awaitIdle()
+            engine.ensureUser(session.session.value?.userId)
+            context.getSystemService<ConnectivityManager>()?.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    engine.kick()
+                    socket.nudge()
+                }
+            })
+            if (engine.persisted.value.queue.isNotEmpty()) engine.kick()
+            // Cached tasks can be large (every event); parse off the main thread.
             repo.loadCache()
             // Every process start (first launch after an update included) redraws the widgets with this build.
             syncSurfaces()
+            // Redraw through Glance too (new build, new day), a little later: a tap that started this process
+            // has pushed its own RemoteViews already and shouldn't compete with eight Glance compositions.
+            kotlinx.coroutines.delay(5_000)
             WidgetUpdater.updateAllNow(context)
             runCatching { co.bitterlemon.trackify.widget.WidgetPreviews.publish(context) }
             if (co.bitterlemon.trackify.widget.TeamSnapshot.anyTeamWidget(context)) {
@@ -119,13 +138,6 @@ class AppGraph(private val context: Context) {
                 updateSocket()
             }
         })
-        context.getSystemService<ConnectivityManager>()?.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-                engine.kick()
-                socket.nudge()
-            }
-        })
-        if (engine.persisted.value.queue.isNotEmpty()) engine.kick()
     }
 
     fun onForeground() {
@@ -175,34 +187,37 @@ class AppGraph(private val context: Context) {
 
     /** Push the current timer/task state to the notification, widgets, tile and launcher shortcuts. */
     fun syncSurfaces() {
-        val s = session.session.value
-        val ui = engine.ui.value
-        val snap = WidgetSnapshot.build(
-            s != null, session.server.value, s?.userId, ui.running, ui.pending, repo.tasks.value, session.widgetTheme.value,
-            prev = WidgetSnapshot.read(context),
-        )
-        WidgetSnapshot.write(context, snap)
+        val snap = buildSnapshot()
         notifier.update(snap)
+        // Our own RemoteViews first (no Glance session / WorkManager needed), then the regular Glance update.
+        co.bitterlemon.trackify.widget.FastWidgets.pushAsync(context)
         WidgetUpdater.updateAll(context)
         WidgetUpdater.requestTileUpdate(context)
         Shortcuts.update(context, snap)
+    }
+
+    /**
+     * Build and store the widget snapshot from the live timer and tasks. [fromSnapshot] (timer taps) takes who is
+     * signed in, the server and the widget theme from the previous snapshot instead of loading the session.
+     */
+    fun buildSnapshot(fromSnapshot: Boolean = false): co.bitterlemon.trackify.widget.WidgetSnapshotData {
+        // Load the session (if needed) before taking the snapshot lock, so a tap on the main thread never waits on it.
+        if (!fromSnapshot) session.session.value
+        return WidgetSnapshot.update(context, stamp = { listOf(engine.ui.value, repo.tasks.value) }) { prev ->
+            val ui = engine.ui.value
+            if (fromSnapshot && !sessionLazy.isInitialized()) {
+                WidgetSnapshot.build(prev.signedIn, prev.serverUrl, prev.userId, ui.running, ui.pending, repo.tasks.value, prev.theme, prev)
+            } else {
+                val s = session.session.value
+                WidgetSnapshot.build(s != null, session.server.value, s?.userId, ui.running, ui.pending, repo.tasks.value, session.widgetTheme.value, prev)
+            }
+        }
     }
 
     /** syncSurfaces + wait for the widget redraw (background taps: the process may freeze right after). */
     suspend fun syncSurfacesNow() {
         syncSurfaces()
         WidgetUpdater.updateAllNow(context)
-    }
-
-    /**
-     * A timer tap outside the app (widget, notification): show the new state on every surface right away and
-     * wait until the widgets have drawn it, then let an expedited job send the op. Never waits for the network,
-     * so the broadcast finishes quickly and the next tap isn't queued behind this one.
-     */
-    suspend fun afterExternalTap() {
-        syncSurfaces()
-        WidgetUpdater.redrawAndWait(context)
-        if (engine.persisted.value.queue.isNotEmpty()) TimerSyncWorker.expedite(context)
     }
 
     // Runs in the app scope: storing the session swaps the login screen out right away, which cancels the

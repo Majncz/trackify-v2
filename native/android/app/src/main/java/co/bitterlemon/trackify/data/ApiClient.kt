@@ -47,14 +47,17 @@ class ApiClient(
     private val token: () -> String?,
     private val onUnauthorized: () -> Unit,
 ) {
-    val http: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .build()
+    // Built on first request: a widget tap on a cold process must not pay for OkHttp's setup.
+    val http: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
 
     /** Long-lived client for the chat SSE stream. */
-    val streamHttp: OkHttpClient = http.newBuilder().readTimeout(5, TimeUnit.MINUTES).build()
+    val streamHttp: OkHttpClient by lazy { http.newBuilder().readTimeout(5, TimeUnit.MINUTES).build() }
 
     private val jsonType = "application/json; charset=utf-8".toMediaType()
 

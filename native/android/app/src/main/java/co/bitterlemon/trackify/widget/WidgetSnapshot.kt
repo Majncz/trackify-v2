@@ -34,6 +34,11 @@ data class WidgetSnapshotData(
     /** Last "couldn't save" message from the timer queue, shown briefly on the widgets. */
     val notice: String? = null,
     val noticeAt: Long = 0,
+    /**
+     * Monotonic build number. A widget tap pushes RemoteViews itself (FastWidgets); a Glance composition of an
+     * older snapshot must never land on top of it.
+     */
+    val version: Long = 0,
 ) {
     fun noticeNow(now: Long): String? = notice?.takeIf { now - noticeAt in 0..90_000 }
 
@@ -46,6 +51,12 @@ data class WidgetSnapshotData(
 
 object WidgetSnapshot {
     @Volatile private var cached: WidgetSnapshotData? = null
+
+    /** Render key of the snapshot this process found on disk (what the widgets show when it starts). */
+    @Volatile var storedRenderKey: Int? = null
+        private set
+    @Volatile var storedSnapshotKey: String? = null
+        private set
     private val _flow = kotlinx.coroutines.flow.MutableStateFlow<WidgetSnapshotData?>(null)
 
     /** Live snapshot for running Glance sessions (they recompose on change). */
@@ -68,7 +79,7 @@ object WidgetSnapshot {
         if (tasks == null && signedIn && prev != null && prev.signedIn && prev.userId == userId && prev.day == Time.today().toString()) {
             val t = running?.let { r -> prev.tasks.firstOrNull { it.id == r.taskId } }
             return prev.copy(
-                updatedAt = System.currentTimeMillis(), theme = theme, notice = n?.first, noticeAt = n?.second ?: 0,
+                updatedAt = System.currentTimeMillis(), version = nextVersion(prev), theme = theme, notice = n?.first, noticeAt = n?.second ?: 0,
                 running = running?.let { SnapshotRunning(it.taskId, t?.name ?: prev.running?.takeIf { p -> p.taskId == it.taskId }?.taskName ?: "Task", t?.accentHex ?: "#22c55e", it.startTime, pending) },
                 lastTaskId = running?.taskId ?: prev.lastTaskId,
             )
@@ -97,10 +108,40 @@ object WidgetSnapshot {
             day = today.toString(),
             notice = n?.first,
             noticeAt = n?.second ?: 0,
+            version = nextVersion(prev),
         )
     }
 
+    private fun nextVersion(prev: WidgetSnapshotData?): Long =
+        maxOf((prev?.version ?: 0) + 1, (cached?.version ?: 0) + 1)
+
+    /** The newer of two snapshots (by [WidgetSnapshotData.version]). */
+    fun newest(a: WidgetSnapshotData?, b: WidgetSnapshotData): WidgetSnapshotData = if (a != null && a.version >= b.version) a else b
+
     private fun file(context: Context) = File(context.filesDir, "widget_snapshot.json")
+
+    /**
+     * Build and store the next snapshot atomically: [block] reads the live state (timer, tasks) under the lock,
+     * so two writers (a widget tap on the main thread, the app's debounced sync) can't store an older state last.
+     */
+    fun update(context: Context, stamp: () -> List<Any?> = { emptyList() }, block: (prev: WidgetSnapshotData) -> WidgetSnapshotData): WidgetSnapshotData {
+        // Build outside the lock (a full build walks every event), store only if nothing changed meanwhile —
+        // so a tap on the main thread never waits for a background rebuild.
+        repeat(3) {
+            val prev = read(context)
+            val s0 = stamp()
+            val next = block(prev)
+            synchronized(this) {
+                if (read(context) === prev && sameRefs(stamp(), s0)) {
+                    write(context, next)
+                    return next
+                }
+            }
+        }
+        return synchronized(this) { block(read(context)).also { write(context, it) } }
+    }
+
+    private fun sameRefs(a: List<Any?>, b: List<Any?>) = a.size == b.size && a.indices.all { a[it] === b[it] }
 
     fun write(context: Context, data: WidgetSnapshotData) {
         cached = data
@@ -114,7 +155,11 @@ object WidgetSnapshot {
     fun read(context: Context): WidgetSnapshotData {
         cached?.let { return it }
         return try {
-            AppJson.decodeFromString(WidgetSnapshotData.serializer(), file(context).readText()).also { cached = it }
+            AppJson.decodeFromString(WidgetSnapshotData.serializer(), file(context).readText()).also {
+                cached = it
+                if (storedRenderKey == null) storedRenderKey = WidgetUpdater.renderKey(it)
+                if (storedSnapshotKey == null) storedSnapshotKey = it.copy(updatedAt = 0, version = 0).hashCode().toString()
+            }
         } catch (_: Exception) {
             WidgetSnapshotData()
         }

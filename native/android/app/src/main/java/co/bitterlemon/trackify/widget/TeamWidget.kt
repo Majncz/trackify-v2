@@ -200,7 +200,7 @@ class TeamWidget : GlanceAppWidget() {
         provideContent {
             val snap by flow.collectAsState()
             val team by teamFlow.collectAsState()
-            val data = snap ?: WidgetSnapshot.read(context)
+            val data = WidgetSnapshot.newest(snap, WidgetSnapshot.read(context))
             Themed(context, data.theme) { TeamContent(context, data, team ?: TeamSnapshotData()) }
         }
     }

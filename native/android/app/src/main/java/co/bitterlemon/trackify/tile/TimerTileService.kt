@@ -8,6 +8,7 @@ import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import co.bitterlemon.trackify.AppGraph
 import co.bitterlemon.trackify.R
+import co.bitterlemon.trackify.timer.TimerTap
 import co.bitterlemon.trackify.util.Time
 import co.bitterlemon.trackify.widget.WidgetSnapshot
 
@@ -20,28 +21,22 @@ class TimerTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
-        val graph = AppGraph.get(this)
-        if (graph.session.session.value == null) {
-            render(); return
-        }
-        val snap = WidgetSnapshot.read(this)
-        graph.engine.toggle(snap.lastTaskId)
-        // Snapshot is rebuilt asynchronously; render optimistic state now.
-        render(optimisticRunning = graph.engine.persisted.value.running != null)
+        // Same fast path as the widgets: local state, widget pixels, then notification + sync in the background.
+        TimerTap.tap(this, TimerTap.Op.TOGGLE, null)
+        render()
     }
 
-    private fun render(optimisticRunning: Boolean? = null) {
+    private fun render() {
         val tile = qsTile ?: return
-        val graph = AppGraph.get(this)
+        // The snapshot says who is signed in; the engine has the timer (neither needs the session loaded).
         val snap = WidgetSnapshot.read(this)
-        val running = graph.engine.persisted.value.running
-        val isRunning = optimisticRunning ?: (running != null)
+        val running = if (snap.signedIn) AppGraph.get(this).engine.persisted.value.running else null
         tile.icon = Icon.createWithResource(this, R.drawable.ic_stat_timer)
-        if (graph.session.session.value == null) {
+        if (!snap.signedIn) {
             tile.state = Tile.STATE_UNAVAILABLE
             tile.label = "Trackify"
             if (Build.VERSION.SDK_INT >= 29) tile.subtitle = "Signed out"
-        } else if (isRunning && running != null) {
+        } else if (running != null) {
             val name = snap.tasks.firstOrNull { it.id == running.taskId }?.name ?: snap.running?.taskName ?: "Tracking"
             tile.state = Tile.STATE_ACTIVE
             tile.label = name

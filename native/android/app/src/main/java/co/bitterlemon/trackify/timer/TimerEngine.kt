@@ -104,7 +104,9 @@ class TimerEngine(
     }
 
     private fun set(s: TimerPersisted) {
-        val scoped = s.copy(userId = userId() ?: s.userId)
+        // The state already names its account (ensureUser/clear handle switches): only ask when it doesn't, so
+        // a widget tap never has to load the session.
+        val scoped = if (s.userId != null) s else s.copy(userId = userId())
         _state.value = scoped
         _ui.value = toUi(scoped)
         save(scoped)

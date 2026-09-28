@@ -16,13 +16,12 @@ import androidx.glance.ImageProvider
 import androidx.glance.LocalSize
 import androidx.glance.action.Action
 import androidx.glance.action.ActionParameters
-import androidx.glance.action.actionParametersOf
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.ActionCallback
-import androidx.glance.appwidget.action.actionRunCallback
+import androidx.glance.appwidget.action.actionSendBroadcast
 import androidx.glance.appwidget.provideContent
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Column
@@ -35,7 +34,8 @@ import androidx.glance.layout.height
 import androidx.glance.layout.size
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
-import co.bitterlemon.trackify.AppGraph
+import co.bitterlemon.trackify.timer.TimerActionReceiver
+import co.bitterlemon.trackify.timer.TimerTap
 import co.bitterlemon.trackify.R
 import co.bitterlemon.trackify.util.Time
 import kotlin.math.floor
@@ -50,31 +50,30 @@ import kotlin.math.min
  */
 
 // ---------------------------------------------------------------------------------------------------------------
-// Actions: optimistic. Change local state, redraw, return; an expedited job sends the op (AppGraph.afterExternalTap).
+// Actions: our own explicit broadcast (TimerActionReceiver → TimerTap), which changes the local state and pushes
+// the new widget pixels itself. Not Glance's action receiver: that path redraws through a Glance session, which
+// WorkManager may start only seconds or minutes later on a phone in Doze / battery saver.
+
+internal fun startAction(context: Context, id: String): Action =
+    actionSendBroadcast(TimerActionReceiver.intent(context, TimerActionReceiver.ACTION_START, id))
+
+internal fun stopAction(context: Context): Action =
+    actionSendBroadcast(TimerActionReceiver.intent(context, TimerActionReceiver.ACTION_STOP))
 
 private val TaskKey = ActionParameters.Key<String>("taskId")
 
+/** Kept for widgets still showing RemoteViews from an older build (their buttons name these classes). */
 class StartTaskAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val id = parameters[TaskKey] ?: return
-        val g = AppGraph.get(context)
-        if (g.session.session.value == null) return
-        g.engine.start(id)
-        g.afterExternalTap()
+        if (TimerTap.apply(context, TimerTap.Op.START, parameters[TaskKey] ?: return)) TimerTap.redraw(context)
     }
 }
 
 class StopAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val g = AppGraph.get(context)
-        if (g.session.session.value == null) return
-        g.engine.stop()
-        g.afterExternalTap()
+        if (TimerTap.apply(context, TimerTap.Op.STOP, null)) TimerTap.redraw(context)
     }
 }
-
-internal fun startAction(id: String): Action = actionRunCallback<StartTaskAction>(actionParametersOf(TaskKey to id))
-internal fun stopAction(): Action = actionRunCallback<StopAction>()
 
 // ---------------------------------------------------------------------------------------------------------------
 // Data helpers
@@ -119,8 +118,9 @@ private fun TaskTitle(r: SnapshotRunning, size: Int = 15, maxLines: Int = 1) {
 @Composable
 private fun TaskRow(t: SnapshotTask, snap: WidgetSnapshotData, height: Int, showToday: Boolean, now: Long, compact: Boolean = false) {
     val running = snap.running?.taskId == t.id
+    val context = androidx.glance.LocalContext.current
     Row(
-        GlanceModifier.fillMaxWidth().height(height.dp).clickable(if (running) stopAction() else startAction(t.id)),
+        GlanceModifier.fillMaxWidth().height(height.dp).clickable(if (running) stopAction(context) else startAction(context, t.id)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Dot(accent(t.accentHex), 8.dp)
@@ -156,7 +156,11 @@ internal const val BAR = 130 // dp: below this the widget is one row high
 internal fun TimerContent(context: Context, snap: WidgetSnapshotData, team: TeamSnapshotData?, widgetId: String?) {
     if (widgetId != null) {
         val key = WidgetUpdater.renderKey(snap)
-        SideEffect { WidgetUpdater.markRendered(widgetId, key) }
+        SideEffect {
+            WidgetUpdater.markRendered(widgetId, key)
+            // A tap already put a newer state on screen (FastWidgets): don't let this older one stay there.
+            if (snap.version < FastWidgets.pushedVersion) FastWidgets.repushSoon(context)
+        }
     }
     if (!snap.signedIn) return Message(context, "Not signed in", "Open Trackify to sign in")
     val size = LocalSize.current
@@ -184,13 +188,13 @@ private fun BarNarrow(context: Context, snap: WidgetSnapshotData) {
                     Clock(r.startTime, 26f)
                 }
                 Spacer(GlanceModifier.width(8.dp))
-                RoundButton(R.drawable.ic_stop, "Stop", P.stopBg, P.stopFg, 42.dp, stopAction())
+                RoundButton(R.drawable.ic_stop, "Stop", P.stopBg, P.stopFg, 42.dp, stopAction(context))
             }
         }
         return
     }
     val t = startable(snap).first()
-    Card(GlanceModifier.clickable(startAction(t.id)), padding = 14.dp) {
+    Card(GlanceModifier.clickable(startAction(context, t.id)), padding = 14.dp) {
         Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
             Column(GlanceModifier.defaultWeight()) {
                 Txt("Not tracking", P.muted, 12, FontWeight.Medium)
@@ -222,7 +226,7 @@ private fun BarWide(context: Context, snap: WidgetSnapshotData) {
                 Spacer(GlanceModifier.width(10.dp))
                 Clock(r.startTime, 30f, GlanceModifier.clickable(openApp(context)))
                 Spacer(GlanceModifier.width(12.dp))
-                StopPill(stopAction())
+                StopPill(stopAction(context))
             }
         } else {
             val rows = floor((h - 28) / 34f).toInt().coerceIn(1, 2)
@@ -258,7 +262,7 @@ private fun Square(context: Context, snap: WidgetSnapshotData) {
                 Spacer(GlanceModifier.defaultWeight())
                 Clock(r.startTime, 34f, GlanceModifier.clickable(openApp(context)))
                 Spacer(GlanceModifier.height(8.dp))
-                StopPill(stopAction(), GlanceModifier.fillMaxWidth())
+                StopPill(stopAction(context), GlanceModifier.fillMaxWidth())
             } else {
                 Column(GlanceModifier.fillMaxWidth().clickable(openApp(context))) {
                     Txt("Not tracking", P.muted, 12, FontWeight.Medium)
@@ -294,7 +298,7 @@ private fun Medium(context: Context, snap: WidgetSnapshotData) {
                     Spacer(GlanceModifier.defaultWeight())
                     Clock(r.startTime, 36f, GlanceModifier.clickable(openApp(context)))
                     Spacer(GlanceModifier.height(8.dp))
-                    StopPill(stopAction(), GlanceModifier.fillMaxWidth())
+                    StopPill(stopAction(context), GlanceModifier.fillMaxWidth())
                 } else {
                     val last = lastTask(snap)
                     Column(GlanceModifier.fillMaxWidth().clickable(openApp(context))) {
@@ -302,7 +306,7 @@ private fun Medium(context: Context, snap: WidgetSnapshotData) {
                         Txt(hm(snap.todayTotalLive(now)), P.fg, 30, FontWeight.Medium)
                     }
                     Spacer(GlanceModifier.defaultWeight())
-                    if (last != null) Txt("Last: ${last.name}", P.muted, 12, modifier = GlanceModifier.clickable(startAction(last.id)))
+                    if (last != null) Txt("Last: ${last.name}", P.muted, 12, modifier = GlanceModifier.clickable(startAction(context, last.id)))
                 }
             }
             Spacer(GlanceModifier.width(16.dp))
@@ -347,7 +351,7 @@ private fun Large(context: Context, snap: WidgetSnapshotData, team: TeamSnapshot
                 }
                 Row(GlanceModifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
                     Clock(r.startTime, 42f, GlanceModifier.defaultWeight().clickable(openApp(context)))
-                    StopPill(stopAction(), height = 38.dp)
+                    StopPill(stopAction(context), height = 38.dp)
                 }
             } else {
                 Column(GlanceModifier.fillMaxWidth().clickable(openApp(context))) {
@@ -383,7 +387,7 @@ class SmallTimerWidget : GlanceAppWidget() {
         val wid = id.toString()
         provideContent {
             val snap by flow.collectAsState()
-            val data = snap ?: WidgetSnapshot.read(context)
+            val data = WidgetSnapshot.newest(snap, WidgetSnapshot.read(context))
             Themed(context, data.theme) { TimerContent(context, data, null, wid) }
         }
     }
@@ -408,7 +412,7 @@ class LargeTimerWidget : GlanceAppWidget() {
         provideContent {
             val snap by flow.collectAsState()
             val team by teamFlow.collectAsState()
-            val data = snap ?: WidgetSnapshot.read(context)
+            val data = WidgetSnapshot.newest(snap, WidgetSnapshot.read(context))
             Themed(context, data.theme) { TimerContent(context, data, team ?: TeamSnapshotData(), wid) }
         }
     }
