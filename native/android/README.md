@@ -5,7 +5,8 @@ Native Android client for Trackify (`co.bitterlemon.trackify`). It covers everyt
 live chronometer, home-screen widgets, a Quick Settings tile and launcher shortcuts. The contract it follows is
 `native/docs/NATIVE_SPEC.md`.
 
-- Kotlin 2.4, Jetpack Compose (Material 3 with the Trackify neutral palette, no dynamic colour), light and dark.
+- Kotlin 2.4, Jetpack Compose Material 3 with Material You: wallpaper (dynamic) colour on Android 12+, a Trackify-green
+  tonal scheme on older versions, light and dark (`ui/theme/Theme.kt`; the legacy `T.c` tokens map onto M3 roles).
 - minSdk 26, targetSdk 36. compileSdk is 37 because the Compose 2026.09 BOM requires it.
 - Dependencies are kept lean: OkHttp, kotlinx.serialization, coroutines, DataStore, WorkManager, Glance,
   Navigation Compose and `io.socket:socket.io-client` 2.1.2. There is no Retrofit or Hilt; DI is manual (`AppGraph`).
@@ -116,8 +117,12 @@ disconnects.
 
 - **Ongoing notification:** chronometer, **Stop** and **Switch…** actions, and `setRequestPromotedOngoing(true)`.
   The app asks for `POST_NOTIFICATIONS` the first time you start a timer.
-- **Widgets:** a small one (clock with Stop, or Start for the last task) and a large one (the running card plus up to
-  8 tasks with start buttons). Both are Glance widgets and read a live snapshot flow.
+- **Widgets:** "Timer" (2×1 to 4×2) and "Timer and tasks" (4×2 and up, a task list from 4×3). Glance, launcher corner
+  radius, wallpaper colours via `GlanceTheme` (Settings → Appearance can force light or dark), `SizeMode.Responsive`
+  with a layout per size. Running: task, live clock (a `Chronometer`, sized in dp) and a big Stop; idle: one-tap resume
+  of the last task plus start chips/rows. Whole tiles and rows are the tap targets. Picker previews: `previewLayout`
+  (Android 12–14) and generated Glance previews (Android 15+, published once per build). Actions redraw synchronously
+  (`AppGraph.syncSurfacesNow()` → `WidgetUpdater.updateAllNow`).
 - **Quick Settings tile:** stops the running timer, or starts the last task.
 - **Dynamic shortcuts:** the 4 most recent tasks, plus Stop while a timer runs.
 - Settings → **Widgets & Quick Settings** can pin the widgets and add the tile in one tap.

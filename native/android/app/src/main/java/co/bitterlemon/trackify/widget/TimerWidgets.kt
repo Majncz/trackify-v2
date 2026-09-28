@@ -227,7 +227,9 @@ private fun todayText(snap: WidgetSnapshotData): String? {
 
 /** Up to two one-tap start chips in a row (the bottom of the tall-wide small widget). */
 @Composable
-private fun NextChips(next: List<SnapshotTask>) {
+private fun NextChips(candidates: List<SnapshotTask>) {
+    // Two chips need a 4-column widget; narrower widgets get one full-width chip.
+    val next = candidates.take(if (LocalSize.current.width >= 250.dp) 2 else 1)
     if (next.isEmpty()) return
     Spacer(GlanceModifier.height(8.dp))
     Row(GlanceModifier.fillMaxWidth().height(48.dp)) {
@@ -242,7 +244,6 @@ private fun NextChips(next: List<SnapshotTask>) {
                 Label(n.name, C.onSurface, 13, maxLines = 1)
             }
         }
-        if (next.size == 1) { Spacer(GlanceModifier.width(8.dp)); Spacer(GlanceModifier.defaultWeight()) }
     }
 }
 
@@ -254,9 +255,10 @@ private val SmallBarWide = DpSize(250.dp, 40.dp)
 private val SmallSquare = DpSize(110.dp, 120.dp)
 private val SmallWide = DpSize(200.dp, 120.dp)
 private val SmallWideTall = DpSize(200.dp, 180.dp)
+private val SmallWideTallFull = DpSize(300.dp, 180.dp)
 
 class SmallTimerWidget : GlanceAppWidget() {
-    override val sizeMode = SizeMode.Responsive(setOf(SmallBar, SmallBarWide, SmallSquare, SmallWide, SmallWideTall))
+    override val sizeMode = SizeMode.Responsive(setOf(SmallBar, SmallBarWide, SmallSquare, SmallWide, SmallWideTall, SmallWideTallFull))
     override val previewSizeMode = SizeMode.Responsive(setOf(SmallSquare, SmallWide))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
@@ -430,7 +432,7 @@ private fun SmallIdleWide(snap: WidgetSnapshotData, tall: Boolean) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Dot(accent(t.accentHex), 8.dp)
                         Spacer(GlanceModifier.width(6.dp))
-                        Label("Not tracking · resume", C.onSecondaryContainer, 12)
+                        Label("Resume", C.onSecondaryContainer, 12)
                     }
                     Label(t.name, C.onSecondaryContainer, 18, bold = true, maxLines = 2)
                     todayText(snap)?.let { Label(it, C.onSecondaryContainer, 13) }
@@ -537,7 +539,7 @@ private fun ResumeHero(t: SnapshotTask, wide: Boolean) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Dot(accent(t.accentHex), 8.dp)
                 Spacer(GlanceModifier.width(6.dp))
-                Label("Not tracking · tap to resume", C.onSecondaryContainer, 12)
+                Label("Not tracking · resume", C.onSecondaryContainer, 12, maxLines = 1)
             }
             Label(t.name, C.onSecondaryContainer, 18, bold = true, maxLines = 2)
         }

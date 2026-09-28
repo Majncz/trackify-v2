@@ -44,7 +44,6 @@ import androidx.compose.ui.unit.sp
 import co.bitterlemon.trackify.AppGraph
 import co.bitterlemon.trackify.data.BillingSummary
 import co.bitterlemon.trackify.ui.components.ListRow
-import co.bitterlemon.trackify.ui.components.RowDivider
 import co.bitterlemon.trackify.ui.components.ScreenBar
 import co.bitterlemon.trackify.ui.components.Skeleton
 import co.bitterlemon.trackify.ui.theme.T
@@ -89,7 +88,7 @@ fun BillingScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
             item {
                 Column(Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth()) {
                     Summary(summary, summaryError)
-                    RowDivider(Modifier.padding(top = 8.dp))
+                    Spacer(Modifier.height(8.dp))
                     val enrolled = billingTasks?.size
                     ListRow(
                         "Sessions", subtitle = "Select tracked time and mark it paid",

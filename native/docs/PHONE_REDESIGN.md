@@ -64,3 +64,16 @@ Fix session, Log past time, New task, Group editor, Mark as paid, AI billing ent
 - Tab switches are instant (no crossfade/slide).
 - Screenshots of Timer (idle, running, searching), row menu sheet, Stats, Team, More, Settings, Task detail, light+dark.
 - Every existing feature still reachable.
+
+## Android: Material You pass (2026-09-28)
+
+Owner feedback: the Android app and widgets looked like the website. Changes:
+
+- **Colour:** dynamic wallpaper colour on Android 12+ (`dynamicLight/DarkColorScheme`), Trackify-green tonal fallback
+  below that. Tonal surfaces instead of hairlines and shadows; M3 buttons, segmented buttons, pickers, sheets, FAB.
+- **Timer:** no per-row icons. Tap a row = start/switch, hold = row sheet. The running task is a primary-container hero
+  (task, big clock, one big Stop; Stop sits beside the clock on short screens) and is not repeated in the list unless
+  you are searching. Rows lead with a coloured initial. New task is a FAB.
+- **Widgets:** no wordmark; launcher corner radius; wallpaper colours; a layout per size (2×1, 4×1, 2×2, 4×2, 4×3+);
+  running task + live clock are the biggest thing; whole tiles/rows are the targets; idle = resume the last task.
+- **Notification** is tinted with the task colour; the **tile** says what a tap will do.
