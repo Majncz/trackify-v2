@@ -141,6 +141,30 @@ struct BillingSessionsView: View {
         }
         .toolbar(editing ? .hidden : .automatic, for: .tabBar)
         .toolbar { iosToolbar }
+        // A full-width bar instead of a bottom toolbar item: the toolbar version ran off the screen edge.
+        .safeAreaInset(edge: .bottom) {
+            if editing && !store.selectedSessions.isEmpty {
+                VStack(spacing: 6) {
+                    if selection.multipleCurrencies {
+                        Text("Select one currency to mark as paid").font(.footnote).foregroundStyle(.secondary)
+                    }
+                    Button { openMarkPaid(store.selectedSessions) } label: {
+                        Text(selection.multipleCurrencies
+                             ? "Mark as Paid"
+                             : "Mark as Paid (\(selection.count) · \(selection.byCurrency.map { Money.format($0.1, $0.0) }.joined()))")
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .disabled(selection.multipleCurrencies)
+                    .accessibilityIdentifier("billingMarkPaid")
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+            }
+        }
         .refreshable { await store.loadAll(model.api) }
         .onChange(of: editMode) { _, m in if !m.isEditing { store.selected = [] } }
         .onChange(of: store.unpaidInList.isEmpty) { _, empty in if empty { editMode = .inactive } }
@@ -154,26 +178,6 @@ struct BillingSessionsView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Done") { editMode = .inactive }.fontWeight(.semibold)
-            }
-            if !store.selectedSessions.isEmpty {
-                ToolbarItemGroup(placement: .bottomBar) {
-                    if selection.multipleCurrencies {
-                        Text("Select one currency to mark as paid").font(.footnote).foregroundStyle(.secondary)
-                        Spacer()
-                    } else {
-                        Spacer()
-                    }
-                    Button { openMarkPaid(store.selectedSessions) } label: {
-                        Text(selection.multipleCurrencies
-                             ? "Mark as Paid"
-                             : "Mark as Paid (\(selection.count) · \(selection.byCurrency.map { Money.format($0.1, $0.0) }.joined()))")
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(selection.multipleCurrencies)
-                    .accessibilityIdentifier("billingMarkPaid")
-                }
             }
         } else {
             ToolbarItemGroup(placement: .topBarTrailing) {
