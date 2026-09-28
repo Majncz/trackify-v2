@@ -131,11 +131,18 @@ disconnects.
     kept in `files/widget_team.json` and refreshed on the app's presence signal (timer ops, socket
     `presence:changed` while the app or timer service is up), on foreground, when the system updates the widget and
     every 30 minutes (`TeamRefreshWorker`) — only while a widget that shows the team is placed.
-  - Taps are optimistic: the action changes local state, redraws every widget and waits until they have composed the
-    new state (`WidgetUpdater.redrawAndWait`, so a freeze right after can't leave a stale widget), then returns; an
-    expedited `TimerSyncWorker` sends the op. The broadcast never waits for the network, so a second tap is never
-    queued behind the first. Measured on the emulator with 1.5 s extra network latency: Stop visible 60–100 ms after
-    the tap (was 6.3 s when tapped 2 s after a Start, up to 8 s plus a background ANR at 10 s).
+  - Taps never go through Glance's machinery. Buttons send an explicit foreground broadcast to
+    `TimerActionReceiver` → `TimerTap`: the timer changes in memory (files are written by a background writer), the
+    snapshot is rebuilt from the previous one, and `FastWidgets` composes the same widget content with
+    `GlanceRemoteViews` for every placed timer / Timer-and-tasks / Team widget (the size it shows first, then all
+    sizes) and hands it to `AppWidgetManager.updateAppWidget` itself. A Glance update needs a session, and without a
+    live one Glance starts it through WorkManager — which Doze, battery saver and the rare/restricted buckets defer by
+    seconds. Glance still redraws the same state 1.5 s later; snapshots carry a monotonic `version`, so an older
+    composition never lands on top (it triggers a re-push instead). The notification, tile, shortcuts and the
+    expedited `TimerSyncWorker` follow after the pixels; nothing on the tap path waits for the network, the session
+    (DataStore + Keystore), OkHttp or WorkManager (initialised on demand). The Quick Settings tile and the Switch…
+    picker use the same path. Tap → RemoteViews at the system: 50–120 ms warm, 240–370 ms for a cold process in
+    Doze / battery saver (emulator, 8 widgets placed).
   - Picker previews: `previewLayout` (Android 12–14) and generated Glance previews (Android 15+).
 - **Quick Settings tile:** stops the running timer, or starts the last task.
 - **Dynamic shortcuts:** the 4 most recent tasks, plus Stop while a timer runs.
