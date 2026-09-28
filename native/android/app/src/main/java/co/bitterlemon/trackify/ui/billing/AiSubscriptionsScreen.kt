@@ -1,5 +1,8 @@
 package co.bitterlemon.trackify.ui.billing
 
+import androidx.compose.foundation.lazy.itemsIndexed
+import co.bitterlemon.trackify.ui.components.GroupedItem
+import co.bitterlemon.trackify.ui.components.ListRow
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.Canvas
@@ -189,34 +192,29 @@ fun AiSubscriptionsScreen(onBack: () -> Unit) {
                 }
                 else -> {
                     item {
-                        Column(Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
+                        co.bitterlemon.trackify.ui.components.TCard(Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().padding(horizontal = 16.dp).padding(top = 8.dp)) {
                             if (d.fxMissingCurrencies.isNotEmpty()) {
                                 Text(
                                     "Exchange rate unavailable for ${d.fxMissingCurrencies.joinToString(", ")} — totals in ${d.viewCurrency} may be incomplete.",
                                     fontSize = 14.sp, color = if (T.c.dark) T.c.amber400 else Color(0xFFB45309), modifier = Modifier.padding(bottom = 10.dp),
                                 )
                             }
-                            Text("Lifetime AI billing", fontSize = 14.sp, color = T.c.mutedForeground)
+                            Text("Lifetime AI billing", fontSize = 15.sp, color = T.c.mutedForeground)
                             Text(Format.money(d.summary.lifetimeSpendInView, d.viewCurrency), fontSize = 34.sp, lineHeight = 40.sp, fontWeight = FontWeight.Bold, color = T.c.foreground, style = Tabular)
                             SupportingParts(listOf("This month ${Format.money(d.summary.currentMonthOverlapSpendInView, d.viewCurrency)}", "${d.summary.activeSubscriptions} active", "${d.summary.periodCount} total"))
                         }
                     }
                     if (d.cumulativeByMonth.isNotEmpty()) item {
-                        SurfaceBlock(Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        SurfaceBlock(Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().padding(horizontal = 16.dp).padding(top = 20.dp)) {
                             Column(Modifier.padding(16.dp)) {
                                 FlowRow(
                                     Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    Text(if (chartMonthly) "Spend per month" else "Cumulative spend", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, modifier = Modifier.padding(end = 12.dp))
-                                    SingleChoiceSegmentedButtonRow {
-                                        listOf(true to "Monthly", false to "Cumulative").forEachIndexed { i, (m, l) ->
-                                            SegmentedButton(
-                                                chartMonthly == m, { chartMonthly = m }, SegmentedButtonDefaults.itemShape(i, 2),
-                                                icon = {},
-                                            ) { Text(l, fontSize = 13.sp, maxLines = 1) }
-                                        }
-                                    }
+                                    Text(if (chartMonthly) "Spend per month" else "Cumulative spend", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, modifier = Modifier.padding(end = 12.dp))
+                                    co.bitterlemon.trackify.ui.components.Segmented(
+                                        listOf(true to "Monthly", false to "Cumulative"), chartMonthly, { chartMonthly = it }, Modifier.width(230.dp), compact = true,
+                                    )
                                 }
                                 Spacer(Modifier.height(12.dp))
                                 SpendChart(if (chartMonthly) d.spendByMonth.map { it.month to it.totalInView } else d.cumulativeByMonth.map { it.month to it.totalInView }, chartMonthly, d.viewCurrency)
@@ -225,10 +223,10 @@ fun AiSubscriptionsScreen(onBack: () -> Unit) {
                     }
                     if (d.rankings.mostTrackedHours.isNotEmpty()) {
                         item { SectionLabel("Most tracked hours credited", Modifier.widthIn(max = BillingMaxWidth)) }
-                        items(d.rankings.mostTrackedHours, key = { "rk-" + it.id }) { r ->
-                            Row(Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text(r.name, fontSize = 15.sp, color = T.c.foreground, modifier = Modifier.weight(1f))
-                                Text("${trimNum(r.trackedHours)}h", fontSize = 15.sp, color = T.c.foreground, style = Tabular)
+                        val rk = d.rankings.mostTrackedHours
+                        itemsIndexed(rk, key = { _, it -> "rk-" + it.id }) { i, r ->
+                            GroupedItem(i == 0, i == rk.lastIndex, Modifier.widthIn(max = BillingMaxWidth)) {
+                                ListRow(r.name, value = "${trimNum(r.trackedHours)}h")
                             }
                         }
                     }
@@ -238,11 +236,15 @@ fun AiSubscriptionsScreen(onBack: () -> Unit) {
                     if (d.periods.isEmpty()) item { StateMessage("No AI billing entries yet. Tap + to start tracking.") }
                     if (active.isNotEmpty()) {
                         item { SectionLabel("Active", Modifier.widthIn(max = BillingMaxWidth)) }
-                        items(active, key = { "a-" + it.id }) { p -> PeriodRow(p) { detail = p.id } }
-                    } else if (d.periods.isNotEmpty()) item { SectionLabel("Active", Modifier.widthIn(max = BillingMaxWidth)); Text("No active entries.", fontSize = 15.sp, color = T.c.mutedForeground, modifier = Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) }
+                        itemsIndexed(active, key = { _, it -> "a-" + it.id }) { i, p ->
+                            GroupedItem(i == 0, i == active.lastIndex, Modifier.widthIn(max = BillingMaxWidth), dividerInset = 42.dp) { PeriodRow(p) { detail = p.id } }
+                        }
+                    } else if (d.periods.isNotEmpty()) item { SectionLabel("Active", Modifier.widthIn(max = BillingMaxWidth)); Text("No active entries.", fontSize = 15.sp, color = T.c.mutedForeground, modifier = Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().padding(horizontal = 32.dp)) }
                     if (past.isNotEmpty()) {
                         item { SectionLabel("Past (${past.size})", Modifier.widthIn(max = BillingMaxWidth)) }
-                        items(past, key = { "p-" + it.id }) { p -> PeriodRow(p) { detail = p.id } }
+                        itemsIndexed(past, key = { _, it -> "p-" + it.id }) { i, p ->
+                            GroupedItem(i == 0, i == past.lastIndex, Modifier.widthIn(max = BillingMaxWidth), dividerInset = 42.dp) { PeriodRow(p) { detail = p.id } }
+                        }
                     }
                 }
             }
@@ -275,9 +277,9 @@ private fun PeriodRow(p: AiPeriod, onClick: () -> Unit) {
     val state = AiCadence.state(p)
     val kind = if (p.billingKind == "recurring_monthly") "${AiCadence.label(AiCadence.normalize(p.billingCadence))} · ${Format.money(p.price, p.currency)}"
     else "One-time · ${Format.money(p.price, p.currency)}"
-    Column(Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth()) {
+    Column(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 20.dp, vertical = 10.dp),
+            Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable(role = Role.Button, onClick = onClick).padding(start = 16.dp, end = 10.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AccentDot(stateColor(state), 10.dp)
@@ -290,8 +292,8 @@ private fun PeriodRow(p: AiPeriod, onClick: () -> Unit) {
                     "${p.metrics.durationDays} day${if (p.metrics.durationDays == 1) "" else "s"}", state,
                 ))
             }
+            co.bitterlemon.trackify.ui.components.Chevron()
         }
-        RowDivider(inset = 46.dp)
     }
 }
 

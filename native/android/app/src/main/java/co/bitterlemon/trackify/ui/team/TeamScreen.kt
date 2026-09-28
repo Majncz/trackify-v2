@@ -96,16 +96,13 @@ fun TeamScreen(onOpenRace: () -> Unit) {
             contentPadding = PaddingValues(bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            item(key = "lb") { LeaderboardCard(Modifier.widthIn(max = 720.dp)) }
+            item(key = "lb") { LeaderboardCard(Modifier.widthIn(max = 720.dp).padding(horizontal = 16.dp).padding(top = 8.dp)) }
             item(key = "race") {
-                Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
-                    RowDivider()
+                co.bitterlemon.trackify.ui.components.Section(Modifier.widthIn(max = 720.dp)) {
                     ListRow(
-                        "Race", subtitle = "Play the hours back and watch the team race",
-                        icon = Icons.Outlined.Leaderboard, onClick = onOpenRace,
-                        trailing = { Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = T.c.mutedForeground) },
+                        "Race", subtitle = "Play the team\u2019s hours back",
+                        icon = Icons.Outlined.Leaderboard, onClick = onOpenRace, chevron = true,
                     )
-                    RowDivider()
                 }
             }
         }
@@ -167,13 +164,7 @@ private fun Visualizations() {
         Column(Modifier.fillMaxWidth()) {
             Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 RacePreset.entries.forEach { p ->
-                    val sel = p == preset
-                    Text(
-                        p.label,
-                        Modifier.clip(RoundedCornerShape(6.dp)).background(if (sel) T.c.primary else T.c.muted)
-                            .clickable { presetName = p.name }.padding(horizontal = 10.dp, vertical = 7.dp),
-                        fontSize = 12.sp, fontWeight = FontWeight.Medium, color = if (sel) T.c.onPrimary else T.c.mutedForeground,
-                    )
+                    co.bitterlemon.trackify.ui.components.Chip(p.label, p == preset, { presetName = p.name })
                 }
             }
             if (preset == RacePreset.Custom) {

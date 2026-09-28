@@ -1,5 +1,7 @@
 package co.bitterlemon.trackify.ui.billing
 
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -196,15 +198,18 @@ fun <K> ChoiceSheet(
         dragHandle = handle,
     ) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
-            Text(title, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+            Text(
+                title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+            )
             options.forEach { (k, label) ->
+                // iOS-style choice list: the label, a check mark on the current one.
                 Row(
-                    Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(role = Role.RadioButton) { onSelect(k) }.padding(horizontal = 8.dp),
+                    Modifier.fillMaxWidth().heightIn(min = 52.dp).selectable(k == selected, role = Role.RadioButton) { onSelect(k) }.padding(horizontal = 20.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    RadioButton(k == selected, { onSelect(k) })
-                    Spacer(Modifier.width(8.dp))
-                    Text(label, fontSize = 16.sp, color = T.c.foreground)
+                    Text(label, fontSize = 17.sp, color = T.c.foreground, modifier = Modifier.weight(1f))
+                    if (k == selected) Icon(Icons.Outlined.Check, null, tint = T.c.foreground)
                 }
             }
             extra?.invoke(this)
@@ -220,15 +225,16 @@ fun DropChip(label: String, active: Boolean, onClick: () -> Unit) {
         onClick = onClick,
         label = { Text(label, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         trailingIcon = { Icon(Icons.Outlined.ArrowDropDown, null, modifier = Modifier.size(18.dp)) },
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
         colors = FilterChipDefaults.filterChipColors(
-            containerColor = Color.Transparent,
+            containerColor = T.c.cell,
             labelColor = T.c.foreground,
             iconColor = T.c.mutedForeground,
-            selectedContainerColor = T.c.muted,
-            selectedLabelColor = T.c.foreground,
-            selectedTrailingIconColor = T.c.foreground,
+            selectedContainerColor = T.c.foreground,
+            selectedLabelColor = T.c.plain,
+            selectedTrailingIconColor = T.c.plain,
         ),
-        border = FilterChipDefaults.filterChipBorder(enabled = true, selected = active, borderColor = T.c.border, selectedBorderColor = T.c.muted),
+        border = null,
     )
 }
 
@@ -314,7 +320,7 @@ fun <K> BDropdown(value: K, options: List<Pair<K, String>>, onChange: (K) -> Uni
 fun SupportingParts(parts: List<String>, modifier: Modifier = Modifier) {
     FlowRow(modifier) {
         parts.forEachIndexed { i, t ->
-            Text(t.replace(' ', '\u00A0') + (if (i < parts.lastIndex) "\u00A0·\u00A0" else ""), fontSize = 14.sp, color = T.c.mutedForeground, style = co.bitterlemon.trackify.ui.theme.Tabular)
+            Text(t.replace(' ', '\u00A0') + (if (i < parts.lastIndex) "\u00A0·\u00A0" else ""), fontSize = 15.sp, color = T.c.mutedForeground, style = co.bitterlemon.trackify.ui.theme.Tabular)
         }
     }
 }

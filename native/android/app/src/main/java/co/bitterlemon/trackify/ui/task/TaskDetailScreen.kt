@@ -1,5 +1,15 @@
 package co.bitterlemon.trackify.ui.task
 
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import co.bitterlemon.trackify.ui.components.Section
+import co.bitterlemon.trackify.ui.components.SectionDivider
+import co.bitterlemon.trackify.ui.components.SectionFooter
+import co.bitterlemon.trackify.ui.components.TDialog
+import co.bitterlemon.trackify.ui.components.TInput
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -117,11 +127,15 @@ fun TaskDetailScreen(id: String, onBack: () -> Unit, onOpenBilling: () -> Unit =
     var editing by remember { mutableStateOf<Event?>(null) }
     var logOpen by remember { mutableStateOf(false) }
     var billingError by remember { mutableStateOf(false) }
+    var renameOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(id) { billingError = graph.repo.refreshBillingTasks().isFailure && graph.repo.billingTasks.value == null }
 
     Column(Modifier.fillMaxSize()) {
-    ScreenBar(null, onBack = onBack)
+    // iOS layout: the task name as the centred title, Rename on the right, then grouped sections.
+    ScreenBar(task?.name, onBack = onBack) {
+        if (task != null) TButton("Rename", { renameOpen = true }, variant = BtnVariant.Ghost)
+    }
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 32.dp),
@@ -139,28 +153,27 @@ fun TaskDetailScreen(id: String, onBack: () -> Unit, onOpenBilling: () -> Unit =
             val running = timer.running?.taskId == task.id
             val now = co.bitterlemon.trackify.ui.team.rememberTicker(running)
             val live = if (running) maxOf(0L, now - timer.running!!.startTime) else 0L
-            Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 16.dp)) {
-                EditableName(task)
-                task.taskGroup?.let {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                        co.bitterlemon.trackify.ui.components.AccentDot(hexColor(it.accent), 8.dp)
-                        Spacer(Modifier.width(8.dp))
-                        Text(it.name, fontSize = 14.sp, color = T.c.mutedForeground)
-                    }
+            Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
+                Section(topGap = 8.dp) {
+                    ListRow("Group", trailing = {
+                        val g = task.taskGroup
+                        if (g != null) co.bitterlemon.trackify.ui.components.AccentBadge(g.name, hexColor(g.accent))
+                        else Text("Ungrouped", fontSize = 17.sp, color = T.c.mutedForeground)
+                    })
+                    SectionDivider()
+                    ListRow("Total time", value = Format.durationWords(task.events.sumOf { it.toMs - it.fromMs } + live))
+                    SectionDivider()
+                    ListRow("Sessions", value = "${task.events.size}")
                 }
-                Row(Modifier.fillMaxWidth().padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    co.bitterlemon.trackify.ui.components.StatTile("Total", Format.durationWords(task.events.sumOf { it.toMs - it.fromMs } + live), Modifier.weight(1f))
-                    co.bitterlemon.trackify.ui.components.StatTile("Sessions", "${task.events.size}", Modifier.weight(1f))
-                }
-                Row(Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (running) TButton("Stop", { graph.engine.stop() }, Modifier.weight(1f), size = BtnSize.Lg, icon = Icons.Outlined.Stop)
-                    else TButton("Start", { graph.engine.start(task.id) }, Modifier.weight(1f), size = BtnSize.Lg, icon = Icons.Outlined.PlayArrow)
-                    TButton("Log past time", { logOpen = true }, Modifier.weight(1f), variant = BtnVariant.Outline, size = BtnSize.Lg, icon = Icons.Outlined.Add)
+                Section {
+                    if (running) ListRow("Stop", icon = Icons.Filled.Stop, destructive = true, onClick = { graph.engine.stop() })
+                    else ListRow("Start", icon = Icons.Filled.PlayArrow, onClick = { graph.engine.start(task.id) })
+                    SectionDivider(icon = true)
+                    ListRow("Log past time", icon = Icons.Outlined.History, onClick = { logOpen = true })
                 }
             }
         }
         if (task.events.isNotEmpty()) {
-            item(key = "entries-h") { SectionLabel("Time entries · tap one to edit", Modifier.widthIn(max = 720.dp)) }
             val groups = groupByDay(task.events)
             val shown = if (showAll) groups else groups.take(5)
             items(shown, key = { it.date.toEpochDay() }) { g ->
@@ -168,24 +181,28 @@ fun TaskDetailScreen(id: String, onBack: () -> Unit, onOpenBilling: () -> Unit =
             }
             if (groups.size > 5) {
                 item {
-                    TButton(if (showAll) "Show fewer days" else "Show ${groups.size - 5} more days", { showAll = !showAll }, variant = BtnVariant.Ghost, modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 12.dp))
+                    Section(Modifier.widthIn(max = 720.dp)) {
+                        ListRow(if (showAll) "Show fewer days" else "Show ${groups.size - 5} more days", onClick = { showAll = !showAll }, chevron = !showAll)
+                    }
                 }
             }
+            item { SectionFooter("Tap an entry to edit or delete it.", Modifier.widthIn(max = 720.dp)) }
         }
         item(key = "billing-h") { SectionLabel("Billing", Modifier.widthIn(max = 720.dp)) }
         item(key = "billing") {
-            Box(Modifier.widthIn(max = 720.dp).padding(horizontal = 20.dp)) { BillingPanel(task, billingTasks, billingError, onOpenBilling) }
+            Box(Modifier.widthIn(max = 720.dp).padding(horizontal = 16.dp).clip(co.bitterlemon.trackify.ui.components.CardShape).background(T.c.cell).padding(16.dp)) {
+                BillingPanel(task, billingTasks, billingError, onOpenBilling)
+            }
         }
         item(key = "hide") {
-            Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(top = 16.dp)) {
-                RowDivider()
-                ListRow(if (hiding) "Hiding…" else "Hide task", subtitle = "Restore it any time from More → Hidden tasks", icon = Icons.Outlined.VisibilityOff, destructive = true, onClick = { if (!hiding) confirmHide = true })
-                RowDivider()
+            Section(Modifier.widthIn(max = 720.dp), footer = "Restore it any time from More → Hidden tasks.") {
+                ListRow(if (hiding) "Hiding…" else "Hide task", icon = Icons.Outlined.VisibilityOff, destructive = true, onClick = { if (!hiding) confirmHide = true })
             }
         }
     }
     }
 
+    if (renameOpen && task != null) RenameDialog(task) { renameOpen = false }
     if (confirmHide && task != null) {
         ConfirmDialog(
             "Hide task?", "Hide this task? You can restore it from More → Hidden tasks.", "Hide",
@@ -231,76 +248,53 @@ private fun DayCard(g: DayGroup, onEdit: (Event) -> Unit) {
     val label = when (g.date) {
         today -> "Today"
         today.minusDays(1) -> "Yesterday"
-        else -> Time.format(g.date, "EEE d MMM yyyy")
+        else -> Time.format(g.date, "EEEE, d MMMM yyyy")
     }
-    Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 4.dp)) {
-            Text(label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, modifier = Modifier.weight(1f))
-            Text(Format.durationWords(g.totalMs), fontSize = 14.sp, color = T.c.mutedForeground, style = Tabular)
+    Section(Modifier.widthIn(max = 720.dp), header = label, headerTrailing = Format.durationWords(g.totalMs)) {
+        g.events.forEachIndexed { i, e ->
+            if (i > 0) SectionDivider()
+            ListRow(
+                "${Time.clock(e.fromMs)} → ${Time.clock(e.toMs)}",
+                value = Format.durationWords(e.toMs - e.fromMs),
+                onClick = { onEdit(e) },
+                trailing = if (e.paymentRecordId != null) ({ TBadge("Paid", variant = BadgeVariant.Secondary) }) else null,
+            )
         }
-        g.events.forEach { e ->
-            Row(
-                Modifier.fillMaxWidth().heightIn(min = 52.dp)
-                    .clickable(onClickLabel = "Edit entry") { onEdit(e) }
-                    .padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("${Time.clock(e.fromMs)} – ${Time.clock(e.toMs)}", fontSize = 16.sp, color = T.c.foreground, style = Tabular, modifier = Modifier.weight(1f))
-                if (e.paymentRecordId != null) {
-                    TBadge("Paid", variant = BadgeVariant.Secondary); Spacer(Modifier.width(8.dp))
-                }
-                Text(Format.durationWords(e.toMs - e.fromMs), fontSize = 15.sp, color = T.c.mutedForeground, style = Tabular)
-            }
-        }
-        RowDivider(Modifier.padding(top = 4.dp), inset = 20.dp)
     }
 }
 
+/** Rename the task (the Rename button in the top bar). */
 @Composable
-private fun EditableName(task: Task) {
+private fun RenameDialog(task: Task, onDismiss: () -> Unit) {
     val graph = AppGraph.get(LocalContext.current)
     val scope = rememberCoroutineScope()
-    var editing by remember { mutableStateOf(false) }
     var value by remember(task.name) { mutableStateOf(task.name) }
+    var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    val focus = remember { FocusRequester() }
     fun save() {
-        if (!editing) return
-        editing = false
         val v = value.trim()
-        if (v.isEmpty() || v == task.name) {
-            value = task.name; return
-        }
+        if (v.isEmpty() || busy) return
+        if (v == task.name) { onDismiss(); return }
+        busy = true
         scope.launch {
             try {
-                graph.repo.renameTask(task.id, v); error = null
+                graph.repo.renameTask(task.id, v); onDismiss()
             } catch (e: Exception) {
-                error = friendlyError(e, "Rename failed"); value = task.name
+                error = friendlyError(e, "Rename failed")
             }
+            busy = false
         }
     }
-    if (editing) {
-        LaunchedEffect(Unit) { focus.requestFocus() }
-        BasicTextField(
-            value, { value = it.take(100) },
-            textStyle = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground),
-            singleLine = true,
-            cursorBrush = SolidColor(T.c.foreground),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { save() }),
-            modifier = Modifier.fillMaxWidth().focusRequester(focus)
-                .onFocusChanged { if (!it.isFocused && editing) save() }
-                .onKeyEvent { if (it.key == Key.Escape) { editing = false; value = task.name; true } else false }
-                .border(1.dp, T.c.foreground.copy(alpha = 0.3f), ControlShape).padding(horizontal = 10.dp, vertical = 8.dp),
-        )
-    } else {
-        Row(Modifier.clickable(onClickLabel = "Rename task") { editing = true }, verticalAlignment = Alignment.CenterVertically) {
-            Text(task.name, fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, modifier = Modifier.weight(1f, fill = false))
-            Spacer(Modifier.width(6.dp))
-            Icon(Icons.Outlined.Edit, null, tint = T.c.mutedForeground, modifier = Modifier.size(15.dp))
-        }
+    TDialog(
+        "Rename task", onDismiss,
+        footer = {
+            TButton("Cancel", onDismiss, variant = BtnVariant.Outline)
+            TButton(if (busy) "Saving…" else "Save", { save() }, enabled = value.isNotBlank() && !busy)
+        },
+    ) {
+        TInput(value, { value = it.take(100) }, placeholder = "Task name", onIme = { save() }, autoFocus = true)
+        error?.let { Spacer(Modifier.height(8.dp)); Text(it, color = T.c.destructive, fontSize = 14.sp) }
     }
-    error?.let { Text(it, color = T.c.destructive, fontSize = 13.sp) }
 }
 
 @Composable
@@ -323,7 +317,7 @@ private fun BillingPanel(task: Task, billingTasks: List<co.bitterlemon.trackify.
         BillingStatsRow(task, billing)
         Spacer(Modifier.height(12.dp))
         BillingRateControls(task, billing) {}
-        Text("Same settings as Billing → Rates. Changes apply to unpaid sessions.", fontSize = 12.sp, color = T.c.mutedForeground, modifier = Modifier.padding(top = 8.dp))
+        Text("Same settings as Billing → Rates. Changes apply to unpaid sessions.", fontSize = 13.sp, color = T.c.mutedForeground, modifier = Modifier.padding(top = 8.dp))
     }
     @Suppress("UNUSED_VARIABLE") val unusedAccent = accent
 }

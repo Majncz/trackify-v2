@@ -1,5 +1,6 @@
 package co.bitterlemon.trackify.ui.chat
 
+import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -110,7 +111,7 @@ fun ChatScreen(onBack: () -> Unit) {
     }
     LaunchedEffect(vm.conversations.size) { if (vm.conversations.isNotEmpty()) tabsState.scrollToItem(vm.conversations.size) }
 
-    Column(Modifier.fillMaxSize().imePadding()) {
+    Column(Modifier.fillMaxSize().background(T.c.plain).imePadding()) {
         co.bitterlemon.trackify.ui.components.ScreenBar("AI chat", onBack = onBack) {
             IconButton({ vm.newConversation() }) { Icon(Icons.Outlined.Add, "New conversation", tint = T.c.foreground) }
         }
@@ -121,17 +122,17 @@ fun ChatScreen(onBack: () -> Unit) {
                     val active = c.id == vm.currentId
                     Text(
                         tabTitle(c),
-                        Modifier.clip(RoundedCornerShape(8.dp))
-                            .background(if (active) T.c.primary else T.c.muted)
+                        Modifier.clip(RoundedCornerShape(50))
+                            .background(if (active) T.c.fill else Color.Transparent)
                             .combinedClickable(onClick = { vm.select(c.id) }, onLongClick = { confirmDelete = c }, onLongClickLabel = "Delete conversation")
                             .padding(horizontal = 12.dp, vertical = 7.dp),
-                        fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1,
-                        color = if (active) T.c.onPrimary else T.c.foreground,
+                        fontSize = 15.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1,
+                        color = T.c.foreground,
                     )
                 }
             }
         }
-        HorizontalDivider(color = T.c.border)
+        HorizontalDivider(thickness = 0.8.dp, color = T.c.separator)
 
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
@@ -154,12 +155,12 @@ fun ChatScreen(onBack: () -> Unit) {
             }
         }
 
-        HorizontalDivider(color = T.c.border)
-        Row(Modifier.fillMaxWidth().background(T.c.background).padding(12.dp), verticalAlignment = Alignment.Bottom) {
+        HorizontalDivider(thickness = 0.8.dp, color = T.c.separator)
+        Row(Modifier.fillMaxWidth().background(T.c.plain).padding(12.dp), verticalAlignment = Alignment.Bottom) {
             BasicTextField(
                 vm.input, { vm.input = it },
                 enabled = !vm.streaming,
-                textStyle = TextStyle(fontSize = 15.sp, color = T.c.foreground),
+                textStyle = TextStyle(fontSize = 17.sp, color = T.c.foreground),
                 cursorBrush = SolidColor(T.c.foreground),
                 maxLines = 5,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Send),
@@ -171,9 +172,9 @@ fun ChatScreen(onBack: () -> Unit) {
                     },
                 decorationBox = { inner ->
                     Box(
-                        Modifier.clip(RoundedCornerShape(8.dp)).border(1.dp, T.c.border, RoundedCornerShape(8.dp)).background(T.c.background).padding(horizontal = 12.dp, vertical = 11.dp),
+                        Modifier.clip(RoundedCornerShape(22.dp)).border(1.dp, T.c.separator, RoundedCornerShape(22.dp)).background(T.c.plain).padding(horizontal = 16.dp, vertical = 11.dp),
                     ) {
-                        if (vm.input.isEmpty()) Text("Type a message...", color = T.c.mutedForeground, fontSize = 15.sp)
+                        if (vm.input.isEmpty()) Text("Type a message...", color = T.c.mutedForeground, fontSize = 17.sp)
                         inner()
                     }
                 },
@@ -195,17 +196,17 @@ fun ChatScreen(onBack: () -> Unit) {
 @Composable
 private fun EmptyChat(onExample: (String) -> Unit) {
     Column(Modifier.widthIn(max = 448.dp).fillMaxWidth().padding(top = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(Icons.Outlined.SmartToy, null, tint = T.c.mutedForeground, modifier = Modifier.size(48.dp))
+        Icon(Icons.Outlined.Forum, null, tint = T.c.mutedForeground, modifier = Modifier.size(52.dp))
         Spacer(Modifier.height(16.dp))
-        Text("How can I help?", fontSize = 18.sp, fontWeight = FontWeight.Medium, color = T.c.foreground)
-        Spacer(Modifier.height(8.dp))
-        Text("Try something like:", fontSize = 14.sp, color = T.c.mutedForeground)
+        Text("How can I help?", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground)
+        Spacer(Modifier.height(6.dp))
+        Text("Try something like:", fontSize = 16.sp, color = T.c.mutedForeground)
         Spacer(Modifier.height(16.dp))
         listOf("What tasks do I have?", "How much did I work this week?", "Log 2 hours to my project yesterday").forEach { t ->
             Text(
                 "\"$t\"",
-                Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(8.dp)).background(T.c.muted).clickable(role = Role.Button) { onExample(t) }.padding(horizontal = 16.dp, vertical = 12.dp),
-                fontSize = 14.sp, color = T.c.mutedForeground,
+                Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(T.c.fill).clickable(role = Role.Button) { onExample(t) }.padding(horizontal = 16.dp, vertical = 12.dp),
+                fontSize = 16.sp, color = T.c.mutedForeground,
             )
         }
     }
@@ -215,7 +216,7 @@ private fun EmptyChat(onExample: (String) -> Unit) {
 private fun TypingBubble() {
     Row(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
         val t = rememberInfiniteTransition(label = "typing")
-        Row(Modifier.clip(RoundedCornerShape(8.dp)).background(T.c.muted).padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.clip(RoundedCornerShape(18.dp)).background(T.c.fill).padding(horizontal = 14.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             repeat(3) { i ->
                 val a by t.animateFloat(0.25f, 1f, infiniteRepeatable(tween(600, delayMillis = i * 150), RepeatMode.Reverse), label = "d$i")
                 Box(Modifier.size(6.dp).alpha(a).clip(CircleShape).background(T.c.mutedForeground))
@@ -230,12 +231,12 @@ private fun MessageBubble(m: ChatMessage, vm: ChatVm) {
         if (m.role == "user") {
             Text(
                 m.parts.filterIsInstance<ChatPart.Text>().joinToString("") { it.text },
-                Modifier.widthIn(max = 320.dp).clip(RoundedCornerShape(8.dp)).background(T.c.primary).padding(horizontal = 12.dp, vertical = 8.dp),
-                color = T.c.onPrimary, fontSize = 14.sp, lineHeight = 20.sp,
+                Modifier.widthIn(max = 320.dp).clip(RoundedCornerShape(18.dp)).background(T.c.primary).padding(horizontal = 14.dp, vertical = 9.dp),
+                color = T.c.onPrimary, fontSize = 16.sp, lineHeight = 22.sp,
             )
         } else {
             if (m.parts.none { it is ChatPart.Text && it.text.isNotBlank() || it is ChatPart.Tool }) return@Row
-            Column(Modifier.fillMaxWidth(0.94f).clip(RoundedCornerShape(8.dp)).background(T.c.muted).padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(Modifier.fillMaxWidth(0.94f).clip(RoundedCornerShape(18.dp)).background(T.c.fill).padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 m.parts.forEach { p ->
                     when (p) {
                         is ChatPart.Text -> if (p.text.isNotBlank()) MarkdownText(p.text, T.c.foreground)

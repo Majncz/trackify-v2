@@ -23,7 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Groups
@@ -94,10 +94,11 @@ import co.bitterlemon.trackify.ui.theme.T
 private data class Tab(val graph: String, val root: String, val label: String, val icon: ImageVector, val selectedIcon: ImageVector)
 
 private val tabs = listOf(
-    Tab("tab_timer", "timer", "Timer", Icons.Outlined.Timer, Icons.Filled.Timer),
-    Tab("tab_stats", "stats", "Stats", Icons.Outlined.BarChart, Icons.Filled.BarChart),
-    Tab("tab_team", "team", "Team", Icons.Outlined.Groups, Icons.Filled.Groups),
-    Tab("tab_more", "more", "More", Icons.Outlined.Menu, Icons.Filled.Menu),
+    // Same glyph selected or not (like the iOS tab bar); only the grey pill marks the selection.
+    Tab("tab_timer", "timer", "Timer", Icons.Outlined.Timer, Icons.Outlined.Timer),
+    Tab("tab_stats", "stats", "Stats", Icons.Filled.BarChart, Icons.Filled.BarChart),
+    Tab("tab_team", "team", "Team", Icons.Filled.Groups, Icons.Filled.Groups),
+    Tab("tab_more", "more", "More", Icons.Filled.MoreHoriz, Icons.Filled.MoreHoriz),
 )
 
 @Composable
@@ -155,19 +156,24 @@ private fun MainShell(pendingRoute: MutableState<String?>) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide = maxWidth >= 600.dp
         Scaffold(
-            containerColor = T.c.background,
+            // Timer is a plain white (dark: black) list like iOS; every other screen sits on the grouped grey.
+            containerColor = if (entry?.destination?.route in setOf("timer", "chat")) T.c.plain else T.c.background,
             snackbarHost = { SnackbarHost(snackbar) },
             bottomBar = {
                 if (!wide) CappedFontScale {
                     Column {
-                        NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 0.dp) {
+                        // Light, minimal bar close to the iOS tab bar: neutral surface, hairline on top, a grey pill
+                        // behind the selected tab, every glyph in the label colour.
+                        HorizontalDivider(thickness = 0.5.dp, color = T.c.separator)
+                        NavigationBar(containerColor = barColor(), tonalElevation = 0.dp) {
                             tabs.forEach { tab ->
                                 val selected = currentTab == tab.graph
                                 NavigationBarItem(
                                     selected = selected,
                                     onClick = { nav.selectTab(tab) },
-                                    icon = { Icon(if (selected) tab.selectedIcon else tab.icon, null, modifier = Modifier.size(24.dp)) },
-                                    label = { Text(tab.label, fontSize = 12.sp, maxLines = 1, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium) },
+                                    icon = { Icon(if (selected) tab.selectedIcon else tab.icon, null, modifier = Modifier.size(28.dp)) },
+                                    label = { Text(tab.label, fontSize = 12.sp, maxLines = 1, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium) },
+                                    colors = barItemColors(),
                                 )
                             }
                         }
@@ -177,7 +183,7 @@ private fun MainShell(pendingRoute: MutableState<String?>) {
         ) { pad ->
             Row(Modifier.fillMaxSize().padding(pad).consumeWindowInsets(pad)) {
                 if (wide) CappedFontScale {
-                    NavigationRail(containerColor = MaterialTheme.colorScheme.surfaceContainer, windowInsets = WindowInsets.navigationBars) {
+                    NavigationRail(containerColor = barColor(), windowInsets = WindowInsets.navigationBars) {
                         Spacer(Modifier.height(8.dp))
                         tabs.forEach { tab ->
                             val selected = currentTab == tab.graph
@@ -185,10 +191,16 @@ private fun MainShell(pendingRoute: MutableState<String?>) {
                                 selected = selected,
                                 onClick = { nav.selectTab(tab) },
                                 icon = { Icon(if (selected) tab.selectedIcon else tab.icon, null, modifier = Modifier.size(24.dp)) },
-                                label = { Text(tab.label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium) },
+                                label = { Text(tab.label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium) },
+                                colors = NavigationRailItemDefaults.colors(
+                                    selectedIconColor = T.c.foreground, selectedTextColor = T.c.foreground,
+                                    unselectedIconColor = T.c.foreground, unselectedTextColor = T.c.foreground,
+                                    indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                                ),
                             )
                         }
                     }
+                    VerticalDivider(thickness = 0.5.dp, color = T.c.separator)
                 }
                 Box(Modifier.weight(1f).fillMaxHeight()) {
                     AppNavHost(nav, onOpenBilling = { openInMore("billing") })
@@ -197,6 +209,16 @@ private fun MainShell(pendingRoute: MutableState<String?>) {
         }
     }
 }
+
+@Composable
+private fun barColor() = if (T.c.dark) androidx.compose.ui.graphics.Color(0xFF0F0F10) else androidx.compose.ui.graphics.Color(0xFFFCFCFD)
+
+@Composable
+private fun barItemColors() = NavigationBarItemDefaults.colors(
+    selectedIconColor = T.c.foreground, selectedTextColor = T.c.foreground,
+    unselectedIconColor = T.c.foreground, unselectedTextColor = T.c.foreground,
+    indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+)
 
 private fun sameTab(a: NavBackStackEntry, b: NavBackStackEntry) = a.tabGraph() == b.tabGraph()
 
@@ -219,7 +241,10 @@ private fun AppNavHost(nav: NavHostController, onOpenBilling: () -> Unit) {
             }
         }
         navigation(startDestination = "stats", route = "tab_stats") {
-            composable("stats") { StatsScreen() }
+            composable("stats") { StatsScreen(onOpenTask = { nav.navigate("stats/task/$it") }) }
+            composable("stats/task/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { e ->
+                TaskDetailScreen(e.arguments?.getString("id") ?: "", onBack = back, onOpenBilling = onOpenBilling)
+            }
         }
         navigation(startDestination = "team", route = "tab_team") {
             composable("team") { TeamScreen(onOpenRace = { nav.navigate("race") }) }

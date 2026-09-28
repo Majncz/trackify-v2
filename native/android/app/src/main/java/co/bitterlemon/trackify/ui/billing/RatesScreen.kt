@@ -1,5 +1,7 @@
 package co.bitterlemon.trackify.ui.billing
 
+import androidx.compose.foundation.lazy.itemsIndexed
+import co.bitterlemon.trackify.ui.components.GroupedItem
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -66,8 +68,8 @@ fun RatesScreen(onBack: () -> Unit) {
             item {
                 Text(
                     "Tasks with an hourly rate show up under Sessions. Rate changes apply to unpaid sessions.",
-                    fontSize = 15.sp, color = T.c.mutedForeground,
-                    modifier = Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
+                    fontSize = 14.sp, color = T.c.mutedForeground,
+                    modifier = Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().padding(horizontal = 32.dp, vertical = 4.dp),
                 )
             }
             val list = tasks
@@ -87,11 +89,15 @@ fun RatesScreen(onBack: () -> Unit) {
             val off = sorted.filter { byTask[it.id] == null }
             if (on.isNotEmpty()) {
                 item { SectionLabel("Billing", Modifier.widthIn(max = BillingMaxWidth)) }
-                items(on, key = { "on-" + it.id }) { t -> RateRow(t, byTask[t.id]) { editing = t.id } }
+                itemsIndexed(on, key = { _, it -> "on-" + it.id }) { i, t ->
+                    GroupedItem(i == 0, i == on.lastIndex, Modifier.widthIn(max = BillingMaxWidth), dividerInset = 42.dp) { RateRow(t, byTask[t.id]) { editing = t.id } }
+                }
             }
             if (off.isNotEmpty()) {
                 item { SectionLabel("Not billing", Modifier.widthIn(max = BillingMaxWidth)) }
-                items(off, key = { "off-" + it.id }) { t -> RateRow(t, null) { editing = t.id } }
+                itemsIndexed(off, key = { _, it -> "off-" + it.id }) { i, t ->
+                    GroupedItem(i == 0, i == off.lastIndex, Modifier.widthIn(max = BillingMaxWidth), dividerInset = 42.dp) { RateRow(t, null) { editing = t.id } }
+                }
             }
         }
     }
@@ -104,9 +110,9 @@ private fun RateRow(t: Task, b: BillingTask?, onClick: () -> Unit) {
     val rawMin = t.events.sumOf { BillingMath.minutes(it.fromMs, it.toMs) }
     val est = b?.let { bb -> t.events.sumOf { BillingMath.earnings(BillingMath.minutes(it.fromMs, it.toMs), bb.hourlyRate) } }
     val big = largeFont()
-    Column(Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth()) {
+    Column(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 20.dp, vertical = 10.dp),
+            Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable(role = Role.Button, onClick = onClick).padding(start = 16.dp, end = 10.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AccentDot(hexColor(t.accent), 10.dp)
@@ -121,14 +127,15 @@ private fun RateRow(t: Task, b: BillingTask?, onClick: () -> Unit) {
                 if (big) RateTrailing(b)
             }
             if (!big) { Spacer(Modifier.width(12.dp)); RateTrailing(b) }
+            Spacer(Modifier.width(4.dp))
+            co.bitterlemon.trackify.ui.components.Chevron()
         }
-        RowDivider(inset = 46.dp)
     }
 }
 
 @Composable
 private fun RateTrailing(b: BillingTask?) {
-    if (b != null) Text("${Format.money(b.hourlyRate, b.currency)}/h", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, style = Tabular)
+    if (b != null) Text("${Format.money(b.hourlyRate, b.currency)} / h", fontSize = 15.sp, color = T.c.mutedForeground, style = Tabular)
     else Text("Add rate", fontSize = 15.sp, color = T.c.mutedForeground)
 }
 

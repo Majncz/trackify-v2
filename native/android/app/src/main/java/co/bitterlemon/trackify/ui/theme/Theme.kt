@@ -1,6 +1,10 @@
 package co.bitterlemon.trackify.ui.theme
 
+import android.app.Activity
 import android.content.Context
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
@@ -47,6 +51,14 @@ data class TColors(
     /** Busy blocks on the session slider (neutral-400 @ 70 %). */
     val busy: Color = Color(0xB3A3A3A3),
     val raceStage: Color,
+    /** iOS-style roles: plain screen background (Timer), grouped cell, grey fill (search field, idle play circle). */
+    val plain: Color = background,
+    val cell: Color = card,
+    val fill: Color = muted,
+    val separator: Color = border,
+    /** Soft green behind the running row. */
+    val runningRow: Color = Color(0xFFE8F6EF),
+    val stop: Color = Color(0xFFEF4444),
 )
 
 val LocalTColors = staticCompositionLocalOf { tokensFor(BrandLight, false) }
@@ -105,7 +117,54 @@ val BrandDark = darkColorScheme(
     surfaceContainer = Color(0xFF1D211B), surfaceContainerHigh = Color(0xFF282B25), surfaceContainerHighest = Color(0xFF33362F),
 )
 
-/** The app's colour scheme: wallpaper colours on Android 12+, the Trackify green palette before that. */
+/**
+ * The app's own scheme: neutral and calm like the iOS app (system grouped grey with white sections in light mode,
+ * true black with dark grey sections in dark mode). Colour comes only from task colours, the green running
+ * highlight and the red Stop. No wallpaper colours in the app (widgets keep [trackifyColorScheme]).
+ */
+val AppLight = lightColorScheme(
+    primary = Color(0xFF111111), onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFFEDEDF0), onPrimaryContainer = Color(0xFF111111),
+    secondary = Color(0xFF6E6E73), onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFE5E5EA), onSecondaryContainer = Color(0xFF111111),
+    tertiary = Color(0xFF16A34A), onTertiary = Color(0xFFFFFFFF),
+    tertiaryContainer = Color(0xFFE8F6EF), onTertiaryContainer = Color(0xFF14532D),
+    error = Color(0xFFE5383B), onError = Color(0xFFFFFFFF),
+    errorContainer = Color(0xFFFDECEC), onErrorContainer = Color(0xFFB42318),
+    background = Color(0xFFF2F2F7), onBackground = Color(0xFF000000),
+    surface = Color(0xFFF2F2F7), onSurface = Color(0xFF000000),
+    surfaceVariant = Color(0xFFE5E5EA), onSurfaceVariant = Color(0xFF76767B),
+    surfaceTint = Color.Transparent,
+    outline = Color(0xFFC7C7CC), outlineVariant = Color(0xFFDCDCE0),
+    inverseSurface = Color(0xFF1C1C1E), inverseOnSurface = Color(0xFFFFFFFF), inversePrimary = Color(0xFFFFFFFF),
+    surfaceDim = Color(0xFFE5E5EA), surfaceBright = Color(0xFFFFFFFF),
+    surfaceContainerLowest = Color(0xFFFFFFFF), surfaceContainerLow = Color(0xFFFFFFFF),
+    surfaceContainer = Color(0xFFFFFFFF), surfaceContainerHigh = Color(0xFFFFFFFF), surfaceContainerHighest = Color(0xFFEFEFF2),
+    scrim = Color(0xFF000000),
+)
+
+val AppDark = darkColorScheme(
+    primary = Color(0xFFFFFFFF), onPrimary = Color(0xFF000000),
+    primaryContainer = Color(0xFF2C2C2E), onPrimaryContainer = Color(0xFFFFFFFF),
+    secondary = Color(0xFF98989F), onSecondary = Color(0xFF000000),
+    secondaryContainer = Color(0xFF3A3A3C), onSecondaryContainer = Color(0xFFFFFFFF),
+    tertiary = Color(0xFF4ADE80), onTertiary = Color(0xFF000000),
+    tertiaryContainer = Color(0xFF12291C), onTertiaryContainer = Color(0xFFBBF7D0),
+    error = Color(0xFFFF5A52), onError = Color(0xFFFFFFFF),
+    errorContainer = Color(0xFF3A1614), onErrorContainer = Color(0xFFFFB4AB),
+    background = Color(0xFF000000), onBackground = Color(0xFFFFFFFF),
+    surface = Color(0xFF000000), onSurface = Color(0xFFFFFFFF),
+    surfaceVariant = Color(0xFF2C2C2E), onSurfaceVariant = Color(0xFF9D9DA3),
+    surfaceTint = Color.Transparent,
+    outline = Color(0xFF545458), outlineVariant = Color(0xFF38383A),
+    inverseSurface = Color(0xFFF2F2F7), inverseOnSurface = Color(0xFF000000), inversePrimary = Color(0xFF111111),
+    surfaceDim = Color(0xFF000000), surfaceBright = Color(0xFF2C2C2E),
+    surfaceContainerLowest = Color(0xFF000000), surfaceContainerLow = Color(0xFF1C1C1E),
+    surfaceContainer = Color(0xFF1C1C1E), surfaceContainerHigh = Color(0xFF2C2C2E), surfaceContainerHighest = Color(0xFF2C2C2E),
+    scrim = Color(0xFF000000),
+)
+
+/** The widgets' colour scheme: wallpaper colours on Android 12+, the Trackify green palette before that. */
 fun trackifyColorScheme(context: Context, dark: Boolean): ColorScheme = when {
     Build.VERSION.SDK_INT >= 31 -> if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     else -> if (dark) BrandDark else BrandLight
@@ -116,16 +175,34 @@ fun tokensFor(s: ColorScheme, dark: Boolean) = TColors(
     dark = dark,
     background = s.surface,
     foreground = s.onSurface,
-    card = s.surfaceContainerLow,
+    card = s.surfaceContainer,
     primary = s.primary,
     onPrimary = s.onPrimary,
-    muted = s.surfaceContainerHigh,
+    muted = s.surfaceContainerHighest,
     mutedForeground = s.onSurfaceVariant,
     border = s.outlineVariant,
     destructive = s.error,
     onDestructive = s.onError,
-    raceStage = s.surfaceContainerLow,
+    raceStage = s.surfaceContainer,
+    plain = if (dark) Color(0xFF000000) else Color(0xFFFFFFFF),
+    cell = s.surfaceContainer,
+    fill = if (dark) Color(0xFF2A2A2C) else Color(0xFFF2F2F4),
+    separator = s.outlineVariant,
+    runningRow = if (dark) Color(0xFF0A2219) else Color(0xFFE7F8F1),
+    stop = Color(0xFFEF4444),
 )
+
+/** Type scale close to the iOS text styles (body 17, subheadline 15, footnote 13, title 3 20, large title 34). */
+private val AppTypography = Typography().let { t ->
+    t.copy(
+        headlineSmall = t.headlineSmall.copy(fontWeight = FontWeight.Bold, fontSize = 24.sp),
+        titleLarge = t.titleLarge.copy(fontWeight = FontWeight.SemiBold, fontSize = 20.sp),
+        titleMedium = t.titleMedium.copy(fontWeight = FontWeight.SemiBold, fontSize = 17.sp),
+        bodyLarge = t.bodyLarge.copy(fontSize = 17.sp, letterSpacing = 0.sp),
+        bodyMedium = t.bodyMedium.copy(fontSize = 15.sp, letterSpacing = 0.sp),
+        labelLarge = t.labelLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp),
+    )
+}
 
 @Composable
 fun isAppDark(themePref: String): Boolean = when (themePref) {
@@ -137,11 +214,22 @@ fun isAppDark(themePref: String): Boolean = when (themePref) {
 @Composable
 fun TrackifyTheme(themePref: String = "system", content: @Composable () -> Unit) {
     val dark = isAppDark(themePref)
-    val context = LocalContext.current
-    val scheme = remember(dark, context) { trackifyColorScheme(context, dark) }
-    val c = tokensFor(scheme, dark)
+    val scheme = if (dark) AppDark else AppLight
+    val c = remember(dark) { tokensFor(scheme, dark) }
+    // Status/navigation bar icons follow the app's own appearance, not the system's: with the app in Light on a
+    // dark phone (or the reverse) the clock and battery would otherwise vanish (white on white).
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as? Activity)?.window ?: return@SideEffect
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = !dark
+                isAppearanceLightNavigationBars = !dark
+            }
+        }
+    }
     CompositionLocalProvider(LocalTColors provides c) {
-        MaterialTheme(colorScheme = scheme, typography = Typography(), content = content)
+        MaterialTheme(colorScheme = scheme, typography = AppTypography, content = content)
     }
 }
 

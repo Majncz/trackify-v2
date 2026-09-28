@@ -87,7 +87,7 @@ fun TDialog(
                 .background(androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh),
         ) {
             Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp, top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(title, fontSize = 24.sp, fontWeight = FontWeight.Normal, color = T.c.foreground, modifier = Modifier.weight(1f).padding(top = 6.dp))
+                Text(title, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, modifier = Modifier.weight(1f).padding(top = 6.dp))
                 IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, "Close", tint = T.c.mutedForeground, modifier = Modifier.size(18.dp)) }
             }
             if (description != null) {
@@ -132,9 +132,16 @@ private fun TSheet(
         contentColor = T.c.foreground,
     ) {
         Column(Modifier.fillMaxWidth().imePadding()) {
-            Text(title, fontSize = 22.sp, fontWeight = FontWeight.Normal, color = T.c.foreground, modifier = Modifier.padding(start = 24.dp, end = 24.dp))
+            Text(
+                title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp),
+            )
             if (description != null) {
-                Text(description, fontSize = 14.sp, color = T.c.mutedForeground, modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp))
+                Text(
+                    description, fontSize = 14.sp, color = T.c.mutedForeground, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
+                )
             }
             Column(
                 Modifier
@@ -162,29 +169,39 @@ fun ActionSheet(title: String?, onDismiss: () -> Unit, content: @Composable Colu
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = state,
-        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerLow,
+        containerColor = if (T.c.dark) Color(0xFF1C1C1E) else Color(0xFFF2F2F7),
         contentColor = T.c.foreground,
     ) {
-        Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+        // iOS-like menu: the task name, then one rounded group of actions.
+        Column(Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
             if (title != null) {
-                Text(title, fontSize = 16.sp, fontWeight = FontWeight.Medium, color = T.c.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp))
+                Text(
+                    title, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 12.dp),
+                )
             }
-            content()
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(CardShape)
+                    .background(if (T.c.dark) Color(0xFF2C2C2E) else Color.White),
+                content = content,
+            )
         }
     }
 }
 
 /** One row of an [ActionSheet]. */
 @Composable
-fun SheetAction(icon: ImageVector, label: String, onClick: () -> Unit, destructive: Boolean = false) {
+fun SheetAction(icon: ImageVector, label: String, onClick: () -> Unit, destructive: Boolean = false, first: Boolean = false) {
     val color = if (destructive) T.c.destructive else T.c.foreground
+    if (!first) SectionDivider(icon = true)
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 24.dp),
+        Modifier.fillMaxWidth().heightIn(min = 54.dp).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, null, tint = if (destructive) color else T.c.mutedForeground, modifier = Modifier.size(24.dp))
+        Icon(icon, null, tint = color, modifier = Modifier.size(24.dp))
         Spacer(Modifier.width(16.dp))
-        Text(label, fontSize = 16.sp, color = color)
+        Text(label, fontSize = 17.sp, color = color)
     }
 }
 

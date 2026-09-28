@@ -1,5 +1,6 @@
 package co.bitterlemon.trackify.ui.billing
 
+import co.bitterlemon.trackify.ui.components.SectionLabel
 import androidx.compose.ui.draw.clip
 
 import androidx.compose.foundation.background
@@ -82,34 +83,36 @@ fun BillingScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
 
     Column(Modifier.fillMaxSize()) {
         ScreenBar("Billing", onBack = onBack) {
-            IconButton({ guide = true }) { Icon(Icons.Outlined.Info, "How billing works", tint = T.c.mutedForeground) }
+            IconButton({ guide = true }) { Icon(Icons.Outlined.Info, "How billing works", tint = T.c.foreground) }
         }
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             item {
                 Column(Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth()) {
+                    // iOS: "Unpaid" header, one card with a block per currency, then the four rows.
+                    SectionLabel("Unpaid", Modifier.padding(top = 0.dp))
                     Summary(summary, summaryError)
-                    Spacer(Modifier.height(8.dp))
                     val enrolled = billingTasks?.size
-                    ListRow(
-                        "Sessions", subtitle = "Select tracked time and mark it paid",
-                        icon = Icons.AutoMirrored.Outlined.ReceiptLong, onClick = { onOpen(BillingRoutes.SESSIONS) }, trailing = { Chevron() },
-                    )
-                    ListRow(
-                        "Payments", subtitle = paymentCount?.let { if (it == 0) "No payments yet" else "$it payment${if (it == 1) "" else "s"} recorded" } ?: "Payment history",
-                        icon = Icons.Outlined.Payments, onClick = { onOpen(BillingRoutes.PAYMENTS) }, trailing = { Chevron() },
-                    )
-                    ListRow(
-                        "Rates", subtitle = when (enrolled) {
-                            null -> "Hourly rates per task"
-                            0 -> "Set up billing: add a rate to a task"
-                            else -> "$enrolled task${if (enrolled == 1) "" else "s"} billing hourly"
-                        },
-                        icon = Icons.Outlined.Sell, onClick = { onOpen(BillingRoutes.RATES) }, trailing = { Chevron() },
-                    )
-                    ListRow(
-                        "AI subscriptions", subtitle = aiActive?.let { if (it == 0) "No active entries" else "$it active" } ?: "AI tool spend",
-                        icon = Icons.Outlined.AutoAwesome, onClick = { onOpen(BillingRoutes.AI) }, trailing = { Chevron() },
-                    )
+                    co.bitterlemon.trackify.ui.components.Section {
+                        ListRow(
+                            "Sessions", icon = Icons.AutoMirrored.Outlined.ReceiptLong, onClick = { onOpen(BillingRoutes.SESSIONS) }, chevron = true,
+                        )
+                        co.bitterlemon.trackify.ui.components.SectionDivider(icon = true)
+                        ListRow(
+                            "Payments", value = paymentCount?.takeIf { it > 0 }?.toString(),
+                            icon = Icons.Outlined.Payments, onClick = { onOpen(BillingRoutes.PAYMENTS) }, chevron = true,
+                        )
+                        co.bitterlemon.trackify.ui.components.SectionDivider(icon = true)
+                        ListRow(
+                            "Rates", subtitle = if (enrolled == 0) "Set up billing: add a rate to a task" else null,
+                            value = enrolled?.takeIf { it > 0 }?.toString(),
+                            icon = Icons.Outlined.Sell, onClick = { onOpen(BillingRoutes.RATES) }, chevron = true,
+                        )
+                        co.bitterlemon.trackify.ui.components.SectionDivider(icon = true)
+                        ListRow(
+                            "AI subscriptions", value = aiActive?.takeIf { it > 0 }?.let { "$it active" },
+                            icon = Icons.Outlined.AutoAwesome, onClick = { onOpen(BillingRoutes.AI) }, chevron = true,
+                        )
+                    }
                 }
             }
         }
@@ -118,11 +121,12 @@ fun BillingScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
 }
 
 @Composable
-private fun Chevron() = Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = T.c.mutedForeground)
-
-@Composable
 private fun Summary(summary: BillingSummary?, error: Boolean) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+            .clip(co.bitterlemon.trackify.ui.components.CardShape).background(T.c.cell)
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+    ) {
         when {
             summary == null && error -> Text("Couldn't load the billing summary.", fontSize = 15.sp, color = T.c.destructive)
             summary == null -> {
@@ -132,18 +136,10 @@ private fun Summary(summary: BillingSummary?, error: Boolean) {
             }
             summary.byCurrency.isEmpty() -> Text("Enroll tasks in billing to see earnings summary.", fontSize = 15.sp, color = T.c.mutedForeground)
             else -> summary.byCurrency.entries.sortedBy { it.key }.forEachIndexed { i, (cur, t) ->
-                if (i > 0) Spacer(Modifier.height(12.dp))
-                // Material 3 filled card per currency.
-                Column(
-                    Modifier.fillMaxWidth()
-                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
-                        .background(androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainer)
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                ) {
-                    Text("Unpaid · $cur", fontSize = 14.sp, color = T.c.mutedForeground)
-                    Text(Format.money(t.unpaidTotal, cur), fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Medium, color = T.c.foreground, style = Tabular)
-                    SupportingParts(listOf("This week ${Format.money(t.thisWeekTotal, cur)}", "This month ${Format.money(t.thisMonthTotal, cur)}", "Paid ${Format.money(t.allTimePaidTotal, cur)}"))
-                }
+                if (i > 0) androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 16.dp), thickness = 0.8.dp, color = T.c.separator)
+                Text(cur, fontSize = 15.sp, color = T.c.mutedForeground)
+                Text(Format.money(t.unpaidTotal, cur), fontSize = 38.sp, lineHeight = 46.sp, fontWeight = FontWeight.Bold, color = T.c.foreground, style = Tabular)
+                SupportingParts(listOf("This week ${Format.money(t.thisWeekTotal, cur)}", "This month ${Format.money(t.thisMonthTotal, cur)}", "Paid ${Format.money(t.allTimePaidTotal, cur)}"))
             }
         }
     }

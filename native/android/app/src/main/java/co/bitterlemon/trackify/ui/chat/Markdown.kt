@@ -198,7 +198,7 @@ fun MarkdownText(text: String, color: Color, modifier: Modifier = Modifier) {
         blocks.forEachIndexed { idx, b ->
             if (idx > 0) Spacer(Modifier.padding(top = 4.dp))
             when (b) {
-                is MdBlock.Para -> Text(MarkdownParser.inline(b.text, codeBg, link), color = color, fontSize = 14.sp, lineHeight = 20.sp)
+                is MdBlock.Para -> Text(MarkdownParser.inline(b.text, codeBg, link), color = color, fontSize = 16.sp, lineHeight = 22.sp)
                 is MdBlock.Heading -> Text(MarkdownParser.inline(b.text, codeBg, link), color = color, fontSize = if (b.level <= 2) 16.sp else 15.sp, fontWeight = FontWeight.SemiBold)
                 is MdBlock.Code -> Text(
                     b.text, color = color, fontFamily = FontFamily.Monospace, fontSize = 12.sp,
@@ -206,14 +206,14 @@ fun MarkdownText(text: String, color: Color, modifier: Modifier = Modifier) {
                 )
                 is MdBlock.Quote -> Row {
                     Spacer(Modifier.width(3.dp).padding(vertical = 2.dp).background(T.c.border))
-                    Text(MarkdownParser.inline(b.text, codeBg, link), color = T.c.mutedForeground, fontSize = 14.sp, modifier = Modifier.padding(start = 8.dp))
+                    Text(MarkdownParser.inline(b.text, codeBg, link), color = T.c.mutedForeground, fontSize = 16.sp, modifier = Modifier.padding(start = 8.dp))
                 }
                 is MdBlock.ListBlock -> Column {
                     b.items.forEachIndexed { n, (level, t) ->
                         Row(Modifier.padding(start = (12 * level).dp)) {
-                            Text(if (b.ordered) "${b.start + n}." else "•", color = color, fontSize = 14.sp, modifier = Modifier.widthIn(min = 16.dp))
+                            Text(if (b.ordered) "${b.start + n}." else "•", color = color, fontSize = 16.sp, modifier = Modifier.widthIn(min = 16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text(MarkdownParser.inline(t, codeBg, link), color = color, fontSize = 14.sp, lineHeight = 20.sp)
+                            Text(MarkdownParser.inline(t, codeBg, link), color = color, fontSize = 16.sp, lineHeight = 22.sp)
                         }
                     }
                 }

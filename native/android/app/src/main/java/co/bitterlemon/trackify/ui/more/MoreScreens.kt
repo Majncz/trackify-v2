@@ -1,5 +1,9 @@
 package co.bitterlemon.trackify.ui.more
 
+import androidx.compose.material.icons.outlined.MonetizationOn
+import co.bitterlemon.trackify.ui.components.Section
+import co.bitterlemon.trackify.ui.components.SectionDivider
+import co.bitterlemon.trackify.ui.components.SectionFooter
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -57,59 +61,37 @@ import co.bitterlemon.trackify.ui.theme.T
 import co.bitterlemon.trackify.util.Format
 import kotlinx.coroutines.launch
 
-@Composable
-private fun Chevron() = Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = T.c.mutedForeground)
-
-/** More tab: everything that isn't Timer, Stats or Team. Each row opens a full screen with Back. */
+/** More tab (iOS): grouped sections of rows with a leading icon and a chevron; the account email underneath. */
 @Composable
 fun MoreScreen(onOpen: (String) -> Unit) {
     val graph = AppGraph.get(LocalContext.current)
     val session by graph.session.session.collectAsState()
-    val profile by graph.repo.profile.collectAsState()
     Column(Modifier.fillMaxSize()) {
         ScreenBar("More")
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             item {
-                // Account card (Google-app style): who is signed in; tap for Settings.
-                val name = profile?.displayName?.ifBlank { null } ?: session?.email ?: ""
-                androidx.compose.foundation.layout.Row(
-                    Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
-                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(28.dp))
-                        .background(androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainer)
-                        .clickable { onOpen("settings") }
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    androidx.compose.foundation.layout.Box(
-                        Modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape)
-                            .background(androidx.compose.material3.MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            name.trim().firstOrNull()?.uppercase() ?: "?", fontSize = 20.sp,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                    }
-                    androidx.compose.foundation.layout.Spacer(Modifier.width(16.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(name, fontSize = 18.sp, color = T.c.foreground, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                        session?.email?.let { if (it != name) Text(it, fontSize = 14.sp, color = T.c.mutedForeground, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) }
-                    }
-                }
-            }
-            item {
-                Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(top = 8.dp)) {
-                    val rows = listOf(
-                        Triple("billing", "Billing", Icons.Outlined.AttachMoney),
-                        Triple("chat", "AI chat", Icons.AutoMirrored.Outlined.Chat),
-                        Triple("settings", "Settings", Icons.Outlined.Settings),
-                        Triple("hidden", "Hidden tasks", Icons.Outlined.VisibilityOff),
-                        Triple("widgets", "Widgets & tile", Icons.Outlined.Widgets),
-                        Triple("about", "About", Icons.Outlined.Info),
+                Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
+                    val groups = listOf(
+                        listOf(
+                            Triple("billing", "Billing", Icons.Outlined.MonetizationOn),
+                            Triple("chat", "AI chat", Icons.AutoMirrored.Outlined.Chat),
+                        ),
+                        listOf(
+                            Triple("settings", "Settings", Icons.Outlined.Settings),
+                            Triple("hidden", "Hidden tasks", Icons.Outlined.VisibilityOff),
+                            Triple("widgets", "Widgets & tile", Icons.Outlined.Widgets),
+                        ),
+                        listOf(Triple("about", "About", Icons.Outlined.Info)),
                     )
-                    rows.forEach { (route, label, icon) ->
-                        ListRow(label, icon = icon, onClick = { onOpen(route) }, trailing = { Chevron() })
+                    groups.forEachIndexed { gi, rows ->
+                        Section(topGap = if (gi == 0) 8.dp else 20.dp) {
+                            rows.forEachIndexed { i, (route, label, icon) ->
+                                if (i > 0) SectionDivider(icon = true)
+                                ListRow(label, icon = icon, onClick = { onOpen(route) }, chevron = true)
+                            }
+                        }
                     }
+                    session?.email?.let { SectionFooter(it) }
                 }
             }
         }
@@ -140,7 +122,18 @@ fun HiddenTasksScreen(onBack: () -> Unit) {
                     Text("No hidden tasks. Tasks you hide from the Timer list show up here.", fontSize = 15.sp, color = T.c.mutedForeground, modifier = Modifier.widthIn(max = 720.dp).padding(20.dp))
                 }
                 else -> items(list, key = { it.id }) { t ->
-                    Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
+                    Column(
+                        Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 16.dp)
+                            .then(
+                                when (t.id) {
+                                    list.first().id -> Modifier.padding(top = 8.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp, bottomStart = if (list.size == 1) 22.dp else 0.dp, bottomEnd = if (list.size == 1) 22.dp else 0.dp))
+                                    list.last().id -> Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(bottomStart = 22.dp, bottomEnd = 22.dp))
+                                    else -> Modifier
+                                },
+                            )
+                            .background(T.c.cell),
+                    ) {
+                        if (t.id != list.first().id) SectionDivider()
                         ListRow(
                             t.name, subtitle = Format.durationWords(t.events.sumOf { it.toMs - it.fromMs }) + " total",
                             trailing = {
@@ -151,11 +144,10 @@ fun HiddenTasksScreen(onBack: () -> Unit) {
                                             runCatching { graph.repo.restoreTask(t.id) }
                                             restoring = null; tick++
                                         }
-                                    }, variant = BtnVariant.Outline, size = BtnSize.Default, icon = Icons.Outlined.RestartAlt, enabled = restoring != t.id,
+                                    }, variant = BtnVariant.Outline, size = BtnSize.Sm, enabled = restoring != t.id,
                                 )
                             },
                         )
-                        RowDivider(inset = 20.dp)
                     }
                 }
             }
@@ -171,33 +163,30 @@ fun WidgetsScreen(onBack: () -> Unit) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             item {
                 Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
-                    Text(
-                        "Start and stop without opening the app.", fontSize = 15.sp, color = T.c.mutedForeground,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-                    )
-                    SectionLabel("Home screen")
-                    ListRow(
-                        "Timer", subtitle = "The running timer with Stop, or resume your last task in one tap",
-                        icon = Icons.Outlined.SmartDisplay, onClick = { pinWidget(context, co.bitterlemon.trackify.widget.SmallTimerWidgetReceiver::class.java) },
-                        trailing = { AddChip() },
-                    )
-                    ListRow(
-                        "Timer and tasks", subtitle = "The running timer and your recent tasks: tap one to switch",
-                        icon = Icons.Outlined.ViewAgenda, onClick = { pinWidget(context, co.bitterlemon.trackify.widget.LargeTimerWidgetReceiver::class.java) },
-                        trailing = { AddChip() },
-                    )
-                    if (android.os.Build.VERSION.SDK_INT >= 33) {
-                        SectionLabel("Quick Settings")
+                    Section(header = "Home screen", footer = "Start and stop without opening the app.") {
                         ListRow(
-                            "Trackify tile", subtitle = "Tap to stop, or start your last task",
-                            icon = Icons.Outlined.Tune, onClick = { requestTile(context) },
+                            "Timer", subtitle = "The running timer with Stop, or resume your last task in one tap",
+                            icon = Icons.Outlined.SmartDisplay, onClick = { pinWidget(context, co.bitterlemon.trackify.widget.SmallTimerWidgetReceiver::class.java) },
+                            trailing = { AddChip() },
+                        )
+                        SectionDivider(icon = true)
+                        ListRow(
+                            "Timer and tasks", subtitle = "The running timer and your recent tasks: tap one to switch",
+                            icon = Icons.Outlined.ViewAgenda, onClick = { pinWidget(context, co.bitterlemon.trackify.widget.LargeTimerWidgetReceiver::class.java) },
                             trailing = { AddChip() },
                         )
                     }
-                    Text(
-                        "Widgets use your wallpaper colours. Force light or dark in Settings → Appearance.", fontSize = 13.sp, color = T.c.mutedForeground,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-                    )
+                    if (android.os.Build.VERSION.SDK_INT >= 33) {
+                        Section(header = "Quick Settings", footer = "Widgets use your wallpaper colours. Force light or dark in Settings → Appearance.") {
+                            ListRow(
+                                "Trackify tile", subtitle = "Tap to stop, or start your last task",
+                                icon = Icons.Outlined.Tune, onClick = { requestTile(context) },
+                                trailing = { AddChip() },
+                            )
+                        }
+                    } else {
+                        SectionFooter("Widgets use your wallpaper colours. Force light or dark in Settings → Appearance.")
+                    }
                 }
             }
         }
@@ -216,17 +205,18 @@ fun AboutScreen(onBack: () -> Unit) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             item {
                 Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
-                    Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-                        Wordmark(28)
-                        Text("Version ${BuildConfig.VERSION_NAME}", fontSize = 16.sp, color = T.c.foreground, modifier = Modifier.padding(top = 4.dp))
+                    Column(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Wordmark(30)
+                        Text("Version ${BuildConfig.VERSION_NAME}", fontSize = 15.sp, color = T.c.mutedForeground, modifier = Modifier.padding(top = 4.dp))
                     }
-                    RowDivider()
-                    AboutRow("App version", BuildConfig.VERSION_NAME)
-                    AboutRow("Build", BuildConfig.VERSION_CODE.toString())
-                    model?.gitShaShort?.let { AboutRow("Server build", it) }
-                    model?.model?.let { AboutRow("AI model", it) }
-                    AboutRow("Server", server)
-                    AboutRow("Signed in as", session?.email ?: "")
+                    Section {
+                        AboutRow("App version", BuildConfig.VERSION_NAME, first = true)
+                        AboutRow("Build", BuildConfig.VERSION_CODE.toString())
+                        model?.gitShaShort?.let { AboutRow("Server build", it) }
+                        model?.model?.let { AboutRow("AI model", it) }
+                        AboutRow("Server", server)
+                        AboutRow("Signed in as", session?.email ?: "")
+                    }
                 }
             }
         }
@@ -234,9 +224,9 @@ fun AboutScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun AboutRow(k: String, v: String) {
-    ListRow(k, trailing = { Text(v, fontSize = 15.sp, color = T.c.mutedForeground, maxLines = 1) })
-    RowDivider(inset = 20.dp)
+private fun AboutRow(k: String, v: String, first: Boolean = false) {
+    if (!first) SectionDivider()
+    ListRow(k, value = v)
 }
 
 private fun pinWidget(context: android.content.Context, receiver: Class<*>) {
@@ -262,9 +252,9 @@ private fun requestTile(context: android.content.Context) {
 @Composable
 private fun AddChip() {
     Text(
-        "Add", fontSize = 14.sp, color = androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer,
+        "Add", fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = T.c.foreground,
         modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
-            .background(androidx.compose.material3.MaterialTheme.colorScheme.secondaryContainer)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .background(T.c.fill)
+            .padding(horizontal = 16.dp, vertical = 7.dp),
     )
 }

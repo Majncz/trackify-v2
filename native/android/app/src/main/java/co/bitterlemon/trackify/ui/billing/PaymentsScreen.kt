@@ -1,5 +1,7 @@
 package co.bitterlemon.trackify.ui.billing
 
+import androidx.compose.foundation.lazy.itemsIndexed
+import co.bitterlemon.trackify.ui.components.GroupedItem
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -76,10 +78,12 @@ fun PaymentsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                     }
                 }
                 list.isEmpty() -> item { StateMessage("No payments recorded yet. Select sessions and mark them as paid.") }
-                else -> items(list, key = { it.id }) { p ->
-                    Column(Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth()) {
+                else -> list.groupBy { Time.format(Time.parse(it.paidAt), "MMMM yyyy") }.forEach { (month, ps) ->
+                item(key = "m-$month") { SectionLabel(month, Modifier.widthIn(max = BillingMaxWidth)) }
+                itemsIndexed(ps, key = { _, it -> it.id }) { i, p ->
+                    GroupedItem(i == 0, i == ps.lastIndex, Modifier.widthIn(max = BillingMaxWidth)) {
                         Row(
-                            Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable(role = Role.Button) { onOpen(p.id) }.padding(start = 20.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+                            Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable(role = Role.Button) { onOpen(p.id) }.padding(start = 16.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(Modifier.weight(1f)) {
@@ -87,10 +91,10 @@ fun PaymentsScreen(onBack: () -> Unit, onOpen: (String) -> Unit) {
                                 SupportingParts(listOf(Time.format(Time.parse(p.paidAt), "MMM d, yyyy"), Time.format(Time.parse(p.paidAt), "HH:mm"), sessionsLabel(p.sessions.size), Format.durationMinutes(p.totalMinutes.toDouble())))
                                 if (!p.note.isNullOrBlank()) Text(p.note, fontSize = 14.sp, color = T.c.mutedForeground, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
-                            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = T.c.mutedForeground)
+                            co.bitterlemon.trackify.ui.components.Chevron()
                         }
-                        RowDivider(inset = 20.dp)
                     }
+                }
                 }
             }
         }
@@ -129,7 +133,7 @@ fun PaymentDetailScreen(id: String, onBack: () -> Unit) {
                 }
                 else -> {
                     item {
-                        Column(Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
+                        co.bitterlemon.trackify.ui.components.TCard(Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().padding(horizontal = 16.dp).padding(top = 8.dp)) {
                             Text(Format.money(p.totalAmount, p.currency), fontSize = 34.sp, lineHeight = 40.sp, fontWeight = FontWeight.Bold, color = T.c.foreground, style = Tabular)
                             Text("Paid ${Time.format(Time.parse(p.paidAt), "MMM d, yyyy · HH:mm")}", fontSize = 15.sp, color = T.c.mutedForeground)
                             Text("${sessionsLabel(p.sessions.size)} · ${Format.durationMinutes(p.totalMinutes.toDouble())}", fontSize = 15.sp, color = T.c.mutedForeground, style = Tabular)
@@ -143,7 +147,9 @@ fun PaymentDetailScreen(id: String, onBack: () -> Unit) {
                             "No line items could be computed for this payment (e.g. billing settings changed). The total above still reflects what was paid.",
                             fontSize = 14.sp, color = T.c.mutedForeground, modifier = Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().padding(horizontal = 20.dp),
                         )
-                    } else items(p.sessions, key = { it.id }) { s -> PaymentLine(s, p) }
+                    } else itemsIndexed(p.sessions, key = { _, it -> it.id }) { i, s ->
+                        GroupedItem(i == 0, i == p.sessions.lastIndex, Modifier.widthIn(max = BillingMaxWidth)) { PaymentLine(s, p) }
+                    }
                 }
             }
         }
@@ -166,8 +172,8 @@ private fun PaymentLine(s: BillingSession, p: Payment) {
     val sameDay = Time.localDate(s.fromMs) == Time.localDate(s.toMs)
     val session = if (sameDay) "${Time.format(s.fromMs, "MMM d, yyyy")} · ${Time.clock(s.fromMs)}–${Time.clock(s.toMs)}"
     else "${Time.format(s.fromMs, "MMM d, yyyy HH:mm")} → ${Time.format(s.toMs, "MMM d, yyyy HH:mm")}"
-    Column(Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.Top) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     AccentDot(hexColor(s.accent), 8.dp); Spacer(Modifier.width(8.dp))
@@ -182,6 +188,5 @@ private fun PaymentLine(s: BillingSession, p: Payment) {
             Spacer(Modifier.width(12.dp))
             Text(Format.money(s.earnings, s.currency), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, style = Tabular, modifier = Modifier.padding(top = 2.dp))
         }
-        RowDivider(inset = 20.dp)
     }
 }

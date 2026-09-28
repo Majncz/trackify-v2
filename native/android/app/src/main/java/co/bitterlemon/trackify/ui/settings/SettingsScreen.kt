@@ -1,5 +1,12 @@
 package co.bitterlemon.trackify.ui.settings
 
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.outlined.UnfoldMore
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import co.bitterlemon.trackify.ui.components.Section
+import co.bitterlemon.trackify.ui.components.SectionDivider
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.background
@@ -107,58 +114,55 @@ fun SettingsScreen(onBack: () -> Unit) {
         ) {
             item {
                 Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
-                    SectionLabel("Account")
-                    ListRow(profile?.email?.ifEmpty { null } ?: session?.email ?: "", subtitle = "Email", icon = Icons.Outlined.Mail)
-                    Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) { DisplayNameForm(profile?.displayName ?: "") }
-
-                    SectionLabel("Appearance")
-                    Column(Modifier.padding(horizontal = 16.dp)) {
-                        Text("App", fontSize = 16.sp, color = T.c.foreground)
-                        Spacer(Modifier.height(8.dp))
-                        Segmented(listOf("system" to "System", "light" to "Light", "dark" to "Dark"), theme, { v -> scope.launch { graph.session.setTheme(v) } }, Modifier.fillMaxWidth())
-                        Spacer(Modifier.height(20.dp))
-                        Text("Home-screen widgets", fontSize = 16.sp, color = T.c.foreground)
-                        Text(
-                            if (android.os.Build.VERSION.SDK_INT >= 31) "System follows dark mode and uses your wallpaper colours" else "System follows dark mode",
-                            fontSize = 14.sp, color = T.c.mutedForeground,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Segmented(
-                            listOf("system" to "System", "light" to "Light", "dark" to "Dark"), widgetTheme,
-                            { v -> scope.launch { graph.session.setWidgetTheme(v); graph.syncSurfacesNow() } },
-                            Modifier.fillMaxWidth(),
-                        )
+                    val themes = listOf("system" to "System", "light" to "Light", "dark" to "Dark")
+                    Section(header = "Account", footer = "Your display name is shown to your team while you track.") {
+                        ListRow("Email", value = profile?.email?.ifEmpty { null } ?: session?.email ?: "")
+                        SectionDivider()
+                        DisplayNameRow(profile?.displayName ?: "")
                     }
 
-                    SectionLabel("Notifications")
-                    ListRow(
-                        "Timer notification",
-                        subtitle = if (notifAllowed) "On · shows the running timer with Stop and Switch" else "Off · tap to allow in system settings",
-                        icon = Icons.Outlined.Notifications,
-                        onClick = {
-                            runCatching {
-                                context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                            }
-                        },
-                        trailing = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, tint = T.c.mutedForeground, modifier = Modifier.size(18.dp)) },
-                    )
+                    Section(
+                        header = "Appearance",
+                        footer = if (android.os.Build.VERSION.SDK_INT >= 31) "Widgets on System follow dark mode and use your wallpaper colours." else "Widgets on System follow dark mode.",
+                    ) {
+                        PickerRow("App", themes, theme) { v -> scope.launch { graph.session.setTheme(v) } }
+                        SectionDivider()
+                        PickerRow("Widgets", themes, widgetTheme) { v -> scope.launch { graph.session.setWidgetTheme(v); graph.syncSurfacesNow() } }
+                    }
+
+                    Section(header = "Notifications", footer = "Shows the running timer with Stop and Switch.") {
+                        ListRow(
+                            "Timer notification", value = if (notifAllowed) "On" else "Off",
+                            onClick = {
+                                runCatching {
+                                    context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                }
+                            },
+                            trailing = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, "Open system settings", tint = T.c.mutedForeground, modifier = Modifier.size(18.dp)) },
+                        )
+                    }
 
                     if (!securityUnsupported) {
-                        SectionLabel("Security")
-                        ListRow("Change password", icon = Icons.Outlined.Lock, onClick = { pwOpen = true })
-                        ListRow("Delete account", icon = Icons.Outlined.DeleteForever, destructive = true, onClick = { deleteOpen = true })
+                        Section(header = "Security") {
+                            ListRow("Change password", onClick = { pwOpen = true }, chevron = true)
+                            SectionDivider()
+                            ListRow("Delete account…", destructive = true, onClick = { deleteOpen = true })
+                        }
                     }
 
-                    SectionLabel("Server")
-                    ListRow(server, subtitle = "To use another server, sign out and open Advanced on the login screen.", icon = Icons.Outlined.Dns)
+                    Section(header = "Server", footer = "To use another server, sign out and open Advanced on the login screen.") {
+                        Text(
+                            server, fontSize = 15.sp, color = T.c.mutedForeground, fontFamily = co.bitterlemon.trackify.ui.theme.Mono,
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        )
+                    }
 
-                    Spacer(Modifier.height(12.dp))
-                    RowDivider()
-                    ListRow(
-                        if (signingOut) "Signing out…" else "Sign out", icon = Icons.AutoMirrored.Outlined.Logout, destructive = true,
-                        onClick = { if (!signingOut) confirmSignOut = true },
-                    )
-                    RowDivider()
+                    Section {
+                        ListRow(
+                            if (signingOut) "Signing out…" else "Sign out", destructive = true,
+                            onClick = { if (!signingOut) confirmSignOut = true },
+                        )
+                    }
                 }
             }
         }
@@ -175,8 +179,37 @@ fun SettingsScreen(onBack: () -> Unit) {
     if (deleteOpen) DeleteAccountDialog(onDismiss = { deleteOpen = false }, onUnsupported = { securityUnsupported = true; deleteOpen = false })
 }
 
+/** iOS-style picker row: title on the left, the current choice and ⌃⌄ on the right; tap for a menu. */
 @Composable
-private fun DisplayNameForm(initial: String) {
+private fun PickerRow(title: String, options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        ListRow(
+            title, value = options.firstOrNull { it.first == selected }?.second ?: selected, onClick = { open = true },
+            trailing = { Icon(Icons.Outlined.UnfoldMore, null, tint = T.c.mutedForeground, modifier = Modifier.size(20.dp)) },
+        )
+        androidx.compose.material3.DropdownMenu(
+            expanded = open, onDismissRequest = { open = false },
+            offset = androidx.compose.ui.unit.DpOffset(x = 1000.dp, y = 0.dp),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+            containerColor = T.c.cell,
+        ) {
+            options.forEach { (k, label) ->
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(label, fontSize = 17.sp, color = T.c.foreground) },
+                    leadingIcon = {
+                        if (k == selected) Icon(Icons.Outlined.Check, null, tint = T.c.foreground) else Spacer(Modifier.size(24.dp))
+                    },
+                    onClick = { open = false; onSelect(k) },
+                )
+            }
+        }
+    }
+}
+
+/** Display name edited in place (iOS: a text field in the Account section); Save appears once it changed. */
+@Composable
+private fun DisplayNameRow(initial: String) {
     val graph = AppGraph.get(LocalContext.current)
     val scope = rememberCoroutineScope()
     var name by remember(initial) { mutableStateOf(initial) }
@@ -184,30 +217,43 @@ private fun DisplayNameForm(initial: String) {
     var error by remember { mutableStateOf<String?>(null) }
     val trimmed = name.trim()
     val dirty = trimmed != initial.trim()
-    Column {
-        Text("Display name", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = T.c.foreground)
-        Spacer(Modifier.height(6.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TInput(name, { name = it.take(40); status = "idle"; error = null }, Modifier.weight(1f), placeholder = "How others see you")
-            Spacer(Modifier.width(8.dp))
-            TButton(if (status == "saving") "Saving…" else "Save", {
-                status = "saving"
-                scope.launch {
-                    try {
-                        val p = graph.api.setDisplayName(trimmed)
-                        graph.repo.setProfile(graph.repo.profile.value?.copy(displayName = p.displayName) ?: p)
-                        graph.repo.signalPresence()
-                        status = "saved"
-                    } catch (e: Exception) {
-                        status = "error"; error = friendlyError(e, "Could not save name")
-                    }
-                }
-            }, enabled = dirty && trimmed.isNotEmpty() && status != "saving")
+    fun save() {
+        if (!dirty || trimmed.isEmpty() || status == "saving") return
+        status = "saving"
+        scope.launch {
+            try {
+                val p = graph.api.setDisplayName(trimmed)
+                graph.repo.setProfile(graph.repo.profile.value?.copy(displayName = p.displayName) ?: p)
+                graph.repo.signalPresence()
+                status = "saved"
+            } catch (e: Exception) {
+                status = "error"; error = friendlyError(e, "Could not save name")
+            }
         }
-        Spacer(Modifier.height(6.dp))
-        Text("Shown when you are tracking a task.", fontSize = 13.sp, color = T.c.mutedForeground)
-        if (status == "saved") Text("Saved", fontSize = 14.sp, color = T.c.mutedForeground)
-        error?.let { Text(it, fontSize = 14.sp, color = T.c.destructive) }
+    }
+    Column {
+        Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = 16.dp, end = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.foundation.text.BasicTextField(
+                name, { name = it.take(40); status = "idle"; error = null },
+                singleLine = true,
+                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 17.sp, color = T.c.foreground),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(T.c.foreground),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { save() }),
+                modifier = Modifier.weight(1f).padding(vertical = 14.dp).semantics { contentDescription = "Display name" },
+                decorationBox = { inner ->
+                    Box {
+                        if (name.isEmpty()) Text("Display name", fontSize = 17.sp, color = T.c.mutedForeground)
+                        inner()
+                    }
+                },
+            )
+            when {
+                dirty && trimmed.isNotEmpty() -> TButton(if (status == "saving") "Saving…" else "Save", { save() }, size = BtnSize.Sm, enabled = status != "saving")
+                status == "saved" -> Text("Saved", fontSize = 15.sp, color = T.c.mutedForeground, modifier = Modifier.padding(end = 6.dp))
+            }
+        }
+        error?.let { Text(it, fontSize = 14.sp, color = T.c.destructive, modifier = Modifier.padding(start = 16.dp, bottom = 10.dp)) }
     }
 }
 

@@ -1,5 +1,14 @@
 package co.bitterlemon.trackify.ui.stats
 
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.foundation.clickable
+import co.bitterlemon.trackify.ui.components.Section
+import co.bitterlemon.trackify.ui.components.SectionDivider
+import co.bitterlemon.trackify.ui.components.TCard
+import co.bitterlemon.trackify.ui.components.SectionLabel
+import co.bitterlemon.trackify.ui.components.ListRow
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -112,7 +121,7 @@ fun rangeBounds(r: StatsRange, customFrom: LocalDate, customTo: LocalDate, today
 }
 
 @Composable
-fun StatsScreen() {
+fun StatsScreen(onOpenTask: (String) -> Unit = {}) {
     val graph = AppGraph.get(LocalContext.current)
     val tasks by graph.repo.tasks.collectAsState()
     val groups by graph.repo.groups.collectAsState()
@@ -145,22 +154,29 @@ fun StatsScreen() {
     }
 
     Column(Modifier.fillMaxSize()) {
-    ScreenBar("Stats") {
-        IconButton({ rangeName = if (range == StatsRange.Custom) StatsRange.Week.name else StatsRange.Custom.name }) {
-            Icon(Icons.Outlined.DateRange, "Custom range", tint = if (range == StatsRange.Custom) T.c.foreground else T.c.mutedForeground)
-        }
-    }
+    ScreenBar("Stats")
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        val res = result
+        // iOS layout: one card with the range picker (+ calendar for a custom range) and the two totals.
         item(key = "ranges") {
-            Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 16.dp)) {
-                Segmented(
-                    listOf(StatsRange.Today to "Today", StatsRange.Week to "Week", StatsRange.Month to "Month", StatsRange.AllTime to "All"),
-                    range, { rangeName = it.name }, Modifier.fillMaxWidth(),
-                )
+            TCard(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 16.dp).padding(top = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Segmented(
+                        listOf(StatsRange.Today to "Today", StatsRange.Week to "Week", StatsRange.Month to "Month", StatsRange.AllTime to "All"),
+                        range, { rangeName = it.name }, Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    IconButton({ rangeName = if (range == StatsRange.Custom) StatsRange.Week.name else StatsRange.Custom.name }) {
+                        Icon(
+                            if (range == StatsRange.Custom) Icons.Filled.CalendarMonth else Icons.Outlined.CalendarMonth, "Custom range",
+                            tint = T.c.foreground,
+                        )
+                    }
+                }
                 if (range == StatsRange.Custom) {
                     Spacer(Modifier.height(10.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -169,41 +185,48 @@ fun StatsScreen() {
                         DateField(LocalDate.parse(customTo), { customTo = it.toString() }, Modifier.weight(1f), maxDate = null)
                     }
                 }
+                HorizontalDivider(Modifier.padding(vertical = 14.dp), thickness = 0.8.dp, color = T.c.separator)
+                if (res == null) {
+                    Skeleton(Modifier.fillMaxWidth(0.6f).height(44.dp))
+                } else {
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Column(Modifier.weight(1f)) {
+                            Text(Format.fmtMs(res.totalMs), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = T.c.foreground, style = Tabular, maxLines = 1)
+                            Text(rangeLabel(range, rFrom, rTo), fontSize = 15.sp, color = T.c.mutedForeground, maxLines = 2)
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(Format.fmtMs(res.dailyAvgMs), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = T.c.foreground, style = Tabular, maxLines = 1)
+                            Text("daily average", fontSize = 15.sp, color = T.c.mutedForeground, maxLines = 1)
+                        }
+                    }
+                }
             }
         }
-        val res = result
         if (res == null) {
             item(key = "sk") {
                 Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Skeleton(Modifier.fillMaxWidth(0.6f).height(40.dp))
                     Skeleton(Modifier.fillMaxWidth().height(200.dp))
                     Skeleton(Modifier.fillMaxWidth().height(128.dp))
                 }
             }
             return@LazyColumn
         }
-        item(key = "totals") {
-            Row(
-                Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                co.bitterlemon.trackify.ui.components.StatTile("Total", Format.fmtMs(res.totalMs), Modifier.weight(1f))
-                co.bitterlemon.trackify.ui.components.StatTile("Daily average", Format.fmtMs(res.dailyAvgMs), Modifier.weight(1f))
-            }
-        }
         if (res.trend.any { it.total > 0 }) {
             item(key = "trend") {
-                Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+                TCard(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 16.dp).padding(top = 20.dp)) {
+                    Text("Daily breakdown", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground)
+                    Spacer(Modifier.height(8.dp))
                     // Axis labels are part of the graphic: they must not overlap at large font sizes.
                     co.bitterlemon.trackify.ui.components.CappedFontScale(1f) { BreakdownChart(res) }
-                    Spacer(Modifier.height(8.dp))
-                    FlowRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Spacer(Modifier.height(10.dp))
+                    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         res.series.forEach { s ->
                             if (s.name == "Other" && res.trend.none { it.values.last() > 0 }) return@forEach
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(Modifier.size(10.dp).clip(RoundedCornerShape(2.dp)).background(hexColor(s.hex).copy(alpha = s.alpha)))
-                                Spacer(Modifier.width(5.dp))
-                                Text(s.name, fontSize = 12.sp, color = T.c.mutedForeground, maxLines = 1)
+                                Box(Modifier.size(11.dp).clip(RoundedCornerShape(3.dp)).background(hexColor(s.hex).copy(alpha = s.alpha)))
+                                Spacer(Modifier.width(6.dp))
+                                Text(s.name, fontSize = 14.sp, color = T.c.mutedForeground, maxLines = 1)
                             }
                         }
                     }
@@ -211,23 +234,34 @@ fun StatsScreen() {
             }
         }
         if (res.top.isNotEmpty()) {
-            item(key = "top-h") { SectionLabel("Top tasks", Modifier.widthIn(max = 720.dp)) }
             item(key = "top") {
-                Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 20.dp)) {
+                Section(Modifier.widthIn(max = 720.dp), header = "Top tasks") {
                     res.top.forEachIndexed { i, (t, ms) ->
-                        Column(Modifier.padding(vertical = 8.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(t.name, fontSize = 15.sp, color = T.c.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                                Spacer(Modifier.width(8.dp))
-                                Text(Format.fmtMs(ms), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = T.c.foreground, style = Tabular)
+                        if (i > 0) SectionDivider()
+                        Row(
+                            Modifier.fillMaxWidth().clickable(onClickLabel = "Open task") { onOpenTask(t.id) }
+                                .padding(start = 16.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            val bar = hexColor(co.bitterlemon.trackify.util.Accents.TASK_COLORS[i % 6])
+                            Column(Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    co.bitterlemon.trackify.ui.components.AccentDot(bar, 10.dp)
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(t.name, fontSize = 17.sp, color = T.c.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(Format.fmtMs(ms), fontSize = 17.sp, color = T.c.mutedForeground, style = Tabular, maxLines = 1)
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                Box(Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)).background(T.c.fill)) {
+                                    Box(
+                                        Modifier.fillMaxWidth(if (res.totalMs > 0) ms.toFloat() / res.totalMs else 0f).height(5.dp).clip(RoundedCornerShape(3.dp))
+                                            .background(bar.copy(alpha = 0.88f)),
+                                    )
+                                }
                             }
-                            Spacer(Modifier.height(6.dp))
-                            Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(T.c.muted)) {
-                                Box(
-                                    Modifier.fillMaxWidth(if (res.totalMs > 0) ms.toFloat() / res.totalMs else 0f).height(4.dp).clip(RoundedCornerShape(2.dp))
-                                        .background(hexColor(co.bitterlemon.trackify.util.Accents.TASK_COLORS[i % 6]).copy(alpha = 0.88f)),
-                                )
-                            }
+                            Spacer(Modifier.width(4.dp))
+                            co.bitterlemon.trackify.ui.components.Chevron()
                         }
                     }
                 }
@@ -254,6 +288,18 @@ fun StatsScreen() {
 
     if (createOpen) GroupDialog(null, tasks ?: emptyList(), result?.taskMsInRange ?: emptyMap()) { createOpen = false }
     editGroup?.let { g -> GroupDialog(g, tasks ?: emptyList(), result?.taskMsInRange ?: emptyMap()) { editGroup = null } }
+}
+
+/** "Sep 28 – Oct 4, 2026" under the total (iOS), or "All time". */
+private fun rangeLabel(range: StatsRange, from: Long?, to: Long?): String {
+    if (range == StatsRange.AllTime || from == null || to == null) return "All time"
+    val a = Time.localDate(from)
+    val b = Time.localDate(to)
+    return when {
+        a == b -> Time.format(a, "EEE, MMM d, yyyy")
+        a.year == b.year -> Time.format(a, "MMM d") + " – " + Time.format(b, "MMM d, yyyy")
+        else -> Time.format(a, "MMM d, yyyy") + " – " + Time.format(b, "MMM d, yyyy")
+    }
 }
 
 @Composable
@@ -327,7 +373,7 @@ private fun BreakdownChart(res: StatsResult) {
                             val s = res.series[si]
                             val col = hexColor(s.hex).copy(alpha = s.alpha)
                             drawRoundRect(col, Offset(cx - barW / 2, yBase - h), Size(barW, h), CornerRadius(2.dp.toPx()))
-                            drawRoundRect(c.background, Offset(cx - barW / 2, yBase - h), Size(barW, h), CornerRadius(2.dp.toPx()), style = Stroke(1.5f))
+                            drawRoundRect(c.cell, Offset(cx - barW / 2, yBase - h), Size(barW, h), CornerRadius(2.dp.toPx()), style = Stroke(1.5f))
                             yBase -= h
                         }
                         if (selected?.first == i) {
@@ -390,37 +436,40 @@ private fun GroupsSection(res: StatsResult, onCopy: (String) -> Unit, onEdit: (G
     val groups = res.groups
     var menuFor by remember { mutableStateOf<co.bitterlemon.trackify.util.GroupRow?>(null) }
     Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Groups", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = androidx.compose.material3.MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth().padding(start = 32.dp, end = 20.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Groups", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = T.c.mutedForeground, modifier = Modifier.weight(1f))
             if (groups.size >= 2) IconButton({ onCopy(groups.joinToString("\n\n") { StatsData.groupText(it) }) }) {
-                Icon(Icons.Outlined.ContentCopy, "Copy all groups", tint = T.c.mutedForeground, modifier = Modifier.size(20.dp))
+                Icon(Icons.Outlined.ContentCopy, "Copy all groups", tint = T.c.foreground, modifier = Modifier.size(20.dp))
             }
             IconButton(onCreate) { Icon(Icons.Outlined.Add, "Create a group from tasks", tint = T.c.foreground) }
         }
         if (groups.isEmpty()) {
-            Text("No saved groups yet. Tap + to group tasks together.", fontSize = 14.sp, color = T.c.mutedForeground, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-        }
-        groups.forEach { g ->
-            val members = when {
-                g.group.taskIds.isEmpty() -> "No tasks"
-                g.members.isEmpty() && g.orphanIds.isNotEmpty() -> "${g.orphanIds.size} missing task${if (g.orphanIds.size != 1) "s" else ""}"
-                else -> g.members.joinToString(" · ") { (t, ms) -> t.name + (if (t.hidden) " (hidden)" else "") + " " + Format.fmtMs(ms) } +
-                    (if (g.orphanIds.isNotEmpty()) " · ${g.orphanIds.size} removed" else "")
+            Section(topGap = 0.dp) {
+                Text("No saved groups yet. Tap + to group tasks together.", fontSize = 15.sp, color = T.c.mutedForeground, modifier = Modifier.padding(16.dp))
             }
-            ListRow(
-                g.group.name, subtitle = members, onClick = { onEdit(g.group) },
-                trailing = {
-                    Text(Format.fmtMs(g.ms), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = T.c.foreground, style = Tabular)
-                    IconButton({ menuFor = g }) { Icon(Icons.Outlined.MoreVert, "More for ${g.group.name}", tint = T.c.mutedForeground) }
-                },
-                modifier = Modifier.padding(end = 0.dp),
-            )
-            RowDivider(inset = 20.dp)
+        } else Section(topGap = 0.dp) {
+            groups.forEachIndexed { i, g ->
+                if (i > 0) SectionDivider()
+                val members = when {
+                    g.group.taskIds.isEmpty() -> "No tasks"
+                    g.members.isEmpty() && g.orphanIds.isNotEmpty() -> "${g.orphanIds.size} missing task${if (g.orphanIds.size != 1) "s" else ""}"
+                    else -> g.members.joinToString(" · ") { (t, ms) -> t.name + (if (t.hidden) " (hidden)" else "") + " " + Format.fmtMs(ms) } +
+                        (if (g.orphanIds.isNotEmpty()) " · ${g.orphanIds.size} removed" else "")
+                }
+                ListRow(
+                    g.group.name, subtitle = members, onClick = { onEdit(g.group) },
+                    trailing = {
+                        Text(Format.fmtMs(g.ms), fontSize = 17.sp, color = T.c.mutedForeground, style = Tabular)
+                        IconButton({ menuFor = g }, Modifier.size(36.dp)) { Icon(Icons.Outlined.MoreHoriz, "More for ${g.group.name}", tint = T.c.foreground) }
+                    },
+                    modifier = Modifier.padding(end = 0.dp),
+                )
+            }
         }
     }
     menuFor?.let { g ->
         ActionSheet(g.group.name, onDismiss = { menuFor = null }) {
-            SheetAction(Icons.Outlined.Edit, "Edit", { menuFor = null; onEdit(g.group) })
+            SheetAction(Icons.Outlined.Edit, "Edit", { menuFor = null; onEdit(g.group) }, first = true)
             SheetAction(Icons.Outlined.ContentCopy, "Copy summary", { menuFor = null; onCopy(StatsData.groupText(g)) })
             SheetAction(Icons.Outlined.Delete, "Delete", { menuFor = null; onDelete(g.group) }, destructive = true)
         }

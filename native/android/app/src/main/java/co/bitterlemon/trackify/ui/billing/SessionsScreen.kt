@@ -1,5 +1,7 @@
 package co.bitterlemon.trackify.ui.billing
 
+import androidx.compose.foundation.lazy.itemsIndexed
+import co.bitterlemon.trackify.ui.components.GroupedItem
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -153,10 +155,10 @@ fun SessionsScreen(onBack: () -> Unit, onOpenRates: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
         if (selecting) {
             CappedFontScale {
-                Row(Modifier.fillMaxWidth().height(64.dp).background(T.c.muted).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton({ selected.clear() }) { Icon(Icons.Outlined.Close, "Clear selection", tint = T.c.foreground) }
                     Spacer(Modifier.width(4.dp))
-                    Text("${sel.count} selected", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, modifier = Modifier.weight(1f), maxLines = 1)
+                    Text("${sel.count} selected", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground, modifier = Modifier.weight(1f), maxLines = 1)
                     IconButton({
                         if (allSelected) selected.clear() else { selected.clear(); selected.addAll(unpaid.map { it.id }) }
                     }) {
@@ -167,16 +169,16 @@ fun SessionsScreen(onBack: () -> Unit, onOpenRates: () -> Unit) {
         } else {
             ScreenBar("Sessions", onBack = onBack) {
                 if (unpaid.isNotEmpty() && status != "paid") IconButton({ selected.addAll(unpaid.map { it.id }) }) {
-                    Icon(Icons.Outlined.SelectAll, "Select all unpaid (${unpaid.size})", tint = T.c.mutedForeground)
+                    Icon(Icons.Outlined.SelectAll, "Select all unpaid (${unpaid.size})", tint = T.c.foreground)
                 }
-                IconButton({ sheet = "calendar" }) { Icon(Icons.Outlined.CalendarMonth, "Activity calendar", tint = T.c.mutedForeground) }
+                IconButton({ sheet = "calendar" }) { Icon(Icons.Outlined.CalendarMonth, "Activity calendar", tint = T.c.foreground) }
             }
         }
 
         val noEnrolled = billingTasks != null && bts.isEmpty()
         if (!noEnrolled) {
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Row(Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 DropChip(if (period == BillingPeriod.Custom) customLabel(cf, ct) else period.label, period != BillingPeriod.ThisMonth) { sheet = "period" }
                 DropChip(statusOptions.first { it.first == status }.second, status != "unpaid") { sheet = "status" }
                 DropChip(groupOptions.firstOrNull { it.first == groupId }?.second ?: "All groups", groupId != "all") { sheet = "group" }
@@ -211,7 +213,7 @@ fun SessionsScreen(onBack: () -> Unit, onOpenRates: () -> Unit) {
                                         .joinToString(" · ") { (c, l) -> Format.money(l.sumOf { it.earnings }, c) } + ". Tap rows to select."
                                 },
                                 fontSize = 14.sp, color = T.c.mutedForeground, style = Tabular,
-                                modifier = Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                                modifier = Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().padding(horizontal = 32.dp, vertical = 8.dp),
                             )
                         }
                         val sections = list.groupBy { BillingLedger.key(it.groupDay, it.groupWeek, it.groupMonth, groupBy) }
@@ -223,8 +225,10 @@ fun SessionsScreen(onBack: () -> Unit, onOpenRates: () -> Unit) {
                                     selectable = status != "paid",
                                 )
                             }
-                            if (collapsed[key] != true) items(rows, key = { "r-" + it.id }) { row ->
-                                SessionRow(row, row.id in selected, showDate = groupBy != "day", showUnpaid = status != "unpaid") { toggle(row.id) }
+                            if (collapsed[key] != true) itemsIndexed(rows, key = { _, it -> "r-" + it.id }) { i, row ->
+                                GroupedItem(i == 0, i == rows.lastIndex, Modifier.widthIn(max = BillingMaxWidth), dividerInset = 60.dp) {
+                                    SessionRow(row, row.id in selected, showDate = groupBy != "day", showUnpaid = status != "unpaid") { toggle(row.id) }
+                                }
                             }
                         }
                     }
@@ -233,8 +237,8 @@ fun SessionsScreen(onBack: () -> Unit, onOpenRates: () -> Unit) {
         }
 
         if (selecting) {
-            HorizontalDivider(color = T.c.border)
-            Column(Modifier.fillMaxWidth().background(T.c.background).padding(horizontal = 16.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            HorizontalDivider(thickness = 0.8.dp, color = T.c.separator)
+            Column(Modifier.fillMaxWidth().background(T.c.cell).padding(horizontal = 16.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 if (sel.multiCurrency) Text("Multiple currencies — narrow the selection to one currency.", fontSize = 14.sp, color = T.c.destructive, modifier = Modifier.padding(bottom = 8.dp))
                 Button(
                     { markOpen = true }, Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().heightIn(min = 52.dp), enabled = sel.ready, colors = primaryButton(),
@@ -315,7 +319,7 @@ private fun SectionHeader(
         Row(
             Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().heightIn(min = 56.dp)
                 .clickable(onClickLabel = if (collapsed) "Expand" else "Collapse", onClick = onToggleCollapse)
-                .padding(start = if (selectable && ids.isNotEmpty()) 4.dp else 20.dp, end = 16.dp),
+                .padding(start = if (selectable && ids.isNotEmpty()) 20.dp else 32.dp, end = 28.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (selectable && ids.isNotEmpty()) {
@@ -329,10 +333,10 @@ private fun SectionHeader(
                 Spacer(Modifier.width(4.dp))
             }
             Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
-                Text(label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground)
+                Text(label, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = T.c.mutedForeground)
                 Text(
                     Format.durationMinutes(mins.toDouble()) + (if (money.isNotEmpty()) " · $money" else ""),
-                    fontSize = 13.sp, color = T.c.mutedForeground, style = Tabular,
+                    fontSize = 15.sp, color = T.c.mutedForeground, style = Tabular,
                 )
             }
             Icon(
@@ -340,12 +344,11 @@ private fun SectionHeader(
                 null, tint = T.c.mutedForeground, modifier = Modifier.size(22.dp),
             )
         }
-        RowDivider(Modifier.widthIn(max = BillingMaxWidth))
     }
 }
 
 @Composable
-private fun checkColors() = CheckboxDefaults.colors()
+private fun checkColors() = CheckboxDefaults.colors(checkedColor = T.c.foreground, checkmarkColor = T.c.plain, uncheckedColor = T.c.mutedForeground)
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -354,11 +357,11 @@ private fun SessionRow(row: BillingSession, selected: Boolean, showDate: Boolean
     val big = largeFont()
     val time = (if (showDate) Time.format(row.fromMs, "MMM d") + " · " else "") +
         "${Time.clock(row.fromMs)}–${Time.clock(row.toMs)} · ${Format.durationMinutes(row.durationMinutes.toDouble())}"
-    Box(Modifier.fillMaxWidth().background(if (selected) T.c.muted else Color.Transparent), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxWidth().background(if (selected) T.c.fill else Color.Transparent), contentAlignment = Alignment.Center) {
         Row(
-            Modifier.widthIn(max = BillingMaxWidth).fillMaxWidth().heightIn(min = 64.dp)
+            Modifier.fillMaxWidth().heightIn(min = 64.dp)
                 .combinedClickable(enabled = !row.isPaid, role = Role.Checkbox, onLongClick = onToggle, onClick = onToggle)
-                .padding(start = 4.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
+                .padding(start = 4.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (row.isPaid) {

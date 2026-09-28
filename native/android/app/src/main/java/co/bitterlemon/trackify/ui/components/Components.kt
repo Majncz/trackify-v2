@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -57,6 +58,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -75,7 +79,7 @@ import androidx.compose.material3.SegmentedButton
 import co.bitterlemon.trackify.data.ConnectionStatus
 import co.bitterlemon.trackify.ui.theme.T
 
-val CardShape = RoundedCornerShape(16.dp)
+val CardShape = RoundedCornerShape(22.dp)
 val ControlShape = RoundedCornerShape(12.dp)
 val PillShape = RoundedCornerShape(50)
 
@@ -129,12 +133,12 @@ fun TCard(
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    // Material 3 filled card: a tonal surface, no hairline and no shadow (a border only when a caller asks for one).
-    val bg = background ?: MaterialTheme.colorScheme.surfaceContainer
+    // iOS grouped section: a white (dark: grey) rounded block on the grouped background, no hairline, no shadow.
+    val bg = background ?: T.c.cell
     Column(
         modifier
             .clip(CardShape)
-            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .background(T.c.cell)
             .background(bg)
             .then(if (border != null) Modifier.border(borderWidth, border, CardShape) else Modifier)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
@@ -157,14 +161,14 @@ fun TButton(
     enabled: Boolean = true,
     contentDescription: String? = null,
 ) {
-    // Material 3 buttons: filled, filled tonal, outlined and text, all fully rounded.
+    // iOS-like capsule buttons: prominent (label colour), grey bordered, plain text.
     val cs = MaterialTheme.colorScheme
     val (bg, fg) = when (variant) {
         BtnVariant.Default -> cs.primary to cs.onPrimary
-        BtnVariant.Destructive -> cs.error to cs.onError
-        BtnVariant.Outline -> Color.Transparent to cs.primary
-        BtnVariant.Secondary -> cs.secondaryContainer to cs.onSecondaryContainer
-        BtnVariant.Ghost -> Color.Transparent to cs.primary
+        BtnVariant.Destructive -> T.c.stop to Color.White
+        BtnVariant.Outline -> T.c.fill to cs.onSurface
+        BtnVariant.Secondary -> T.c.fill to cs.onSurface
+        BtnVariant.Ghost -> Color.Transparent to cs.onSurface
         BtnVariant.DestructiveGhost -> Color.Transparent to cs.error
     }
     val height = when (size) {
@@ -173,7 +177,7 @@ fun TButton(
         BtnSize.Icon -> 40.dp
         BtnSize.Default -> 40.dp
     }
-    val fontSize = if (size == BtnSize.Sm) 13.sp else 14.sp
+    val fontSize = if (size == BtnSize.Sm) 14.sp else 15.sp
     Row(
         modifier
             .heightIn(min = height)
@@ -181,7 +185,6 @@ fun TButton(
             .alpha(if (enabled) 1f else 0.38f)
             .clip(PillShape)
             .background(bg)
-            .then(if (variant == BtnVariant.Outline) Modifier.border(1.dp, cs.outline, PillShape) else Modifier)
             .clickable(enabled = enabled, role = Role.Button, onClickLabel = contentDescription ?: text, onClick = onClick)
             .padding(horizontal = when {
                 size == BtnSize.Icon -> 0.dp
@@ -197,7 +200,7 @@ fun TButton(
             if (text != null) Spacer(Modifier.width(8.dp))
         }
         if (text != null) {
-            Text(text, color = fg, fontSize = fontSize, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(text, color = fg, fontSize = fontSize, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -210,7 +213,7 @@ fun TBadge(text: String, modifier: Modifier = Modifier, variant: BadgeVariant = 
     val cs = MaterialTheme.colorScheme
     val (bg, fg) = when (variant) {
         BadgeVariant.Default -> cs.primary to cs.onPrimary
-        BadgeVariant.Secondary -> cs.secondaryContainer to cs.onSecondaryContainer
+        BadgeVariant.Secondary -> T.c.fill to cs.onSurface
         BadgeVariant.Outline -> Color.Transparent to cs.onSurfaceVariant
         BadgeVariant.Destructive -> cs.errorContainer to cs.onErrorContainer
     }
@@ -264,7 +267,7 @@ fun TInput(
             minLines = minLines,
             maxLines = if (singleLine) 1 else 8,
             enabled = enabled,
-            textStyle = TextStyle(fontSize = 16.sp, color = T.c.foreground),
+            textStyle = TextStyle(fontSize = 17.sp, color = T.c.foreground),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
             keyboardOptions = KeyboardOptions(keyboardType = if (password) KeyboardType.Password else keyboardType, imeAction = imeAction),
@@ -275,14 +278,14 @@ fun TInput(
                         .fillMaxWidth()
                         .heightIn(min = 52.dp)
                         .clip(ControlShape)
-                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                        .border(if (focused) 2.dp else 0.dp, if (focused) MaterialTheme.colorScheme.primary else Color.Transparent, ControlShape)
+                        .background(T.c.fill)
+                        .border(if (focused) 1.5.dp else 0.dp, if (focused) MaterialTheme.colorScheme.outline else Color.Transparent, ControlShape)
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = if (singleLine) Alignment.CenterVertically else Alignment.Top,
                 ) {
                     Box(Modifier.weight(1f)) {
                         if (value.isEmpty() && placeholder != null) {
-                            Text(placeholder, color = T.c.mutedForeground, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(placeholder, color = T.c.mutedForeground, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         inner()
                     }
@@ -340,22 +343,36 @@ fun Muted(text: String, modifier: Modifier = Modifier, size: Int = 13, maxLines:
     Text(text, modifier = modifier, fontSize = size.sp, color = T.c.mutedForeground, maxLines = maxLines, overflow = TextOverflow.Ellipsis)
 }
 
-/** Single-choice Material 3 segmented button row. */
+/** iOS-style segmented control: a grey capsule track with a raised white (dark: grey) thumb on the selection. */
 @Composable
 fun <K> Segmented(options: List<Pair<K, String>>, selected: K, onSelect: (K) -> Unit, modifier: Modifier = Modifier, compact: Boolean = false) {
-    androidx.compose.material3.SingleChoiceSegmentedButtonRow(modifier) {
-        options.forEachIndexed { i, (key, label) ->
+    val c = T.c
+    val thumb = if (c.dark) Color(0xFF636366) else Color.White
+    Row(
+        modifier
+            .heightIn(min = if (compact) 34.dp else 38.dp)
+            .clip(PillShape)
+            .background(if (c.dark) Color(0xFF2C2C2E) else Color(0xFFE9E9EE))
+            .padding(3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        options.forEach { (key, label) ->
             val sel = key == selected
-            SegmentedButton(
-                selected = sel,
-                onClick = { onSelect(key) },
-                shape = androidx.compose.material3.SegmentedButtonDefaults.itemShape(i, options.size),
-                // The check mark only fits when there are few segments.
-                icon = { if (options.size <= 3 && !compact) androidx.compose.material3.SegmentedButtonDefaults.Icon(sel) },
-                contentPadding = PaddingValues(horizontal = if (options.size > 3 || compact) 4.dp else 12.dp),
-                modifier = if (compact) Modifier.heightIn(min = 36.dp) else Modifier,
+            Box(
+                Modifier
+                    .weight(1f)
+                    .heightIn(min = if (compact) 28.dp else 32.dp)
+                    .then(if (sel) Modifier.shadow(if (c.dark) 0.dp else 2.dp, PillShape, clip = false) else Modifier)
+                    .clip(PillShape)
+                    .background(if (sel) thumb else Color.Transparent)
+                    .selectable(sel, role = Role.Tab, onClick = { onSelect(key) })
+                    .padding(horizontal = 6.dp),
+                contentAlignment = Alignment.Center,
             ) {
-                Text(label, fontSize = if (compact) 13.sp else 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    label, fontSize = if (compact) 14.sp else 15.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Medium,
+                    color = c.foreground, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
@@ -367,14 +384,13 @@ fun Chip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifi
     Text(
         label,
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
-            .border(1.dp, if (selected) Color.Transparent else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+            .clip(PillShape)
+            .background(if (selected) T.c.foreground else T.c.fill)
             .clickable(role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 7.dp),
-        fontSize = 14.sp,
+        fontSize = 15.sp,
         fontWeight = FontWeight.Medium,
-        color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+        color = if (selected) T.c.plain else T.c.foreground,
     )
 }
 
@@ -457,10 +473,13 @@ fun Pulsing(active: Boolean, content: @Composable (Float) -> Unit) {
 
 @Composable
 fun SurfaceBlock(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Surface(modifier, color = MaterialTheme.colorScheme.surfaceContainer, shape = CardShape, content = content)
+    Surface(modifier, color = T.c.cell, shape = CardShape, content = content)
 }
 
-/** Plain top bar for every screen: optional back arrow, title, trailing actions. No subtitle, no hero. */
+/**
+ * Top bar for every screen, iOS-like: the title centred in 17 sp semibold, the Android back arrow on the left and
+ * trailing actions on the right. The title stays centred on the screen while it fits between the two sides.
+ */
 @Composable
 fun ScreenBar(
     title: String?,
@@ -469,26 +488,49 @@ fun ScreenBar(
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     CappedFontScale {
-        Row(
-            modifier.fillMaxWidth().height(64.dp).padding(start = if (onBack != null) 4.dp else 16.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (onBack != null) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back", tint = T.c.foreground)
+        androidx.compose.ui.layout.Layout(
+            content = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back", tint = T.c.foreground)
+                        }
+                    }
                 }
-                Spacer(Modifier.width(4.dp))
+                Text(
+                    title ?: "", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = T.c.foreground,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.semantics { heading() },
+                )
+                Row(verticalAlignment = Alignment.CenterVertically, content = actions)
+            },
+            modifier = modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp),
+        ) { m, cons ->
+            val w = cons.maxWidth
+            val h = cons.maxHeight
+            val loose = cons.copy(minWidth = 0, minHeight = 0)
+            val lead = m[0].measure(loose)
+            val trail = m[2].measure(loose.copy(maxWidth = (w - lead.width).coerceAtLeast(0)))
+            val gap = 8.dp.roundToPx()
+            val side = maxOf(lead.width, trail.width, 12.dp.roundToPx())
+            val centredWidth = w - 2 * side - 2 * gap
+            val titleCentred = centredWidth > 48.dp.roundToPx()
+            val titleMax = if (titleCentred) centredWidth else (w - lead.width - trail.width - 2 * gap).coerceAtLeast(0)
+            val tp = m[1].measure(loose.copy(maxWidth = titleMax))
+            layout(w, h) {
+                lead.place(0, (h - lead.height) / 2)
+                trail.place(w - trail.width, (h - trail.height) / 2)
+                val tx = if (titleCentred) (w - tp.width) / 2 else lead.width + gap
+                tp.place(tx, (h - tp.height) / 2)
             }
-            Text(
-                title ?: "", fontSize = if (onBack != null) 22.sp else 24.sp, fontWeight = FontWeight.Normal, color = T.c.foreground,
-                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
-            )
-            actions()
         }
     }
 }
 
-/** Full-width list row (≥ 56 dp): optional leading icon, title + optional subtitle, optional trailing content. */
+/**
+ * Grouped-list row (iOS `insetGrouped` cell): optional leading icon, title + optional subtitle, then an optional
+ * muted [value], custom [trailing] content and a [chevron]. Put it inside a [Section].
+ */
 @Composable
 fun ListRow(
     title: String,
@@ -496,6 +538,8 @@ fun ListRow(
     subtitle: String? = null,
     icon: ImageVector? = null,
     destructive: Boolean = false,
+    value: String? = null,
+    chevron: Boolean = false,
     onClick: (() -> Unit)? = null,
     trailing: (@Composable RowScope.() -> Unit)? = null,
 ) {
@@ -503,39 +547,134 @@ fun ListRow(
     Row(
         modifier
             .fillMaxWidth()
-            .heightIn(min = 56.dp)
+            .heightIn(min = 52.dp)
             .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) {
-            Icon(icon, null, tint = if (destructive) T.c.destructive else T.c.mutedForeground, modifier = Modifier.size(24.dp))
+            Icon(icon, null, tint = if (destructive) T.c.destructive else T.c.foreground, modifier = Modifier.size(24.dp))
             Spacer(Modifier.width(16.dp))
         }
         Column(Modifier.weight(1f)) {
-            Text(title, fontSize = 16.sp, color = color, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (subtitle != null) Text(subtitle, fontSize = 13.sp, color = T.c.mutedForeground, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(title, fontSize = 17.sp, color = color, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (subtitle != null) Text(subtitle, fontSize = 14.sp, color = T.c.mutedForeground, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        }
+        if (value != null) {
+            Spacer(Modifier.width(12.dp))
+            Text(
+                value, fontSize = 17.sp, color = T.c.mutedForeground, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = co.bitterlemon.trackify.ui.theme.Tabular, modifier = Modifier.widthIn(max = 230.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            )
         }
         if (trailing != null) {
             Spacer(Modifier.width(12.dp))
             trailing()
         }
+        if (chevron) {
+            Spacer(Modifier.width(6.dp))
+            Chevron()
+        }
     }
 }
 
-/** Small section label above a group of rows. */
+/** Trailing disclosure chevron (iOS `>`), quiet grey. */
 @Composable
-fun SectionLabel(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text, modifier = modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 8.dp),
-        fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary,
+fun Chevron() {
+    Icon(
+        Icons.AutoMirrored.Outlined.KeyboardArrowRight, null,
+        tint = if (T.c.dark) Color(0xFF5A5A5F) else Color(0xFFBDBDC2), modifier = Modifier.size(24.dp),
     )
+}
+
+/** Grey section header above a grouped section (iOS 26 style: sentence case, semibold, secondary label). */
+@Composable
+fun SectionLabel(text: String, modifier: Modifier = Modifier, trailing: String? = null) {
+    Row(
+        modifier.fillMaxWidth().padding(start = 32.dp, end = 32.dp, top = 22.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        Text(
+            text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = T.c.mutedForeground,
+            modifier = Modifier.weight(1f).semantics { heading() }, maxLines = 2, overflow = TextOverflow.Ellipsis,
+        )
+        if (trailing != null) {
+            Text(trailing, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = T.c.mutedForeground, style = co.bitterlemon.trackify.ui.theme.Tabular)
+        }
+    }
+}
+
+/** Small grey note under a grouped section. */
+@Composable
+fun SectionFooter(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text, modifier = modifier.fillMaxWidth().padding(start = 32.dp, end = 32.dp, top = 8.dp),
+        fontSize = 14.sp, color = T.c.mutedForeground,
+    )
+}
+
+/**
+ * iOS `insetGrouped` section: optional grey [header], a rounded white (dark: grey) block 16 dp from the edges with
+ * the [content] rows, optional [footer]. Separate rows with [SectionDivider].
+ */
+@Composable
+fun Section(
+    modifier: Modifier = Modifier,
+    header: String? = null,
+    headerTrailing: String? = null,
+    footer: String? = null,
+    topGap: Dp = 20.dp,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(modifier.fillMaxWidth()) {
+        if (header != null) SectionLabel(header, trailing = headerTrailing) else Spacer(Modifier.height(topGap))
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(CardShape).background(T.c.cell),
+            content = content,
+        )
+        if (footer != null) SectionFooter(footer)
+    }
+}
+
+/** Inset hairline between rows of a [Section]: 16 dp for text rows, 56 dp after a leading icon. */
+@Composable
+fun SectionDivider(icon: Boolean = false) {
+    androidx.compose.material3.HorizontalDivider(
+        Modifier.padding(start = if (icon) 56.dp else 16.dp, end = 16.dp), thickness = 0.8.dp, color = T.c.separator,
+    )
+}
+
+/**
+ * One row of a grouped section inside a lazy list: 16 dp from the edges, the cell colour, rounded outer corners on
+ * the [first] and [last] rows and an inset hairline above every row but the first.
+ */
+@Composable
+fun GroupedItem(
+    first: Boolean,
+    last: Boolean,
+    modifier: Modifier = Modifier,
+    dividerInset: Dp = 16.dp,
+    background: Color? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val r = 22.dp
+    val shape = RoundedCornerShape(
+        topStart = if (first) r else 0.dp, topEnd = if (first) r else 0.dp,
+        bottomStart = if (last) r else 0.dp, bottomEnd = if (last) r else 0.dp,
+    )
+    Column(modifier.fillMaxWidth().padding(horizontal = 16.dp).clip(shape).background(T.c.cell).background(background ?: Color.Transparent)) {
+        if (!first) androidx.compose.material3.HorizontalDivider(
+            Modifier.padding(start = dividerInset, end = 16.dp), thickness = 0.8.dp, color = T.c.separator,
+        )
+        content()
+    }
 }
 
 /** Hairline between rows/sections. */
 @Composable
 fun RowDivider(modifier: Modifier = Modifier, inset: Dp = 0.dp) {
-    androidx.compose.material3.HorizontalDivider(modifier.padding(start = inset), color = T.c.border)
+    androidx.compose.material3.HorizontalDivider(modifier.padding(start = inset), thickness = 0.8.dp, color = T.c.separator)
 }
 
 /** Tonal number tile (Material 3 filled card): a label and a large tabular value. */
@@ -543,14 +682,14 @@ fun RowDivider(modifier: Modifier = Modifier, inset: Dp = 0.dp) {
 fun StatTile(label: String, value: String, modifier: Modifier = Modifier) {
     Column(
         modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .clip(CardShape)
+            .background(T.c.cell)
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
-        Text(label, fontSize = 14.sp, color = T.c.mutedForeground, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Spacer(Modifier.height(4.dp))
+        Text(label, fontSize = 15.sp, color = T.c.mutedForeground, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.height(2.dp))
         Text(
-            value, fontSize = 26.sp, fontWeight = FontWeight.Medium, color = T.c.foreground, maxLines = 1,
+            value, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = T.c.foreground, maxLines = 1,
             overflow = TextOverflow.Ellipsis, style = co.bitterlemon.trackify.ui.theme.Tabular,
         )
     }
