@@ -37,9 +37,8 @@ the web's own flow. Merging this branch into `master` is a separate decision (Wo
 
 - Lane server: `/srv/projects/trackify/workbench/lanes/native/bin/rebuild`
 - Android: see `android/README.md` (`./gradlew testDebugUnitTest assembleRelease`, emulators in `/opt/android-sdk`)
-- Apple: pushes to `lane/native` run `.github/workflows/native-apple.yml` on GitHub macOS runners (build, 49 kit
-  tests, UI walks on iPhone 16e/17/17 Pro/Pro Max, iPad 13"/mini, landscape, dark, accessibility sizes and iPhone SE on iOS 18, widget/Live Activity renders, macOS screenshots + idle CPU). Helper:
-  `/srv/projects/trackify/workbench/lanes/native/bin/gha runs|wait|fetch`.
+- Apple: build on Taryk's Mac only, after asking him for access (`mac-bridge taryk ask`):
+  `/srv/projects/trackify/workbench/lanes/native/bin/macbuild sync|ios|mac|shot|test`. Never on GitHub Actions.
 
 ## Known follow-ups (Workbench todos, project `trackify`)
 
