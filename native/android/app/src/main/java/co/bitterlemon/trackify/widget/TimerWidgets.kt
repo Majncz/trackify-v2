@@ -186,7 +186,8 @@ private fun Chrono(startTime: Long, sizeSp: Float, modifier: GlanceModifier = Gl
     val rv = RemoteViews(ctx.packageName, R.layout.widget_chrono)
     val base = SystemClock.elapsedRealtime() - (System.currentTimeMillis() - startTime)
     rv.setChronometer(R.id.chrono, base, null, true)
-    rv.setTextViewTextSize(R.id.chrono, TypedValue.COMPLEX_UNIT_SP, sizeSp)
+    // A display number: sized in dp so large font settings can't push it out of its layout.
+    rv.setTextViewTextSize(R.id.chrono, TypedValue.COMPLEX_UNIT_DIP, sizeSp)
     LocalChronoColor.current?.let { rv.setTextColor(R.id.chrono, it) }
     AndroidRemoteViews(rv, modifier)
 }
@@ -224,23 +225,24 @@ private fun todayText(snap: WidgetSnapshotData): String? {
     return if (ms >= 60_000) "Today ${Format.durationWords(ms)}" else null
 }
 
-/** A start tile: accent dot, the name on up to two lines, the whole tile is the button. */
+/** Up to two one-tap start chips in a row (the bottom of the tall-wide small widget). */
 @Composable
-private fun StartTile(t: SnapshotTask, modifier: GlanceModifier, primary: Boolean = false, caption: String? = null) {
-    val bg = if (primary) C.primaryContainer else C.secondaryContainer
-    val fg = if (primary) C.onPrimaryContainer else C.onSecondaryContainer
-    Column(
-        modifier.tonal(bg).clickable(startAction(t.id)).padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Dot(accent(t.accentHex), 10.dp)
-            Spacer(GlanceModifier.defaultWeight())
-            Image(ImageProvider(R.drawable.ic_play), contentDescription = "Start ${t.name}", modifier = GlanceModifier.size(16.dp), colorFilter = ColorFilter.tint(fg))
+private fun NextChips(next: List<SnapshotTask>) {
+    if (next.isEmpty()) return
+    Spacer(GlanceModifier.height(8.dp))
+    Row(GlanceModifier.fillMaxWidth().height(48.dp)) {
+        next.forEachIndexed { i, n ->
+            if (i > 0) Spacer(GlanceModifier.width(8.dp))
+            Row(
+                GlanceModifier.defaultWeight().fillMaxHeight().tonal(C.surface, 24.dp).clickable(startAction(n.id)).padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Dot(accent(n.accentHex), 8.dp)
+                Spacer(GlanceModifier.width(8.dp))
+                Label(n.name, C.onSurface, 13, maxLines = 1)
+            }
         }
-        Spacer(GlanceModifier.height(6.dp))
-        if (caption != null) Label(caption, fg, 12)
-        Label(t.name, fg, 14, bold = true, maxLines = 2)
+        if (next.size == 1) { Spacer(GlanceModifier.width(8.dp)); Spacer(GlanceModifier.defaultWeight()) }
     }
 }
 
@@ -249,11 +251,12 @@ private fun StartTile(t: SnapshotTask, modifier: GlanceModifier, primary: Boolea
 
 private val SmallBar = DpSize(110.dp, 40.dp)
 private val SmallBarWide = DpSize(250.dp, 40.dp)
-private val SmallSquare = DpSize(110.dp, 100.dp)
-private val SmallWide = DpSize(200.dp, 100.dp)
+private val SmallSquare = DpSize(110.dp, 120.dp)
+private val SmallWide = DpSize(200.dp, 120.dp)
+private val SmallWideTall = DpSize(200.dp, 180.dp)
 
 class SmallTimerWidget : GlanceAppWidget() {
-    override val sizeMode = SizeMode.Responsive(setOf(SmallBar, SmallBarWide, SmallSquare, SmallWide))
+    override val sizeMode = SizeMode.Responsive(setOf(SmallBar, SmallBarWide, SmallSquare, SmallWide, SmallWideTall))
     override val previewSizeMode = SizeMode.Responsive(setOf(SmallSquare, SmallWide))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
@@ -275,26 +278,26 @@ private fun SmallContent(context: Context, snap: WidgetSnapshotData) {
     if (!snap.signedIn) return Message(context, "Sign in to Trackify")
     val size = LocalSize.current
     val r = snap.running
-    val bar = size.height < 100.dp
+    val bar = size.height < 120.dp
     val wide = size.width >= 200.dp
     when {
-        r != null && bar -> SmallRunningBar(context, r)
-        r != null && wide -> SmallRunningWide(context, r)
+        r != null && bar -> SmallRunningBar(context, r, wide = size.width >= 250.dp)
+        r != null && wide -> SmallRunningWide(context, r, snap, tall = size.height >= 180.dp)
         r != null -> SmallRunningSquare(context, r)
         startable(snap).isEmpty() -> Message(context, "Create a task in Trackify")
-        bar -> SmallIdleBar(snap, if (size.width >= 250.dp) 3 else 1)
-        wide -> SmallIdleGrid(snap, columns = 2)
+        bar -> SmallIdleBar(snap, if (size.width >= 250.dp) 2 else 1)
+        wide -> SmallIdleWide(snap, tall = size.height >= 180.dp)
         else -> SmallIdleSquare(snap)
     }
 }
 
 @Composable
-private fun SmallRunningBar(context: Context, r: SnapshotRunning) {
-    WidgetRoot(C.primaryContainer, padding = 6.dp) {
+private fun SmallRunningBar(context: Context, r: SnapshotRunning, wide: Boolean) {
+    WidgetRoot(C.primaryContainer, padding = 8.dp) {
         Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-            Column(GlanceModifier.defaultWeight().padding(start = 10.dp).clickable(openApp(context))) {
-                Label(r.taskName, C.onPrimaryContainer, 13, bold = true)
-                Chrono(r.startTime, 20f)
+            Column(GlanceModifier.defaultWeight().padding(start = 8.dp).clickable(openApp(context))) {
+                Label(r.taskName, C.onPrimaryContainer, if (wide) 14 else 13, bold = true)
+                Chrono(r.startTime, if (wide) 26f else 20f)
             }
             RoundIcon(R.drawable.ic_stop, "Stop", C.primary, C.onPrimary, 44.dp, stopAction())
         }
@@ -305,16 +308,17 @@ private fun SmallRunningBar(context: Context, r: SnapshotRunning) {
 private fun SmallRunningSquare(context: Context, r: SnapshotRunning) {
     WidgetRoot(C.primaryContainer, padding = 12.dp) {
         Column(GlanceModifier.fillMaxSize()) {
-            Column(GlanceModifier.fillMaxWidth().defaultWeight().clickable(openApp(context))) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Dot(accent(r.accentHex), 8.dp)
-                    Spacer(GlanceModifier.width(6.dp))
-                    Label(if (r.pending) "Syncing…" else "Tracking", C.onPrimaryContainer, 12)
-                }
-                Spacer(GlanceModifier.height(2.dp))
-                Label(r.taskName, C.onPrimaryContainer, 15, bold = true, maxLines = 2)
-                Chrono(r.startTime, 26f)
+            Row(GlanceModifier.fillMaxWidth().clickable(openApp(context)), verticalAlignment = Alignment.CenterVertically) {
+                Dot(accent(r.accentHex), 8.dp)
+                Spacer(GlanceModifier.width(6.dp))
+                Label(if (r.pending) "Syncing…" else "Since ${Time.clock(r.startTime)}", C.onPrimaryContainer, 12)
             }
+            Spacer(GlanceModifier.defaultWeight())
+            Column(GlanceModifier.fillMaxWidth().clickable(openApp(context))) {
+                Label(r.taskName, C.onPrimaryContainer, 15, bold = true, maxLines = 2)
+                Chrono(r.startTime, 34f)
+            }
+            Spacer(GlanceModifier.height(8.dp))
             Row(
                 GlanceModifier.fillMaxWidth().height(44.dp).tonal(C.primary, 22.dp).clickable(stopAction()),
                 verticalAlignment = Alignment.CenterVertically, horizontalAlignment = Alignment.CenterHorizontally,
@@ -328,20 +332,23 @@ private fun SmallRunningSquare(context: Context, r: SnapshotRunning) {
 }
 
 @Composable
-private fun SmallRunningWide(context: Context, r: SnapshotRunning) {
-    WidgetRoot(C.primaryContainer, padding = 16.dp) {
-        Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-            Column(GlanceModifier.defaultWeight().clickable(openApp(context))) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Dot(accent(r.accentHex), 8.dp)
-                    Spacer(GlanceModifier.width(6.dp))
-                    Label(if (r.pending) "Syncing…" else "Since ${Time.clock(r.startTime)}", C.onPrimaryContainer, 12)
+private fun SmallRunningWide(context: Context, r: SnapshotRunning, snap: WidgetSnapshotData, tall: Boolean) {
+    WidgetRoot(C.primaryContainer, padding = if (tall) 12.dp else 16.dp) {
+        Column(GlanceModifier.fillMaxSize()) {
+            Row(GlanceModifier.fillMaxWidth().defaultWeight().padding(start = if (tall) 4.dp else 0.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(GlanceModifier.defaultWeight().clickable(openApp(context))) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Dot(accent(r.accentHex), 8.dp)
+                        Spacer(GlanceModifier.width(6.dp))
+                        Label(if (r.pending) "Syncing…" else "Since ${Time.clock(r.startTime)}", C.onPrimaryContainer, 12)
+                    }
+                    Label(r.taskName, C.onPrimaryContainer, 16, bold = true, maxLines = if (tall) 1 else 2)
+                    Chrono(r.startTime, if (tall) 44f else 34f)
                 }
-                Label(r.taskName, C.onPrimaryContainer, 16, bold = true, maxLines = 2)
-                Chrono(r.startTime, 34f)
+                Spacer(GlanceModifier.width(12.dp))
+                RoundIcon(R.drawable.ic_stop, "Stop", C.primary, C.onPrimary, 64.dp, stopAction())
             }
-            Spacer(GlanceModifier.width(12.dp))
-            RoundIcon(R.drawable.ic_stop, "Stop", C.primary, C.onPrimary, 64.dp, stopAction())
+            if (tall) NextChips(startable(snap).take(2))
         }
     }
 }
@@ -355,7 +362,7 @@ private fun SmallIdleSquare(snap: WidgetSnapshotData) {
             Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 RoundIcon(R.drawable.ic_play, "Resume ${t.name}", C.primary, C.onPrimary, 44.dp, null)
                 Spacer(GlanceModifier.defaultWeight())
-                todayText(snap)?.let { Label(it.removePrefix("Today "), C.onSecondaryContainer, 12) }
+                todayText(snap)?.let { Label(it, C.onSecondaryContainer, 12) }
             }
             Spacer(GlanceModifier.defaultWeight())
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -363,7 +370,7 @@ private fun SmallIdleSquare(snap: WidgetSnapshotData) {
                 Spacer(GlanceModifier.width(6.dp))
                 Label("Resume", C.onSecondaryContainer, 12)
             }
-            Label(t.name, C.onSecondaryContainer, 15, bold = true, maxLines = 2)
+            Label(t.name, C.onSecondaryContainer, 17, bold = true, maxLines = 2)
         }
     }
 }
@@ -372,6 +379,21 @@ private fun SmallIdleSquare(snap: WidgetSnapshotData) {
 @Composable
 private fun SmallIdleBar(snap: WidgetSnapshotData, count: Int) {
     val tasks = startable(snap).take(count)
+    if (count == 1) {
+        // Narrow bar: the whole widget is the "resume" button.
+        val t = tasks.first()
+        WidgetRoot(C.primaryContainer, GlanceModifier.clickable(startAction(t.id)), padding = 8.dp) {
+            Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                RoundIcon(R.drawable.ic_play, "Resume ${t.name}", C.primary, C.onPrimary, 44.dp, null)
+                Spacer(GlanceModifier.width(10.dp))
+                Column(GlanceModifier.defaultWeight()) {
+                    Label("Resume", C.onPrimaryContainer, 12)
+                    Label(t.name, C.onPrimaryContainer, 14, bold = true, maxLines = 2)
+                }
+            }
+        }
+        return
+    }
     WidgetRoot(C.widgetBackground, padding = 6.dp) {
         Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
             tasks.forEachIndexed { i, t ->
@@ -383,7 +405,8 @@ private fun SmallIdleBar(snap: WidgetSnapshotData, count: Int) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     val fg = if (i == 0) C.onPrimaryContainer else C.onSecondaryContainer
-                    Image(ImageProvider(R.drawable.ic_play), "Start ${t.name}", GlanceModifier.size(16.dp), colorFilter = ColorFilter.tint(fg))
+                    if (i == 0) RoundIcon(R.drawable.ic_play, "Resume ${t.name}", C.primary, C.onPrimary, 36.dp, null)
+                    else Image(ImageProvider(R.drawable.ic_play), "Start ${t.name}", GlanceModifier.size(16.dp), colorFilter = ColorFilter.tint(fg))
                     Spacer(GlanceModifier.width(8.dp))
                     Label(t.name, fg, 13, bold = true, maxLines = 2)
                 }
@@ -392,16 +415,30 @@ private fun SmallIdleBar(snap: WidgetSnapshotData, count: Int) {
     }
 }
 
-/** Idle, 3–4 columns × 2 rows: resume tile + the next task(s). */
+/** Idle, 3–4 columns: a big "resume" button and, when tall enough, one-tap starts for the next tasks. */
 @Composable
-private fun SmallIdleGrid(snap: WidgetSnapshotData, columns: Int) {
-    val tasks = startable(snap).take(columns)
-    WidgetRoot(C.widgetBackground, padding = 8.dp) {
-        Row(GlanceModifier.fillMaxSize()) {
-            tasks.forEachIndexed { i, t ->
-                if (i > 0) Spacer(GlanceModifier.width(6.dp))
-                StartTile(t, GlanceModifier.defaultWeight().fillMaxHeight(), primary = i == 0, caption = if (i == 0) "Resume" else null)
+private fun SmallIdleWide(snap: WidgetSnapshotData, tall: Boolean) {
+    val all = startable(snap)
+    val t = all.first()
+    WidgetRoot(C.secondaryContainer, padding = if (tall) 12.dp else 16.dp) {
+        Column(GlanceModifier.fillMaxSize()) {
+            Row(
+                GlanceModifier.fillMaxWidth().defaultWeight().clickable(startAction(t.id)).padding(start = if (tall) 4.dp else 0.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(GlanceModifier.defaultWeight()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Dot(accent(t.accentHex), 8.dp)
+                        Spacer(GlanceModifier.width(6.dp))
+                        Label("Not tracking · resume", C.onSecondaryContainer, 12)
+                    }
+                    Label(t.name, C.onSecondaryContainer, 18, bold = true, maxLines = 2)
+                    todayText(snap)?.let { Label(it, C.onSecondaryContainer, 13) }
+                }
+                Spacer(GlanceModifier.width(12.dp))
+                RoundIcon(R.drawable.ic_play, "Resume ${t.name}", C.primary, C.onPrimary, 64.dp, null)
             }
+            if (tall) NextChips(all.drop(1).take(2))
         }
     }
 }
@@ -414,11 +451,14 @@ class SmallTimerWidgetReceiver : GlanceAppWidgetReceiver() {
 // Large widget: "Trackify tasks"
 
 private val LargeCompact = DpSize(180.dp, 100.dp)
-private val LargeList = DpSize(180.dp, 170.dp)
-private val LargeListWide = DpSize(300.dp, 170.dp)
+private val LargeCompactWide = DpSize(300.dp, 100.dp)
+private val LargeMid = DpSize(180.dp, 170.dp)
+private val LargeMidWide = DpSize(300.dp, 170.dp)
+private val LargeList = DpSize(180.dp, 240.dp)
+private val LargeListWide = DpSize(300.dp, 240.dp)
 
 class LargeTimerWidget : GlanceAppWidget() {
-    override val sizeMode = SizeMode.Responsive(setOf(LargeCompact, LargeList, LargeListWide))
+    override val sizeMode = SizeMode.Responsive(setOf(LargeCompact, LargeCompactWide, LargeMid, LargeMidWide, LargeList, LargeListWide))
     override val previewSizeMode = SizeMode.Responsive(setOf(LargeListWide))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
@@ -443,10 +483,16 @@ private fun LargeContent(context: Context, snap: WidgetSnapshotData) {
     val others = startable(snap)
     if (r == null && others.isEmpty()) return Message(context, "Create a task in Trackify")
     val wide = size.width >= 300.dp
+    if (size.height < 240.dp) {
+        // Too short for a list: the same full-bleed layout as the wide Timer widget.
+        val tall = size.height >= 170.dp
+        if (r != null) SmallRunningWide(context, r, snap, tall) else SmallIdleWide(snap, tall)
+        return
+    }
     WidgetRoot(C.widgetBackground, padding = 8.dp) {
         Column(GlanceModifier.fillMaxSize()) {
             if (r != null) RunningHero(context, r, wide) else ResumeHero(others.first(), wide)
-            if (size.height >= 170.dp) {
+            run {
                 val list = if (r != null) others else others.drop(1)
                 Row(GlanceModifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Label(if (r != null) "Switch to" else "Recent", C.onSurfaceVariant, 13, bold = true, modifier = GlanceModifier.defaultWeight())
@@ -491,7 +537,7 @@ private fun ResumeHero(t: SnapshotTask, wide: Boolean) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Dot(accent(t.accentHex), 8.dp)
                 Spacer(GlanceModifier.width(6.dp))
-                Label("Not tracking · resume", C.onSecondaryContainer, 12)
+                Label("Not tracking · tap to resume", C.onSecondaryContainer, 12)
             }
             Label(t.name, C.onSecondaryContainer, 18, bold = true, maxLines = 2)
         }

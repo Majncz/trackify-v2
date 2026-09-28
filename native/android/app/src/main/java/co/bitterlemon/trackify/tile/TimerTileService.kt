@@ -46,11 +46,13 @@ class TimerTileService : TileService() {
             tile.state = Tile.STATE_ACTIVE
             tile.label = name
             if (Build.VERSION.SDK_INT >= 29) tile.subtitle = "Since ${Time.clock(running.startTime)} · tap to stop"
+            if (Build.VERSION.SDK_INT >= 30) tile.stateDescription = "Tracking $name"
         } else {
             val last = snap.tasks.firstOrNull { it.id == snap.lastTaskId }
             tile.state = Tile.STATE_INACTIVE
             tile.label = "Trackify"
-            if (Build.VERSION.SDK_INT >= 29) tile.subtitle = last?.let { "Start ${it.name}" } ?: "Idle"
+            if (Build.VERSION.SDK_INT >= 29) tile.subtitle = last?.let { "Tap to resume ${it.name}" } ?: "Not tracking"
+            if (Build.VERSION.SDK_INT >= 30) tile.stateDescription = "Not tracking"
         }
         tile.updateTile()
     }

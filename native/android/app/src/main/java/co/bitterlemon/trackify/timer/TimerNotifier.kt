@@ -83,7 +83,9 @@ class TimerNotifier(private val context: Context) {
         val b = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_timer)
             .setContentTitle(r.taskName)
-            .setContentText(if (r.pending) "Syncing…" else "Tracking since ${co.bitterlemon.trackify.util.Time.clock(r.startTime)}")
+            .setContentText(if (r.pending) "Syncing…" else "Since ${co.bitterlemon.trackify.util.Time.clock(r.startTime)}")
+            // The task's colour tints the icon and the actions, like the dot everywhere else in the app.
+            .setColor(co.bitterlemon.trackify.util.Accents.parseHex(r.accentHex)?.let { 0xFF000000.toInt() or it } ?: 0xFF22C55E.toInt())
             .setWhen(r.startTime)
             .setShowWhen(true)
             .setUsesChronometer(true)

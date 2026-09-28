@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Live clock inside the Glance widgets. Colour = onPrimaryContainer (wallpaper colour on Android 12+). -->
+<Chronometer xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/chrono"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:fontFamily="sans-serif"
+    android:fontFeatureSettings="tnum"
+    android:includeFontPadding="false"
+    android:textSize="28sp"
+    android:textColor="@color/widget_on_primary_container"
+    android:maxLines="1"/>
