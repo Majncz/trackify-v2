@@ -9,6 +9,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
@@ -36,8 +37,19 @@ object WidgetUpdater {
         if (lastKey == null) WidgetSnapshot.storedSnapshotKey?.let { lastKey = it }
         if (!force && key == lastKey) return
         lastKey = key
-        scope.launch { updateTimerWidgets(context) }
+        // FastWidgets has already drawn this state. Glance settles it a little later (a session that is alive
+        // recomposes from the snapshot flow anyway; this starts one if none is).
+        pending?.cancel()
+        pending = scope.launch {
+            delay(SETTLE_MS)
+            updateTimerWidgets(context)
+        }
     }
+
+    private var pending: kotlinx.coroutines.Job? = null
+
+    /** How long Glance waits behind a fast push (FastWidgets) before it redraws the same state. */
+    const val SETTLE_MS = 1_500L
 
     /** Both timer widgets at once (a closed Glance session takes a few hundred ms to start). */
     private suspend fun updateTimerWidgets(context: Context) = coroutineScope {

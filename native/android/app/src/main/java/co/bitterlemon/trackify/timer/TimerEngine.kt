@@ -93,7 +93,9 @@ class TimerEngine(
         TimerPersisted()
     }
 
-    private fun save(s: TimerPersisted) {
+    private fun save(s: TimerPersisted) = co.bitterlemon.trackify.util.Persist.write(file.path) { saveNow(s) }
+
+    private fun saveNow(s: TimerPersisted) {
         try {
             val tmp = File(file.parentFile, file.name + ".tmp")
             tmp.writeText(AppJson.encodeToString(TimerPersisted.serializer(), s))

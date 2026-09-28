@@ -145,10 +145,15 @@ object WidgetSnapshot {
 
     fun write(context: Context, data: WidgetSnapshotData) {
         cached = data
+        // Running Glance sessions recompose from this flow right away: they must never hold an older state (an
+        // explicit Glance update re-sends a session's last composition).
         _flow.value = data
-        try {
-            file(context).writeText(AppJson.encodeToString(WidgetSnapshotData.serializer(), data))
-        } catch (_: Exception) {
+        val f = file(context)
+        co.bitterlemon.trackify.util.Persist.write(f.path) {
+            try {
+                f.writeText(AppJson.encodeToString(WidgetSnapshotData.serializer(), data))
+            } catch (_: Exception) {
+            }
         }
     }
 

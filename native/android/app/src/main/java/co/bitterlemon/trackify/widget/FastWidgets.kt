@@ -51,6 +51,8 @@ object FastWidgets {
 
     private enum class Kind { SMALL, LARGE, TEAM }
 
+    private const val PHASE2_DELAY_MS = 700L
+
     /**
      * Redraw every placed timer, large and team widget from the current snapshot. Returns once all of them have
      * been handed to the launcher. [force] redraws even if the pixels were already pushed.
@@ -117,7 +119,9 @@ object FastWidgets {
             lastKey = key
             lastTeamKey = teamKey
         }
-        // Phase 2: every size the launcher may switch to (rotation, foldables).
+        // Phase 2: every size the launcher may switch to (rotation, foldables) — a moment later, so the launcher
+        // applies phase 1 first (it inflates every update on its main thread).
+        if (done.any { it.sizes.size > 1 }) delay(PHASE2_DELAY_MS)
         coroutineScope {
             done.filter { it.sizes.size > 1 }.forEach { d ->
                 launch(Dispatchers.Default) {
@@ -132,7 +136,7 @@ object FastWidgets {
                 }
             }
         }
-        Log.i(TAG, "fast push v${snap.version} running=${snap.running?.taskId} → ${targets.size} widgets (${groups.size} layouts): first on screen after ${firstAt.get()} ms, all after $visibleMs ms, all sizes after ${SystemClock.uptimeMillis() - t0} ms")
+        Log.i(TAG, "fast push v${snap.version} running=${snap.running?.taskId} → ${targets.size} widgets (${groups.size} layouts): first on screen after ${firstAt.get()} ms, all after $visibleMs ms, all sizes after ${SystemClock.uptimeMillis() - t0} ms (incl. ${PHASE2_DELAY_MS} ms pause)")
     }
 
     /** A newer snapshot exists: never put this one on screen. */

@@ -94,7 +94,8 @@ object TeamSnapshot {
 
     private fun write(context: Context, data: TeamSnapshotData) {
         _flow.value = data
-        runCatching { file(context).writeText(AppJson.encodeToString(TeamSnapshotData.serializer(), data)) }
+        val f = file(context)
+        co.bitterlemon.trackify.util.Persist.write(f.path) { runCatching { f.writeText(AppJson.encodeToString(TeamSnapshotData.serializer(), data)) } }
     }
 
     /**
@@ -125,7 +126,8 @@ object TeamSnapshot {
 
     fun clear(context: Context) {
         _flow.value = TeamSnapshotData()
-        runCatching { file(context).delete() }
+        val f = file(context)
+        co.bitterlemon.trackify.util.Persist.write(f.path) { runCatching { f.delete() } }
         lastFetch = 0
     }
 
@@ -172,6 +174,8 @@ object TeamSnapshot {
                 runCatching { g.engine.refreshTruth() }
             }
         }
+        FastWidgets.push(context, force = false)
+        kotlinx.coroutines.delay(WidgetUpdater.SETTLE_MS)
         WidgetUpdater.updateTeam(context)
     }
 }
