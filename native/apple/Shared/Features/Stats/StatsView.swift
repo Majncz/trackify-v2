@@ -27,6 +27,13 @@ struct BreakdownChartCard: View {
 
     struct Series: Identifiable { let id: String; let name: String; let hex: String; let alpha: Double }
 
+    /// Short days put ticks below an hour (0.25, 0.5…); `Int(h)` turned them all into "0h".
+    static func axisLabel(_ h: Double) -> String {
+        if h == 0 { return "0" }
+        if h < 1 { return "\(Int((h * 60).rounded()))m" }
+        return h == h.rounded() ? "\(Int(h))h" : String(format: "%.1fh", h)
+    }
+
     var body: some View {
         let series = top.enumerated().map { Series(id: $0.element.task.id, name: $0.element.task.name, hex: Accent.taskChartPalette[$0.offset % 6], alpha: 0.84) }
             + [Series(id: Analytics.otherKey, name: "Other", hex: Accent.otherHex, alpha: 0.72)]
@@ -49,7 +56,7 @@ struct BreakdownChartCard: View {
             .chartYAxis {
                 AxisMarks(position: .leading) { v in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 3])).foregroundStyle(Theme.border)
-                    AxisValueLabel { if let h = v.as(Double.self) { Text("\(Int(h))h").font(.system(size: 11)) } }
+                    AxisValueLabel { if let h = v.as(Double.self) { Text(Self.axisLabel(h)).font(.system(size: 11)) } }
                 }
             }
             .chartXAxis {
