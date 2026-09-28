@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.AttachMoney
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material.icons.outlined.Settings
@@ -175,9 +176,15 @@ fun WidgetsScreen(onBack: () -> Unit) {
                             icon = Icons.Outlined.ViewAgenda, onClick = { pinWidget(context, co.bitterlemon.trackify.widget.LargeTimerWidgetReceiver::class.java) },
                             trailing = { AddChip() },
                         )
+                        SectionDivider(icon = true)
+                        ListRow(
+                            "Team today", subtitle = "Who's tracking and the team's hours today",
+                            icon = Icons.Outlined.Groups, onClick = { pinWidget(context, co.bitterlemon.trackify.widget.TeamWidgetReceiver::class.java) },
+                            trailing = { AddChip() },
+                        )
                     }
                     if (android.os.Build.VERSION.SDK_INT >= 33) {
-                        Section(header = "Quick Settings", footer = "Widgets use your wallpaper colours. Force light or dark in Settings → Appearance.") {
+                        Section(header = "Quick Settings", footer = "Widgets follow your phone's light or dark mode. Force one in Settings → Appearance.") {
                             ListRow(
                                 "Trackify tile", subtitle = "Tap to stop, or start your last task",
                                 icon = Icons.Outlined.Tune, onClick = { requestTile(context) },
@@ -185,7 +192,7 @@ fun WidgetsScreen(onBack: () -> Unit) {
                             )
                         }
                     } else {
-                        SectionFooter("Widgets use your wallpaper colours. Force light or dark in Settings → Appearance.")
+                        SectionFooter("Widgets follow your phone's light or dark mode. Force one in Settings → Appearance.")
                     }
                 }
             }

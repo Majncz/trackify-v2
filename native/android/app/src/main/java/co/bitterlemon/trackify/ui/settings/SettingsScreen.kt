@@ -123,7 +123,7 @@ fun SettingsScreen(onBack: () -> Unit) {
 
                     Section(
                         header = "Appearance",
-                        footer = if (android.os.Build.VERSION.SDK_INT >= 31) "Widgets on System follow dark mode and use your wallpaper colours." else "Widgets on System follow dark mode.",
+                        footer = "Widgets on System follow your phone's light or dark mode.",
                     ) {
                         PickerRow("App", themes, theme) { v -> scope.launch { graph.session.setTheme(v) } }
                         SectionDivider()
