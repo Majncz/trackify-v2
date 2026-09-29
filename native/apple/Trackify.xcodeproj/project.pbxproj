@@ -38,6 +38,7 @@
 		391ABD9946492B56D49C45AB /* BillingGuide.swift in Sources */ = {isa = PBXBuildFile; fileRef = 281A65533EB7780782D49F56 /* BillingGuide.swift */; };
 		3943401EC7FEB33EF47B12A4 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4484A09B32DF794F9E4F1295 /* Theme.swift */; };
 		397993EF27D09D27A3B9879A /* BillingRatesTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CB0BE40DA7694E967B5C8CD /* BillingRatesTab.swift */; };
+		3A2C5E43CFB6B9B316819D94 /* WidgetViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF286E05A84F898EF405293 /* WidgetViews.swift */; };
 		3BAF36B76D33141D8D6C9CD2 /* AIBillingTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 909E67B136B718FCA4385CE5 /* AIBillingTab.swift */; };
 		4089D4801DAFE4E36B98C836 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 22797FA861B872512FE3FB2B /* WidgetKit.framework */; };
 		416435D009A283418D886BA0 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B55E024593F54F7CB556FB16 /* SwiftUI.framework */; };
@@ -51,11 +52,11 @@
 		4E9321B1248A584B32A314F9 /* ChatMarkdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CA94615A69C96462DFF50ED /* ChatMarkdown.swift */; };
 		50AF117412F4CA25556D6307 /* BillingHistoryTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = C98262B80F0B64FF8BF33444 /* BillingHistoryTab.swift */; };
 		51EEFE9F3D40827A47F5444A /* BillingRatesTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CB0BE40DA7694E967B5C8CD /* BillingRatesTab.swift */; };
+		535789801455777178C12DB3 /* WidgetViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF286E05A84F898EF405293 /* WidgetViews.swift */; };
 		5371C133524D1519E240045A /* BillingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41787396C2482203EA04C1DF /* BillingStore.swift */; };
 		542C9041D906C864A151C49A /* TrackifyKit in Frameworks */ = {isa = PBXBuildFile; productRef = 9A600FE6DE8D411E2048620A /* TrackifyKit */; };
 		57020A50A6EBEB39D571E208 /* AuthViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A187C2681230764CB4CB34ED /* AuthViews.swift */; };
 		58B7D167A2F40DE0EA16307D /* LiveActivityAndControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EC0896EC077C1C731A99E70 /* LiveActivityAndControl.swift */; };
-		5A6823FF4CB79E76709E377E /* MacWidgetViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7974B8667BF852A4775ECAD8 /* MacWidgetViews.swift */; };
 		5B7B1A76C7B7C66B9D3E9FA6 /* Reminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ED93246DD3CCA6D37F6C3F0 /* Reminder.swift */; };
 		5CCA56391ACC48587E4BDF5F /* HeatViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E867DB2EC95A24AD2ABC2CD /* HeatViews.swift */; };
 		5CD388467C5F1B0CF689CC87 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69F628C6E944BA1344E7D6DD /* RootView.swift */; };
@@ -72,7 +73,6 @@
 		711E7D052AF03301C178CA3B /* ChatMessageViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FB217F9767A6169318D004A /* ChatMessageViews.swift */; };
 		7530005CE8BF66672A005059 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 22797FA861B872512FE3FB2B /* WidgetKit.framework */; };
 		7625B2ECE0192439D2DD6B26 /* BillingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6F074EE56E04D0408787D1B /* BillingView.swift */; };
-		78710EA00BBFCB2C28B27027 /* MacWidgetViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7974B8667BF852A4775ECAD8 /* MacWidgetViews.swift */; };
 		7B234AE73D477308EF93391B /* LeaderboardCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC101F609590F416D75ED17E /* LeaderboardCard.swift */; };
 		7BA7D938BF8FCE99A47C4C62 /* ChatMarkdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CA94615A69C96462DFF50ED /* ChatMarkdown.swift */; };
 		7FCAFEA4CE8B37BDEEBEC493 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4231F4146CDE1C736A848DC0 /* DashboardView.swift */; };
@@ -80,7 +80,6 @@
 		806107D544A37520F22D3CDD /* LiveActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9967DD74CAED935A7779561D /* LiveActivityAttributes.swift */; };
 		873CDB56FDC96F0D88189995 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4484A09B32DF794F9E4F1295 /* Theme.swift */; };
 		8D08F80D57A9BCE805D993DE /* BillingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6F074EE56E04D0408787D1B /* BillingView.swift */; };
-		8D948513802BBA3AABE821EF /* MacWidgetViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7974B8667BF852A4775ECAD8 /* MacWidgetViews.swift */; };
 		8ECB08E79857D15553370FC5 /* TimerIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DEBF7B4816D82B9A35A8CD7 /* TimerIntents.swift */; };
 		913D21E736390837FA0DF075 /* LiveActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9967DD74CAED935A7779561D /* LiveActivityAttributes.swift */; };
 		92592BA5A6278AB24BB62B7C /* LiveActivityAndControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EC0896EC077C1C731A99E70 /* LiveActivityAndControl.swift */; };
@@ -95,6 +94,7 @@
 		9F95D7F967ED580BDFCB4FFA /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF517C3CFD78FE3E53EEFA2C /* Components.swift */; };
 		A1BE1A989F290ABA472415C3 /* MenuPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81A4D3236B61057AE10A6537 /* MenuPanelView.swift */; };
 		A2EAC9236618893A0F882059 /* GroupEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0D725297D3FE5FA2D9DBDA /* GroupEditorSheet.swift */; };
+		A668457C6C3298F2631D49F3 /* WidgetViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF286E05A84F898EF405293 /* WidgetViews.swift */; };
 		A8FF335C2EDAAE247E15D846 /* TaskDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A56284ED8953B84E2CCD4003 /* TaskDetailView.swift */; };
 		A955B4CA4DE2D3417BC92C5A /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FF2C9922347D9306AE85EA6 /* ChatView.swift */; };
 		AA3B621A9DB9AC0014964E0B /* TimerIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DEBF7B4816D82B9A35A8CD7 /* TimerIntents.swift */; };
@@ -103,6 +103,7 @@
 		B4DFD64F2BA6DFAE753EE3E5 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF517C3CFD78FE3E53EEFA2C /* Components.swift */; };
 		B4E8397EE4622E016DB77CFB /* TimerIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DEBF7B4816D82B9A35A8CD7 /* TimerIntents.swift */; };
 		B66B350F0552280198AA36F9 /* TaskDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A56284ED8953B84E2CCD4003 /* TaskDetailView.swift */; };
+		B85FB91DF677F2CCF10515F4 /* WidgetViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF286E05A84F898EF405293 /* WidgetViews.swift */; };
 		B9C1F4F5E7C84A25A760E3E6 /* AIBillingPeriodCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8CD3CEA2F1F9A743A6035EF /* AIBillingPeriodCard.swift */; };
 		BD140C597F145EB3A041EF6B /* TrackifyMacWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 08DF490AC1EA19B7960DDCA2 /* TrackifyMacWidgets.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		BDC3C06718B5A7B80BCCF04A /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4484A09B32DF794F9E4F1295 /* Theme.swift */; };
@@ -125,14 +126,13 @@
 		DC6B9DED21D68B4C894D62BE /* TrackifyKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1BFED707E86CF539894FB6DB /* TrackifyKit */; };
 		E225263AB6B56876D06260B0 /* Reminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ED93246DD3CCA6D37F6C3F0 /* Reminder.swift */; };
 		E2EDC9C6148C203BC141031D /* TrackifyKit in Frameworks */ = {isa = PBXBuildFile; productRef = C02DC519EDC51487402B23C7 /* TrackifyKit */; };
-		E746BFA8ACCBA006EC1A49C8 /* MacWidgetViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7974B8667BF852A4775ECAD8 /* MacWidgetViews.swift */; };
 		E7CA7502F49453B27B8F6F1A /* AIBillingPeriodCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8CD3CEA2F1F9A743A6035EF /* AIBillingPeriodCard.swift */; };
 		E81FA1F3064406F6C61DC8FB /* TimerSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47597AC1B81C73F379412EA2 /* TimerSheets.swift */; };
 		E898EFF4E00091FCD8C062A1 /* SessionSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 516216E5BC416F6F7E0C725D /* SessionSlider.swift */; };
 		EAAFFEEA5DB73A6B5BD618D4 /* PhoneStatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F522474E7CEFD1F5169E252 /* PhoneStatsView.swift */; };
 		ECAF3B148F05B9B5CD9FC4AB /* TrackifyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA46E1310B6C0963019BC2EB /* TrackifyApp.swift */; };
+		ED4DFBB463A6757F3518AD22 /* WidgetViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACF286E05A84F898EF405293 /* WidgetViews.swift */; };
 		EFA4CF1270A64144B0E2FC2E /* Appearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C2BE051915ADDF32431C73 /* Appearance.swift */; };
-		EFEA31E16FDEB3727E1BA52A /* MacWidgetViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7974B8667BF852A4775ECAD8 /* MacWidgetViews.swift */; };
 		EFEB5D0D668853595150DA4B /* Appearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C2BE051915ADDF32431C73 /* Appearance.swift */; };
 		EFFFBD87B76994766E6EE472 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B57F32A85D9A205D5A82FEB1 /* HomeView.swift */; };
 		F149D16B257968D7017043CB /* DashboardWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 346DB28AAEA7CBAF7E6DDBBA /* DashboardWindow.swift */; };
@@ -225,7 +225,6 @@
 		6EC0896EC077C1C731A99E70 /* LiveActivityAndControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityAndControl.swift; sourceTree = "<group>"; };
 		6F522474E7CEFD1F5169E252 /* PhoneStatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneStatsView.swift; sourceTree = "<group>"; };
 		7102C6D8550B95B3BD5DF990 /* TrackifyKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = TrackifyKit; path = Packages/TrackifyKit; sourceTree = SOURCE_ROOT; };
-		7974B8667BF852A4775ECAD8 /* MacWidgetViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacWidgetViews.swift; sourceTree = "<group>"; };
 		7CB0BE40DA7694E967B5C8CD /* BillingRatesTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BillingRatesTab.swift; sourceTree = "<group>"; };
 		81A4D3236B61057AE10A6537 /* MenuPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuPanelView.swift; sourceTree = "<group>"; };
 		86211328BA48374524567260 /* StatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsView.swift; sourceTree = "<group>"; };
@@ -243,6 +242,7 @@
 		A8CD3CEA2F1F9A743A6035EF /* AIBillingPeriodCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIBillingPeriodCard.swift; sourceTree = "<group>"; };
 		A8E850D11BC9F43D62DA2D69 /* DeepLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLink.swift; sourceTree = "<group>"; };
 		AB50E50F1F8262561BE4A2DB /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		ACF286E05A84F898EF405293 /* WidgetViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetViews.swift; sourceTree = "<group>"; };
 		B55E024593F54F7CB556FB16 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		B57F32A85D9A205D5A82FEB1 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		B6F074EE56E04D0408787D1B /* BillingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BillingView.swift; sourceTree = "<group>"; };
@@ -427,8 +427,8 @@
 			children = (
 				A0C2BE051915ADDF32431C73 /* Appearance.swift */,
 				CF517C3CFD78FE3E53EEFA2C /* Components.swift */,
-				7974B8667BF852A4775ECAD8 /* MacWidgetViews.swift */,
 				4484A09B32DF794F9E4F1295 /* Theme.swift */,
+				ACF286E05A84F898EF405293 /* WidgetViews.swift */,
 			);
 			path = Design;
 			sourceTree = "<group>";
@@ -796,11 +796,11 @@
 				D7BBAB724C213485D3589515 /* Components.swift in Sources */,
 				D9D4D57F8BC7E1976ABD3ACB /* LiveActivityAndControl.swift in Sources */,
 				386142FAA19F7C373298D97D /* LiveActivityAttributes.swift in Sources */,
-				EFEA31E16FDEB3727E1BA52A /* MacWidgetViews.swift in Sources */,
 				3943401EC7FEB33EF47B12A4 /* Theme.swift in Sources */,
 				B4E8397EE4622E016DB77CFB /* TimerIntents.swift in Sources */,
 				C0D7541E7122F0B2BB04B5C9 /* TrackifyWidgets.swift in Sources */,
 				00222E327FA7DC018B916A39 /* WidgetBundle.swift in Sources */,
+				ED4DFBB463A6757F3518AD22 /* WidgetViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -843,7 +843,6 @@
 				7B234AE73D477308EF93391B /* LeaderboardCard.swift in Sources */,
 				19CC3B2A0EBAF41E06A622DD /* LiveActivityAttributes.swift in Sources */,
 				08854BE8D2998A3E0EBAF9D6 /* LiveActivityController.swift in Sources */,
-				5A6823FF4CB79E76709E377E /* MacWidgetViews.swift in Sources */,
 				2694FE907C38B3EFC193F3D1 /* MarkPaidSheet.swift in Sources */,
 				9BF20A4D25821D0592559CF7 /* MoreView.swift in Sources */,
 				60FF53B629CC37A35AC90313 /* PhoneRootView.swift in Sources */,
@@ -862,6 +861,7 @@
 				C9792FBCE1F34098152001B7 /* TimerScreen.swift in Sources */,
 				E81FA1F3064406F6C61DC8FB /* TimerSheets.swift in Sources */,
 				ECAF3B148F05B9B5CD9FC4AB /* TrackifyApp.swift in Sources */,
+				535789801455777178C12DB3 /* WidgetViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -873,11 +873,11 @@
 				320A6CE43D283FD092499CE0 /* Components.swift in Sources */,
 				92592BA5A6278AB24BB62B7C /* LiveActivityAndControl.swift in Sources */,
 				913D21E736390837FA0DF075 /* LiveActivityAttributes.swift in Sources */,
-				8D948513802BBA3AABE821EF /* MacWidgetViews.swift in Sources */,
 				873CDB56FDC96F0D88189995 /* Theme.swift in Sources */,
 				801DD4A48C671693D6522AC6 /* TimerIntents.swift in Sources */,
 				F85219F1773D242C93A2FC6A /* TrackifyWidgets.swift in Sources */,
 				261A7B20A8B0007376468695 /* WidgetRenderTests.swift in Sources */,
+				3A2C5E43CFB6B9B316819D94 /* WidgetViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -889,11 +889,11 @@
 				30A0F89E4CF30514AE17BC43 /* Components.swift in Sources */,
 				58B7D167A2F40DE0EA16307D /* LiveActivityAndControl.swift in Sources */,
 				806107D544A37520F22D3CDD /* LiveActivityAttributes.swift in Sources */,
-				E746BFA8ACCBA006EC1A49C8 /* MacWidgetViews.swift in Sources */,
 				BDC3C06718B5A7B80BCCF04A /* Theme.swift in Sources */,
 				AA3B621A9DB9AC0014964E0B /* TimerIntents.swift in Sources */,
 				9427E20920E30D078ADC0F64 /* TrackifyWidgets.swift in Sources */,
 				9C783DE4B88B7EC1C75D7BC3 /* WidgetBundle.swift in Sources */,
+				A668457C6C3298F2631D49F3 /* WidgetViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -928,7 +928,6 @@
 				3505B06DBF0C7A4F6EE84BD8 /* HomeView.swift in Sources */,
 				4E7168E667771EAB62A67B33 /* LeaderboardCard.swift in Sources */,
 				CE398C07D69378460F214647 /* LiveActivityAttributes.swift in Sources */,
-				78710EA00BBFCB2C28B27027 /* MacWidgetViews.swift in Sources */,
 				4AA51F81200DCB76194B9DDB /* MarkPaidSheet.swift in Sources */,
 				A1BE1A989F290ABA472415C3 /* MenuPanelView.swift in Sources */,
 				E225263AB6B56876D06260B0 /* Reminder.swift in Sources */,
@@ -944,6 +943,7 @@
 				97872503F34ACA59A7C4B709 /* TimerIntents.swift in Sources */,
 				2EBC11F3AB2BC7FC6C127619 /* TimerSheets.swift in Sources */,
 				70128411B6031C8C2C9B6AE7 /* TrackifyMacApp.swift in Sources */,
+				B85FB91DF677F2CCF10515F4 /* WidgetViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

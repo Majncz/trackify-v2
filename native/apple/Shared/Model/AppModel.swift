@@ -352,7 +352,26 @@ final class AppModel {
     }
 
     func refreshPresenceToday() async {
-        if let p = try? await api.presence(day: calc.dayKey(Date()), range: .day) { presenceToday = p }
+        let day = calc.dayKey(Date())
+        if let p = try? await api.presence(day: day, range: .day) {
+            presenceToday = p
+            writeTeamSnapshot(p, day: day)
+        }
+    }
+
+    /// "Team today" for the widgets (the large timer widget and the Team widget).
+    private func writeTeamSnapshot(_ p: PresenceResponse, day: String) {
+        guard let uid = session?.userId else { return }
+        var team = TeamSnapshot.from(p, day: day, myId: uid)
+        // A local timer op the server hasn't confirmed yet: keep showing it on our own row.
+        if hasPendingOps, let r = SnapshotStore.shared.load().running {
+            team = team.applying(running: r, userId: uid)
+        }
+        let old = TeamSnapshotStore.shared.load()
+        var a = old, b = team
+        a.fetchedAt = 0; b.fetchedAt = 0
+        TeamSnapshotStore.shared.save(team)
+        if a != b { scheduleWidgetReload() }
     }
 
     // MARK: - Socket
@@ -536,6 +555,11 @@ final class AppModel {
         isFirstSnapshotWrite = false
         lastSnapshot = comparable
         SnapshotStore.shared.save(snap)
+        if session == nil { TeamSnapshotStore.shared.clear() }
+        scheduleWidgetReload()
+    }
+
+    private func scheduleWidgetReload() {
         widgetReloadTask?.cancel()
         widgetReloadTask = Task {
             try? await Task.sleep(nanoseconds: 300_000_000)

@@ -1,7 +1,7 @@
 import Foundation
 import TrackifyKit
 
-/// `trackify://task/<id>`, `trackify://home`, `trackify://stop` (widgets & Live Activity taps).
+/// `trackify://task/<id>`, `trackify://home`, `trackify://stats`, `trackify://team`, `trackify://stop` (widgets & Live Activity taps).
 enum DeepLink {
     static let scheme = "trackify"
 
@@ -14,6 +14,10 @@ enum DeepLink {
             if !id.isEmpty { NavigationState.shared.open(.task(id)) }
         case "stop":
             model.stop()
+        case "stats":
+            NavigationState.shared.select(.stats)
+        case "team":
+            NavigationState.shared.select(.team)
         default:
             NavigationState.shared.select(.home)
         }

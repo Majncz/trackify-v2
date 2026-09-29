@@ -9,11 +9,15 @@ final class WidgetRenderTests: XCTestCase {
     let dir = ProcessInfo.processInfo.environment["SHOT_DIR"] ?? NSTemporaryDirectory()
 
     func write<V: View>(_ view: V, name: String, dark: Bool) {
-        let r = ImageRenderer(content: view.environment(\.colorScheme, dark ? .dark : .light))
+        write(view.environment(\.colorScheme, dark ? .dark : .light), file: "widget-\(name)-\(dark ? "dark" : "light")")
+    }
+
+    func write<V: View>(_ view: V, file: String) {
+        let r = ImageRenderer(content: view)
         r.scale = 3
-        guard let img = r.uiImage, let data = img.pngData() else { XCTFail("render failed: \(name)"); return }
+        guard let img = r.uiImage, let data = img.pngData() else { XCTFail("render failed: \(file)"); return }
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        let url = URL(fileURLWithPath: dir).appendingPathComponent("widget-\(name)-\(dark ? "dark" : "light").png")
+        let url = URL(fileURLWithPath: dir).appendingPathComponent("\(file).png")
         XCTAssertNoThrow(try data.write(to: url))
         let a = XCTAttachment(image: img)
         a.name = url.lastPathComponent
@@ -21,33 +25,20 @@ final class WidgetRenderTests: XCTestCase {
         add(a)
     }
 
-    /// A home-screen-like tile.
-    func tile<V: View>(_ content: V, size: CGSize, dark: Bool) -> some View {
-        ZStack {
-            (dark ? Color(rgb: 0x111111) : Color.white)
-            content.padding(16)
-        }
-        .frame(width: size.width, height: size.height)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .padding(24)
-        .background(LinearGradient(colors: dark ? [Color(rgb: 0x1f2937), Color(rgb: 0x0f172a)] : [Color(rgb: 0xdbeafe), Color(rgb: 0xfce7f3)],
-                                    startPoint: .topLeading, endPoint: .bottomTrailing))
-    }
-
-    var running: WidgetSnapshot { .preview }
-    var idle: WidgetSnapshot { var s = WidgetSnapshot.preview; s.running = nil; return s }
-    let now = Date()
-
+    /// Every home-screen widget at its iPhone 16 Pro and iPad Pro 13" size: light, dark and tinted (iOS 18).
     func testSystemWidgets() {
-        for dark in [false, true] {
-            write(tile(SmallWidget(s: running, now: now), size: CGSize(width: 170, height: 170), dark: dark), name: "small-running", dark: dark)
-            write(tile(SmallWidget(s: idle, now: now), size: CGSize(width: 170, height: 170), dark: dark), name: "small-idle", dark: dark)
-            write(tile(MediumWidget(s: running, now: now), size: CGSize(width: 364, height: 170), dark: dark), name: "medium-running", dark: dark)
-            write(tile(MediumWidget(s: idle, now: now), size: CGSize(width: 364, height: 170), dark: dark), name: "medium-idle", dark: dark)
-            write(tile(LargeWidget(s: running, now: now), size: CGSize(width: 364, height: 382), dark: dark), name: "large-running", dark: dark)
-            write(tile(SignedOutWidget(compact: true), size: CGSize(width: 170, height: 170), dark: dark), name: "small-signedout", dark: dark)
+        for device in [WidgetGallery.Device.iphone, .ipad] {
+            for c in WidgetGallery.cases(device, now: now) {
+                for look in ["light", "dark", "tinted"] {
+                    write(WidgetGallery.tile(c, look: look, desktop: false), file: "widget-\(device.rawValue)-\(c.name)-\(look)")
+                }
+            }
         }
     }
+
+    var running: WidgetSnapshot { WidgetSamples.snapshot(running: true) }
+    var idle: WidgetSnapshot { WidgetSamples.snapshot(running: false) }
+    let now = Date()
 
     func testAccessoryWidgets() {
         let lock = { (v: AnyView, size: CGSize) in

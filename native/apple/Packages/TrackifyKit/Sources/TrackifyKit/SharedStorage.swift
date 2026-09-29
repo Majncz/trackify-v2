@@ -181,10 +181,22 @@ public struct WidgetSnapshot: Codable, Equatable, Sendable {
     /// Day the `todayTotalMs` belongs to (`yyyy-MM-dd`), so a stale snapshot after midnight shows 0.
     public var todayKey: String?
     public var tasks: [TaskItem]
+    /// Completed minutes per local day for the heat map (`WidgetHeat.days` days, oldest first), ending on `heatEndKey`.
+    public var heatDays: [Int]?
+    public var heatEndKey: String?
 
-    public init(signedIn: Bool, serverUrl: String, userId: String?, updatedAt: Int64, running: Running?, todayTotalMs: Int64, todayKey: String? = nil, tasks: [TaskItem]) {
+    public init(signedIn: Bool, serverUrl: String, userId: String?, updatedAt: Int64, running: Running?, todayTotalMs: Int64, todayKey: String? = nil,
+                tasks: [TaskItem], heatDays: [Int]? = nil, heatEndKey: String? = nil) {
         self.signedIn = signedIn; self.serverUrl = serverUrl; self.userId = userId; self.updatedAt = updatedAt
         self.running = running; self.todayTotalMs = todayTotalMs; self.todayKey = todayKey; self.tasks = tasks
+        self.heatDays = heatDays; self.heatEndKey = heatEndKey
+    }
+
+    /// Heat map ending this week; today's cell includes the running stretch.
+    public func heatGrid(now: Date = Date(), weeks: Int, calc: DayCalc = .current) -> WidgetHeat.Grid? {
+        guard let heatDays, !heatDays.isEmpty else { return nil }
+        return WidgetHeat.grid(days: heatDays, endKey: heatEndKey, today: now, weeks: weeks,
+                               todayMinutes: Int(todayTotal(now: now, calc: calc) / MINUTE_MS), calc: calc)
     }
 
     public static let signedOut = WidgetSnapshot(signedIn: false, serverUrl: APIClient.liveServer.absoluteString, userId: nil, updatedAt: 0,
@@ -215,15 +227,19 @@ public struct WidgetSnapshot: Codable, Equatable, Sendable {
         return copy
     }
 
+    /// Tasks kept for the widgets' lists (the large widget pages through them).
+    public static let maxTasks = 24
+
     public static func build(tasks: [TrackifyTask], running: RunningTimer?, session: StoredSession?, now: Date = Date(), calc: DayCalc = .current) -> WidgetSnapshot {
         let sorted = Analytics.sortTasks(tasks, runningTaskId: running?.taskId)
-        let items = sorted.prefix(8).map {
+        let items = sorted.prefix(maxTasks).map {
             TaskItem(id: $0.id, name: $0.name, accentHex: $0.accentHex, todayMs: Analytics.todayMs($0, now: now, calc: calc), totalMs: $0.totalMs)
         }
         var snap = WidgetSnapshot(signedIn: session != nil, serverUrl: session?.server ?? APIClient.liveServer.absoluteString,
                                   userId: session?.userId, updatedAt: now.ms, running: nil,
                                   todayTotalMs: Analytics.todayMs(tasks.filter { !$0.hidden }, now: now, calc: calc),
-                                  todayKey: calc.dayKey(now), tasks: Array(items))
+                                  todayKey: calc.dayKey(now), tasks: Array(items),
+                                  heatDays: WidgetHeat.minutesPerDay(tasks: tasks, end: now, calc: calc), heatEndKey: calc.dayKey(now))
         if let running, let t = tasks.first(where: { $0.id == running.taskId }) {
             snap.running = Running(taskId: t.id, taskName: t.name, accentHex: t.accentHex, startTime: running.startTime, pending: running.pending)
         } else if let running {

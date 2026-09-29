@@ -52,6 +52,11 @@ enum IntentRuntime {
         // Update the widget snapshot immediately so widgets flip before the network answers.
         let snap = SnapshotStore.shared.load().applying(running: st.running)
         SnapshotStore.shared.save(snap)
+        // Our own row in "Team today" follows right away too; the running task sorts first, so show page 1.
+        let team = TeamSnapshotStore.shared.load()
+        let moved = team.applying(running: snap.running, userId: snap.userId)
+        if moved != team { TeamSnapshotStore.shared.save(moved) }
+        WidgetPageStore.shared.reset()
         reloadWidgets()
         if !host {
             postChanged()
@@ -196,6 +201,22 @@ struct WidgetStopIntent: AppIntent {
     init() {}
     func perform() async throws -> some IntentResult {
         try await IntentRuntime.stop()
+        return .result()
+    }
+}
+
+/// Large widget ‹ ›: flip the task list page (the page slides in from that side).
+struct WidgetPageIntent: AppIntent {
+    static var title: LocalizedStringResource = "Page Trackify Tasks"
+    static var isDiscoverable = false
+    @Parameter(title: "Direction") var delta: Int
+    init() {}
+    init(delta: Int) { self.delta = delta }
+    func perform() async throws -> some IntentResult {
+        WidgetPageStore.shared.move(delta)
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadTimelines(ofKind: "TrackifyTimer")
+        #endif
         return .result()
     }
 }

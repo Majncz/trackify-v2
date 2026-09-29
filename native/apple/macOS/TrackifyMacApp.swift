@@ -111,62 +111,19 @@ enum LaunchAtLogin {
 enum WidgetPreviewRenderer {
     static func renderAll(to dir: String) {
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        let now = Date()
-        let running = sample(running: true)
-        let idle = sample(running: false)
-        let small = CGSize(width: 170, height: 170), medium = CGSize(width: 364, height: 170), large = CGSize(width: 364, height: 382)
-        for look in ["light", "dark", "tinted"] {
-            write(tile(MacSmallWidget(s: running, now: now), small, look), "small-running", look, dir)
-            write(tile(MacSmallWidget(s: idle, now: now), small, look), "small-idle", look, dir)
-            write(tile(MacMediumWidget(s: running, now: now), medium, look), "medium-running", look, dir)
-            write(tile(MacMediumWidget(s: idle, now: now), medium, look), "medium-idle", look, dir)
-            write(tile(MacLargeWidget(s: running, now: now), large, look), "large-running", look, dir)
-            write(tile(MacSignedOutWidget(), small, look), "small-signedout", look, dir)
-        }
-    }
-
-    /// A desktop-like tile: system widget background, or (tinted) the monochrome desktop rendering.
-    static func tile<V: View>(_ content: V, _ size: CGSize, _ look: String) -> some View {
-        let dark = look != "light"
-        let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
-        return ZStack {
-            if look == "tinted" {
-                content.padding(16).grayscale(1).brightness(0.35).foregroundStyle(.white)
-            } else {
-                content.padding(16)
+        for c in WidgetGallery.cases(.mac) {
+            for look in ["light", "dark", "tinted"] {
+                write(WidgetGallery.tile(c, look: look, desktop: true), "mac-widget-\(c.name)-\(look).png", dir)
             }
         }
-        .frame(width: size.width, height: size.height)
-        .background {
-            shape.fill(look == "tinted" ? Color.white.opacity(0.16) : Color(nsColor: dark ? NSColor(white: 0.12, alpha: 1) : .white))
-                .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
-        }
-                .padding(28)
-        .background(LinearGradient(colors: look == "tinted" ? [Color(rgb: 0x3b5b7a), Color(rgb: 0x1e2f45)]
-                                    : dark ? [Color(rgb: 0x273548), Color(rgb: 0x111827)] : [Color(rgb: 0xc7d8ea), Color(rgb: 0xe9dfd3)],
-                                    startPoint: .topLeading, endPoint: .bottomTrailing))
-        .environment(\.colorScheme, dark ? .dark : .light)
     }
 
-    static func write<V: View>(_ view: V, _ name: String, _ look: String, _ dir: String) {
+    static func write<V: View>(_ view: V, _ file: String, _ dir: String) {
         let r = ImageRenderer(content: view)
         r.scale = 2
         guard let cg = r.cgImage else { return }
         let data = NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])
-        try? data?.write(to: URL(fileURLWithPath: dir).appendingPathComponent("mac-widget-\(name)-\(look).png"))
-    }
-
-    static func sample(running: Bool) -> WidgetSnapshot {
-        let names = ["Learning Swift", "Code review", "Bombay kitchen hub", "Emails & admin", "Research: pricing", "Standup", "Design system", "Hiring"]
-        let today: [Int64] = [47, 70, 45, 30, 0, 15, 0, 0]
-        let tasks = names.enumerated().map { i, n in
-            WidgetSnapshot.TaskItem(id: "\(i + 1)", name: n, accentHex: Accent.taskAccentHex("\(i + 1)"),
-                                    todayMs: today[i] * MINUTE_MS, totalMs: Int64(50 - i * 5) * HOUR_MS)
-        }
-        return WidgetSnapshot(
-            signedIn: true, serverUrl: "", userId: "u", updatedAt: 0,
-            running: running ? .init(taskId: "1", taskName: "Learning Swift", accentHex: Accent.taskAccentHex("1"), startTime: Date().ms - 47 * 60_000) : nil,
-            todayTotalMs: 3 * HOUR_MS + 12 * MINUTE_MS, todayKey: DayCalc.current.dayKey(Date()), tasks: tasks)
+        try? data?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(file))
     }
 }
 #endif
