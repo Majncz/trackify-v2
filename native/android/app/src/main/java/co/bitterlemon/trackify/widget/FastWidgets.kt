@@ -76,6 +76,8 @@ object FastWidgets {
         val t0 = SystemClock.uptimeMillis()
         val snap = WidgetSnapshot.read(context)
         val team = TeamSnapshot.read(context)
+        currentTheme = snap.theme
+        TapLog.observePush(snap.running?.taskId)
         val key = WidgetUpdater.renderKey(snap)
         val teamKey = team.hashCode()
         // A fresh process: the widgets show what the previous one drew from the stored snapshot.
@@ -88,6 +90,7 @@ object FastWidgets {
             ids(LargeTimerWidgetReceiver::class.java).map { Kind.LARGE to it } +
             (if (force || teamKey != lastTeamKey) ids(TeamWidgetReceiver::class.java).map { Kind.TEAM to it } else emptyList())
         pushedVersion = maxOf(pushedVersion, snap.version)
+        pruneFrames(context, targets.map { it.second }.toSet())
         // Widgets of the same kind and size share one composition. The groups compose in parallel, each with its
         // own GlanceRemoteViews (their layout configuration is not shared). Each widget first gets the size it is
         // showing in the current orientation, then the full size map (rotation, foldables).
@@ -105,8 +108,10 @@ object FastWidgets {
                         val g = GlanceRemoteViews()
                         val main = primary(context, sizes)
                         val rv = g.compose(context, main, null, options) { Content(context, kind, snap, team) }.remoteViews
+                        if (animate) TapLog.stage("composed ${kind.name.lowercase()}")
                         if (stale(context, snap)) return@async null
                         ids.forEach { drawId(context, m, it, rv, animate) }
+                        if (animate) TapLog.stage("drawn ${kind.name.lowercase()}")
                         firstAt.compareAndSet(-1, SystemClock.uptimeMillis() - t0)
                         Done(kind, sizes, ids, options, g, main, rv)
                     }.onFailure { if (it !is kotlinx.coroutines.CancellationException) Log.w(TAG, "fast push failed ($kind)", it) }.getOrNull()
@@ -141,17 +146,55 @@ object FastWidgets {
 
     private fun rememberFrame(context: Context, id: Int, frame: Int) {
         frames[id] = frame
-        framePrefs(context).edit().putString(id.toString(), "${BuildConfig.VERSION_CODE}:$frame").apply()
+        framePrefs(context).edit().putString(id.toString(), "${BuildConfig.VERSION_CODE}:$frame").putString("theme", currentTheme).apply()
+    }
+
+    @Volatile private var currentTheme = "system"
+
+    /** Forget widgets that were removed from the home screen. */
+    private fun pruneFrames(context: Context, live: Set<Int>) {
+        val p = framePrefs(context)
+        val stale = p.all.keys.filter { k -> k.toIntOrNull()?.let { it !in live } == true }
+        if (stale.isEmpty()) return
+        val e = p.edit()
+        stale.forEach { e.remove(it); frames.remove(it.toInt()) }
+        e.apply()
     }
 
     private fun frameView(frame: Int) = if (frame == 0) R.id.frame_a else R.id.frame_b
 
-    private fun wrap(context: Context, content: RemoteViews, frame: Int): RemoteViews =
+    private fun wrap(context: Context, content: RemoteViews, frame: Int, hideOverlay: Boolean = true): RemoteViews =
         RemoteViews(context.packageName, R.layout.widget_flip).also {
             it.removeAllViews(frameView(frame))
             it.addView(frameView(frame), content)
             it.setDisplayedChild(R.id.flip, frame)
+            if (hideOverlay) it.setViewVisibility(R.id.pending, android.view.View.GONE)
         }
+
+    /**
+     * A tap has arrived: put a "Stopping… / Starting…" overlay on every widget this build has drawn, right now.
+     * No composition, no snapshot, no Glance: a handful of binder calls with a RemoteViews built from XML, so the
+     * widget reacts even when the real redraw is slow (cold process, busy or restricted phone). The redraw that
+     * follows removes it.
+     */
+    fun showPending(context: Context, text: String) {
+        val prefs = framePrefs(context)
+        val ids = prefs.all.keys.mapNotNull { it.toIntOrNull() }
+        if (ids.isEmpty()) return
+        val theme = prefs.getString("theme", "system") ?: "system"
+        val night = when (theme) {
+            "dark" -> true
+            "light" -> false
+            else -> (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        }
+        val rv = RemoteViews(context.packageName, R.layout.widget_flip)
+        rv.setViewVisibility(R.id.pending, android.view.View.VISIBLE)
+        rv.setTextViewText(R.id.pending_text, text)
+        rv.setTextColor(R.id.pending_text, if (night) 0xFFF2F2F7.toInt() else 0xFF1D1D1F.toInt())
+        rv.setInt(R.id.pending_bg, "setColorFilter", if (night) 0xE61C1C1E.toInt() else 0xE6FFFFFF.toInt())
+        val m = AppWidgetManager.getInstance(context)
+        for (id in ids) runCatching { m.partiallyUpdateAppWidget(id, rv) }
+    }
 
     /** Draw [content] for [id]: animated into the hidden frame when [animate] and the widget already shows a wrapper. */
     private fun drawId(context: Context, m: AppWidgetManager, id: Int, content: RemoteViews, animate: Boolean) {
@@ -162,8 +205,11 @@ object FastWidgets {
                 // Android 12+ hosts re-inflate on a partial update that adds views (a blank flash, no cross-fade):
                 // put the new state into the hidden frame with a full update (same layout, applied in place), then
                 // flip with a partial update that only changes the displayed child.
-                m.updateAppWidget(id, wrap(context, content, next).also { it.setDisplayedChild(R.id.flip, cur) })
-                m.partiallyUpdateAppWidget(id, RemoteViews(context.packageName, R.layout.widget_flip).also { it.setDisplayedChild(R.id.flip, next) })
+                m.updateAppWidget(id, wrap(context, content, next, hideOverlay = false).also { it.setDisplayedChild(R.id.flip, cur) })
+                m.partiallyUpdateAppWidget(id, RemoteViews(context.packageName, R.layout.widget_flip).also {
+                    it.setDisplayedChild(R.id.flip, next)
+                    it.setViewVisibility(R.id.pending, android.view.View.GONE)
+                })
             } else {
                 m.partiallyUpdateAppWidget(id, wrap(context, content, next))
             }

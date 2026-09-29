@@ -34,7 +34,9 @@ object TimerTap {
     }
 
     /** [apply] + [redraw] in one go, for callers that aren't broadcasts (tile, picker). */
-    fun tap(context: Context, op: Op, taskId: String?): Boolean {
+    fun tap(context: Context, op: Op, taskId: String?, source: String = "tile"): Boolean {
+        val procAge = SystemClock.uptimeMillis() - android.os.Process.getStartUptimeMillis()
+        co.bitterlemon.trackify.widget.TapLog.begin(context, op.name, source, procAge, procAge < 5_000)
         if (!apply(context, op, taskId)) return false
         AppGraph.get(context).scope.launch { redraw(context) }
         return true
@@ -45,6 +47,7 @@ object TimerTap {
         val t0 = SystemClock.uptimeMillis()
         val prev = WidgetSnapshot.read(context)
         if (!prev.signedIn) return false
+        co.bitterlemon.trackify.widget.TapLog.host(prev.serverUrl)
         inFlight.incrementAndGet()
         val g = AppGraph.get(context)
         val t1 = SystemClock.uptimeMillis()
@@ -56,6 +59,8 @@ object TimerTap {
         val t2 = SystemClock.uptimeMillis()
         val snap = g.buildSnapshot(fromSnapshot = true)
         val t3 = SystemClock.uptimeMillis()
+        co.bitterlemon.trackify.widget.TapLog.setIntended(snap.running?.taskId, g.engine.persisted.value.queue.lastOrNull()?.id)
+        co.bitterlemon.trackify.widget.TapLog.stage("applied")
         TeamSnapshot.applyLocalTimer(context, snap)
         Log.i(TAG, "tap $op ${taskId ?: ""} applied in ${SystemClock.uptimeMillis() - t0} ms (graph ${t1 - t0}, timer ${t2 - t1}, snapshot ${t3 - t2}; v${snap.version}, process up ${SystemClock.uptimeMillis() - android.os.Process.getStartUptimeMillis()} ms)")
         return true

@@ -2,6 +2,7 @@ package co.bitterlemon.trackify.timer
 
 import android.content.Context
 import android.util.Log
+import co.bitterlemon.trackify.widget.TapLog
 import co.bitterlemon.trackify.data.ApiClient
 import co.bitterlemon.trackify.data.ApiException
 import co.bitterlemon.trackify.data.AppJson
@@ -70,6 +71,12 @@ class TimerEngine(
     val errors: SharedFlow<String> = _errors.asSharedFlow()
 
     @Volatile private var inFlightId: String? = null
+
+    /** Monotonic ms of the last local timer change (tap or finished op): remote echoes right after it are stale. */
+    @Volatile private var lastLocalAt = 0L
+    private fun nowMs() = System.nanoTime() / 1_000_000L
+    private fun touchLocal() { lastLocalAt = nowMs() }
+    private fun recentLocal() = lastLocalAt != 0L && nowMs() - lastLocalAt < LOCAL_GUARD_MS
     private var loopJob: Job? = null
     private var attempt = 0
 
@@ -125,11 +132,13 @@ class TimerEngine(
     // ----------------- user actions (optimistic) -----------------
 
     fun start(taskId: String) {
+        touchLocal()
         mutate { TimerLogic.start(it, taskId, System.currentTimeMillis()).state }
         kick()
     }
 
     fun stop() {
+        touchLocal()
         mutate { TimerLogic.stop(it, System.currentTimeMillis(), inFlightId = inFlightId).state }
         kick()
     }
@@ -177,26 +186,50 @@ class TimerEngine(
 
     // ----------------- truth -----------------
 
-    fun adoptServer(running: Running?) {
+    fun adoptServer(running: Running?, reason: String = "timer refresh") {
+        val before = _state.value.running?.taskId
+        TapLog.reason(reason)
         mutate { TimerLogic.adoptTruth(it, running, System.currentTimeMillis()) }
+        val after = _state.value.running?.taskId
+        if (before != after) TapLog.note("adopted server state ($reason): ${before?.take(6) ?: "idle"} -> ${after?.take(6) ?: "idle"}")
     }
 
-    fun onRemoteStarted(taskId: String, startTime: Long) = adoptServer(Running(taskId, startTime))
+    /**
+     * Socket events are echoes of what the server did — often of *our own* previous op, arriving after a later
+     * local tap has already finished (queue empty again). Right after a local change they say nothing new, so they
+     * are ignored: a stale `timer:started` must never bring a stopped timer back.
+     */
+    private fun staleEcho(what: String): Boolean {
+        if (!recentLocal()) return false
+        TapLog.note("ignored $what (local change within ${LOCAL_GUARD_MS / 1000} s)")
+        return true
+    }
+
+    fun onRemoteStarted(taskId: String, startTime: Long) {
+        if (staleEcho("socket timer:started")) return
+        adoptServer(Running(taskId, startTime), "socket timer:started")
+    }
 
     fun onRemoteStopped(taskId: String?) {
+        if (staleEcho("socket timer:stopped")) return
+        val before = _state.value.running?.taskId
+        TapLog.reason("socket timer:stopped")
         mutate { TimerLogic.onRemoteStopped(it, taskId, System.currentTimeMillis()) }
+        if (before != _state.value.running?.taskId) TapLog.note("socket timer:stopped changed running: ${before?.take(6)} -> idle")
     }
 
     fun onRemoteStartUpdated(taskId: String, startTime: Long) {
+        if (staleEcho("socket timer:start-updated")) return
+        TapLog.reason("socket timer:start-updated")
         mutate { TimerLogic.onRemoteStartUpdated(it, taskId, startTime, System.currentTimeMillis()) }
     }
 
     /** GET /api/timer and adopt it if nothing is queued. */
-    suspend fun refreshTruth() {
+    suspend fun refreshTruth(reason: String = "timer refresh (GET /api/timer)") {
         if (_state.value.queue.isNotEmpty() || userId() == null) return
         try {
             val t = api.timer()
-            adoptServer(if (t.running && t.taskId != null && t.startTime != null) Running(t.taskId, t.startTime) else null)
+            adoptServer(if (t.running && t.taskId != null && t.startTime != null) Running(t.taskId, t.startTime) else null, reason)
         } catch (_: Exception) {
         }
     }
@@ -230,14 +263,24 @@ class TimerEngine(
     private suspend fun step(): OpOutcome? = lock.withLock {
         val op = _state.value.queue.firstOrNull() ?: return@withLock null
         if (userId() == null) return@withLock null
+        TapLog.opStage(op.id, "sent")
         val outcome = send(op)
+        val route = if (legacy()) "legacy" else "new route"
+        TapLog.opStage(op.id, "server " + when (outcome) {
+            OpOutcome.Done -> "ok ($route, ${lastStatus ?: "2xx"})"
+            is OpOutcome.Rejected -> "rejected ($route, ${lastStatus ?: "?"})"
+            OpOutcome.Retry -> "retry ($route, ${lastStatus ?: "no response"})"
+            OpOutcome.Unauthorized -> "401"
+        })
         when (outcome) {
             OpOutcome.Done -> {
                 attempt = 0
+                touchLocal()
                 mutate { TimerLogic.complete(it, op.id, System.currentTimeMillis()) }
             }
             is OpOutcome.Rejected -> {
                 attempt = 0
+                touchLocal()
                 mutate { TimerLogic.complete(it, op.id, System.currentTimeMillis()) }
                 _errors.tryEmit(outcome.message)
             }
@@ -291,8 +334,12 @@ class TimerEngine(
         mutate { it.copy(legacyServer = serverUrl()) }
     }
 
+    /** HTTP status of the last failed request (for the tap diagnostics); null after a success. */
+    @Volatile private var lastStatus: Int? = null
+
     private suspend fun send(op: TimerOp): OpOutcome = withContext(Dispatchers.IO) {
         inFlightId = op.id
+        lastStatus = null
         try {
             when (op) {
                 is TimerOp.Switch -> sendSwitch(op)
@@ -302,6 +349,7 @@ class TimerEngine(
                 }
             }
         } catch (e: ApiException) {
+            lastStatus = e.status
             outcomeFor(e)
         } catch (_: NetworkException) {
             OpOutcome.Retry
@@ -386,5 +434,6 @@ class TimerEngine(
 
     companion object {
         private const val TAG = "TimerEngine"
+        private const val LOCAL_GUARD_MS = 8_000L
     }
 }

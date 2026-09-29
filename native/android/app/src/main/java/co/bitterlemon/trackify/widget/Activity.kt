@@ -123,7 +123,7 @@ object HeatBitmaps {
     private val cache = object : android.util.LruCache<String, Set>(6) {}
 
     fun get(context: Context, days: List<Int>, liveTodayMin: Int, end: LocalDate, widthDp: Int, weeks: Int): Set {
-        val d = context.resources.displayMetrics.density.coerceAtMost(3f)
+        val d = context.resources.displayMetrics.density.coerceAtMost(2f)
         val key = "${days.hashCode()}:${liveTodayMin / 10}:$end:$widthDp:$weeks:$d"
         synchronized(cache) { cache.get(key)?.let { return it } }
         val s = render(days, liveTodayMin, end, widthDp, weeks, d)
@@ -142,7 +142,7 @@ object HeatBitmaps {
         val h = MONTH_H + 7 * cell + 6 * GAP
         val wPx = (widthDp * d).toInt().coerceIn(1, 1400)
         val hPx = (h * d).toInt().coerceIn(1, 500)
-        fun bmp() = Bitmap.createBitmap(wPx, hPx, Bitmap.Config.ARGB_8888)
+        fun bmp() = Bitmap.createBitmap(wPx, hPx, Bitmap.Config.ALPHA_8)
         val empty = bmp(); val levels = bmp(); val labels = bmp()
         val ce = Canvas(empty); val cl = Canvas(levels); val cb = Canvas(labels)
         val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() }

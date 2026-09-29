@@ -21,6 +21,11 @@ import co.bitterlemon.trackify.widget.WidgetSnapshot
 class TimerLiveService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onDestroy() {
+        running = false
+        super.onDestroy()
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val graph = AppGraph.get(applicationContext)
         val snap = WidgetSnapshot.read(applicationContext)
@@ -39,11 +44,15 @@ class TimerLiveService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        running = true
         graph.updateSocket()
         return START_STICKY
     }
 
     companion object {
+        /** Is the foreground timer service up (for the tap diagnostics)? */
+        @Volatile var running = false
+
         fun start(context: Context) {
             try {
                 ContextCompat.startForegroundService(context, Intent(context, TimerLiveService::class.java))

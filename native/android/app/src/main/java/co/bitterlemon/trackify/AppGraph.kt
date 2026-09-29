@@ -72,7 +72,7 @@ class AppGraph(private val context: Context) {
     val socket = SocketManager(object : SocketListener {
         override fun onAuthenticated() {
             engine.kick()
-            scope.launch { engine.refreshTruth() }
+            scope.launch { engine.refreshTruth("socket connected") }
             repo.requestRefresh(0)
         }
         override fun onTimerStarted(taskId: String, startTime: Long) {
@@ -146,7 +146,7 @@ class AppGraph(private val context: Context) {
         engine.kick()
         socket.nudge()
         scope.launch {
-            engine.refreshTruth()
+            engine.refreshTruth("app foreground")
             repo.refreshAll()
             co.bitterlemon.trackify.widget.TeamSnapshot.refresh(context)
             session.session.value?.let { s ->

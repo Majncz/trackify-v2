@@ -171,7 +171,7 @@ object TeamSnapshot {
             val mine = members.firstOrNull { it.userId == myId }
             val local = g.engine.persisted.value
             if (mine != null && local.queue.isEmpty() && (mine.live != (local.running != null) || (mine.live && mine.startTime != local.running?.startTime))) {
-                runCatching { g.engine.refreshTruth() }
+                runCatching { g.engine.refreshTruth("team presence reconcile") }
             }
         }
         FastWidgets.push(context, force = false)

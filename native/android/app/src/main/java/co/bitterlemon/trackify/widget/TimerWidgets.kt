@@ -472,7 +472,7 @@ class SmallTimerWidgetReceiver : FastAwareReceiver() {
 
 class LargeTimerWidget : GlanceAppWidget() {
     override val sizeMode: SizeMode = SizeMode.Exact
-    override val previewSizeMode = SizeMode.Responsive(setOf(DpSize(320.dp, 440.dp)))
+    override val previewSizeMode = SizeMode.Responsive(setOf(DpSize(340.dp, 540.dp)))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val flow = WidgetSnapshot.flow(context)
@@ -512,6 +512,7 @@ internal object PreviewData {
             signedIn = true,
             running = SnapshotRunning("p1", "Learning Swift", "#334155", System.currentTimeMillis() - 47 * 60_000L),
             tasks = tasks, lastTaskId = "p1", todayTotalMs = 3 * 3_600_000L + 12 * 60_000L, day = Time.today().toString(),
+            activity = List(ActivityMath.DAYS) { i -> val dow = i % 7; if (dow >= 5 || i % 11 == 3) 0 else 40 + (i * 37) % 300 }, activityEnd = Time.today().toString(),
         )
     val team: TeamSnapshotData
         get() {

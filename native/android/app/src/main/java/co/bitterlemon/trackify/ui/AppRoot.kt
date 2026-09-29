@@ -264,7 +264,8 @@ private fun AppNavHost(nav: NavHostController, onOpenBilling: () -> Unit) {
             composable("settings") { SettingsScreen(onBack = back) }
             composable("hidden") { HiddenTasksScreen(onBack = back) }
             composable("widgets") { WidgetsScreen(onBack = back) }
-            composable("about") { AboutScreen(onBack = back) }
+            composable("about") { AboutScreen(onBack = back, onOpen = { nav.navigate(it) }) }
+            composable("diag") { co.bitterlemon.trackify.ui.more.WidgetDiagnosticsScreen(onBack = back) }
         }
     }
 }

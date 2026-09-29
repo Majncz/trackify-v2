@@ -166,19 +166,19 @@ fun WidgetsScreen(onBack: () -> Unit) {
                 Column(Modifier.widthIn(max = 720.dp).fillMaxWidth()) {
                     Section(header = "Home screen", footer = "Start and stop without opening the app.") {
                         ListRow(
-                            "Timer", subtitle = "The running timer with Stop, or resume your last task in one tap",
-                            icon = Icons.Outlined.SmartDisplay, onClick = { pinWidget(context, co.bitterlemon.trackify.widget.SmallTimerWidgetReceiver::class.java) },
-                            trailing = { AddChip() },
-                        )
-                        SectionDivider(icon = true)
-                        ListRow(
-                            "Timer and tasks", subtitle = "Timer, tasks (tap one to switch), a work heat map and the team's day",
+                            "Timer and tasks", subtitle = "The big one (4×4): running timer with Stop, your tasks (tap one to switch), a work heat map and the team's day",
                             icon = Icons.Outlined.ViewAgenda, onClick = { pinWidget(context, co.bitterlemon.trackify.widget.LargeTimerWidgetReceiver::class.java) },
                             trailing = { AddChip() },
                         )
                         SectionDivider(icon = true)
                         ListRow(
-                            "Team today", subtitle = "Who's tracking and the team's hours today",
+                            "Timer", subtitle = "Small (2×2): only the running timer with Stop, or resume your last task",
+                            icon = Icons.Outlined.SmartDisplay, onClick = { pinWidget(context, co.bitterlemon.trackify.widget.SmallTimerWidgetReceiver::class.java) },
+                            trailing = { AddChip() },
+                        )
+                        SectionDivider(icon = true)
+                        ListRow(
+                            "Team today", subtitle = "Team only (4×2): everyone's hours today. No timer, no tasks",
                             icon = Icons.Outlined.Groups, onClick = { pinWidget(context, co.bitterlemon.trackify.widget.TeamWidgetReceiver::class.java) },
                             trailing = { AddChip() },
                         )
@@ -201,7 +201,7 @@ fun WidgetsScreen(onBack: () -> Unit) {
 }
 
 @Composable
-fun AboutScreen(onBack: () -> Unit) {
+fun AboutScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}) {
     val graph = AppGraph.get(LocalContext.current)
     val session by graph.session.session.collectAsState()
     val server by graph.session.server.collectAsState()
@@ -223,6 +223,9 @@ fun AboutScreen(onBack: () -> Unit) {
                         model?.model?.let { AboutRow("AI model", it) }
                         AboutRow("Server", server)
                         AboutRow("Signed in as", session?.email ?: "")
+                    }
+                    Section(topGap = 20.dp) {
+                        ListRow("Widget diagnostics", subtitle = "Timing of your last widget taps, to find out why one is slow", icon = Icons.Outlined.Info, onClick = { onOpen("diag") }, chevron = true)
                     }
                 }
             }
@@ -264,4 +267,49 @@ private fun AddChip() {
             .background(T.c.fill)
             .padding(horizontal = 16.dp, vertical = 7.dp),
     )
+}
+
+/** More → About → Widget diagnostics: the last widget / tile / notification taps with their stage timings. */
+@Composable
+fun WidgetDiagnosticsScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    var records by remember { mutableStateOf(co.bitterlemon.trackify.widget.TapLog.all(context).reversed()) }
+    var copied by remember { mutableStateOf(false) }
+    fun reload() { records = co.bitterlemon.trackify.widget.TapLog.all(context).reversed() }
+    LaunchedEffect(Unit) {
+        // The last tap's server stages arrive a moment after it: keep the list fresh while the screen is open.
+        while (true) { kotlinx.coroutines.delay(1500); reload() }
+    }
+    Column(Modifier.fillMaxSize()) {
+        ScreenBar("Widget diagnostics", onBack = onBack)
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            item {
+                Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(
+                        "Tap Stop and Start on a widget a few times, then come back here and press Copy. " +
+                            "Times are milliseconds after the tap reached the app.",
+                        fontSize = 14.sp, color = T.c.mutedForeground,
+                    )
+                    androidx.compose.foundation.layout.Row(Modifier.padding(top = 12.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
+                        TButton(if (copied) "Copied" else "Copy", onClick = {
+                            val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+                            cm?.setPrimaryClip(android.content.ClipData.newPlainText("Trackify widget diagnostics", co.bitterlemon.trackify.widget.TapLog.text(context)))
+                            copied = true
+                        }, size = BtnSize.Sm)
+                        TButton("Clear", variant = BtnVariant.Outline, onClick = { co.bitterlemon.trackify.widget.TapLog.clear(context); reload(); copied = false }, size = BtnSize.Sm)
+                    }
+                }
+            }
+            if (records.isEmpty()) {
+                item { Text("No taps recorded yet.", fontSize = 15.sp, color = T.c.mutedForeground, modifier = Modifier.padding(horizontal = 16.dp)) }
+            }
+            items(records, key = { it.id }) { r ->
+                Text(
+                    co.bitterlemon.trackify.widget.TapLog.format(r),
+                    fontSize = 12.sp, lineHeight = 17.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, color = T.c.foreground,
+                    modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+        }
+    }
 }
