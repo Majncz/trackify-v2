@@ -4,7 +4,7 @@
     <string name="widget_small_label">Timer</string>
     <string name="widget_small_desc">The running timer with Stop, or resume your last task in one tap</string>
     <string name="widget_large_label">Timer and tasks</string>
-    <string name="widget_large_desc">The running timer, your tasks with today\'s time, and the team\'s day</string>
+    <string name="widget_large_desc">The running timer, your tasks with today\'s time, a work heat map and the team\'s day</string>
     <string name="widget_team_label">Team today</string>
     <string name="widget_team_desc">Who is tracking now and everyone\'s hours today</string>
     <string name="tile_label">Trackify</string>

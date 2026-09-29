@@ -172,7 +172,7 @@ fun WidgetsScreen(onBack: () -> Unit) {
                         )
                         SectionDivider(icon = true)
                         ListRow(
-                            "Timer and tasks", subtitle = "The running timer and your recent tasks: tap one to switch",
+                            "Timer and tasks", subtitle = "Timer, tasks (tap one to switch), a work heat map and the team's day",
                             icon = Icons.Outlined.ViewAgenda, onClick = { pinWidget(context, co.bitterlemon.trackify.widget.LargeTimerWidgetReceiver::class.java) },
                             trailing = { AddChip() },
                         )

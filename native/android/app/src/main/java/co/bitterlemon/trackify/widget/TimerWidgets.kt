@@ -26,8 +26,6 @@ import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionSendBroadcast
 import androidx.glance.appwidget.provideContent
-import androidx.glance.appwidget.lazy.LazyColumn
-import androidx.glance.appwidget.lazy.items
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.ContentScale
@@ -155,6 +153,27 @@ internal fun Header(left: String, right: String?, modifier: GlanceModifier = Gla
     Row(modifier.fillMaxWidth().height(22.dp), verticalAlignment = Alignment.CenterVertically) {
         Txt(left, P.muted, 13, FontWeight.Medium, modifier = GlanceModifier.defaultWeight())
         if (right != null) Txt(right, P.muted, 13)
+    }
+}
+
+/** "Tasks · Today 3h" with ‹ › page buttons when the list has more than one page. */
+@Composable
+private fun TasksHeader(context: Context, left: String, right: String?, pages: Int) {
+    Row(GlanceModifier.fillMaxWidth().height(24.dp), verticalAlignment = Alignment.CenterVertically) {
+        Txt(left, P.muted, 13, FontWeight.Medium, modifier = GlanceModifier.defaultWeight())
+        if (right != null) Txt(right, P.muted, 13)
+        if (pages > 1) {
+            Spacer(GlanceModifier.width(6.dp))
+            PagerButton(R.drawable.ic_w_chev_left, "Previous tasks", TimerActionReceiver.intent(context, TimerActionReceiver.ACTION_PAGE, "prev").putExtra(TimerActionReceiver.EXTRA_DIR, -1))
+            PagerButton(R.drawable.ic_w_chev_right, "More tasks", TimerActionReceiver.intent(context, TimerActionReceiver.ACTION_PAGE, "next").putExtra(TimerActionReceiver.EXTRA_DIR, 1))
+        }
+    }
+}
+
+@Composable
+private fun PagerButton(icon: Int, label: String, intent: android.content.Intent) {
+    Box(GlanceModifier.size(26.dp).tap(actionSendBroadcast(intent), round = true), contentAlignment = Alignment.Center) {
+        Image(ImageProvider(icon), label, GlanceModifier.size(18.dp), colorFilter = ColorFilter.tint(P.muted))
     }
 }
 
@@ -379,10 +398,16 @@ private fun Large(context: Context, snap: WidgetSnapshotData, team: TeamSnapshot
             }
             Divider()
             // Running: "Tasks · Today 3h 59m" (Mac). Idle, the total is already the big number above.
-            Header(if (r != null) "Tasks" else "Start", if (r != null) "Today ${hm(snap.todayTotalLive(now))}" else null)
-            Spacer(GlanceModifier.height(4.dp))
-            // Every task, scrolling; the list takes whatever height the blocks below leave.
-            TaskList(snap, taskRowH, listRows, now, GlanceModifier.fillMaxWidth().defaultWeight())
+            val total = snap.tasks.size
+            val perPage = min(listRows, 10)
+            val pages = Paging.pages(total, perPage)
+            val page = Paging.pageOf(Paging.raw(context), pages)
+            TasksHeader(context, if (r != null) "Tasks" else "Start", if (r != null) "Today ${hm(snap.todayTotalLive(now))}" else null, pages)
+            Spacer(GlanceModifier.height(2.dp))
+            // A page of tasks (‹ › turn it with a fade); the list takes whatever height the blocks below leave.
+            Column(GlanceModifier.fillMaxWidth().defaultWeight()) {
+                Paging.range(page, perPage, total).forEach { TaskRow(snap.tasks[it], snap, taskRowH, showToday = true, now) }
+            }
             if (blocks.heat) {
                 Divider()
                 HeatSection(context, snap, size.width.value - 32, now)
@@ -392,24 +417,6 @@ private fun Large(context: Context, snap: WidgetSnapshotData, team: TeamSnapshot
                 TeamSection(context, team, members, teamRows, teamRowH, now)
             }
         }
-    }
-}
-
-/**
- * The task list. Android 12+: Glance's lazy list, so it scrolls (its items travel inside the RemoteViews).
- * Android 8–11: a lazy list (and any ListView adapter) is not usable in RemoteViews that [FastWidgets] pushes —
- * the platform refuses adapters in nested RemoteViews and Glance's own list needs a Glance session — so the rows
- * that fit are drawn in a plain column (tap works, no scrolling).
- */
-@Composable
-private fun TaskList(snap: WidgetSnapshotData, rowH: Int, rows: Int, now: Long, modifier: GlanceModifier) {
-    if (Build.VERSION.SDK_INT >= 31) {
-        LazyColumn(modifier) {
-            items(snap.tasks, itemId = { it.id.hashCode().toLong() }) { t -> TaskRow(t, snap, rowH, showToday = true, now) }
-        }
-    } else {
-        // (Glance allows at most 10 children per Column.)
-        Column(modifier) { snap.tasks.take(min(rows, 10)).forEach { TaskRow(it, snap, rowH, showToday = true, now) } }
     }
 }
 

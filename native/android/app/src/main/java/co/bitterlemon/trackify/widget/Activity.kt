@@ -179,3 +179,19 @@ object HeatBitmaps {
         return Set(empty, levels, labels, widthDp, ((h) + 0.5f).toInt())
     }
 }
+
+/** Paging of the large widget's task list (RemoteViews can't scroll a list that animates; pages flip with a fade). */
+object Paging {
+    fun pages(total: Int, perPage: Int): Int = if (total <= 0 || perPage <= 0) 1 else (total + perPage - 1) / perPage
+
+    /** [raw] page number wrapped into 0 until pages (past the last page comes the first again). */
+    fun pageOf(raw: Int, pages: Int): Int = Math.floorMod(raw, pages.coerceAtLeast(1))
+
+    /** Index range shown on [page]. */
+    fun range(page: Int, perPage: Int, total: Int): IntRange = (page * perPage) until minOf(total, (page + 1) * perPage)
+
+    private fun prefs(c: Context) = c.getSharedPreferences("widget_pager", Context.MODE_PRIVATE)
+    fun raw(c: Context): Int = prefs(c).getInt("page", 0)
+    fun move(c: Context, dir: Int) = prefs(c).edit().putInt("page", raw(c) + dir).apply()
+    fun reset(c: Context) { if (raw(c) != 0) prefs(c).edit().putInt("page", 0).apply() }
+}

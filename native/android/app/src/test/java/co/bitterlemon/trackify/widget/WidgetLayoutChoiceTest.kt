@@ -68,4 +68,11 @@ class WidgetLayoutChoiceTest {
         assertEquals(-1, grid.last()[2])  // Wednesday hasn't happened
         assertEquals(240, ActivityMath.totalMinutes(days, 4, end))
     }
+
+    @Test fun paging() {
+        assertEquals(1, Paging.pages(0, 4)); assertEquals(3, Paging.pages(10, 4)); assertEquals(2, Paging.pages(8, 4))
+        assertEquals(0, Paging.pageOf(3, 3)); assertEquals(2, Paging.pageOf(-1, 3)); assertEquals(1, Paging.pageOf(1, 3))
+        assertEquals(8..9, Paging.range(2, 4, 10))
+        assertEquals(0..3, Paging.range(0, 4, 10))
+    }
 }

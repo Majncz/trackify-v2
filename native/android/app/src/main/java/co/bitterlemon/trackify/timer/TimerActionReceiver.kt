@@ -18,6 +18,9 @@ class TimerActionReceiver : BroadcastReceiver() {
         const val ACTION_STOP = "co.bitterlemon.trackify.STOP"
         const val ACTION_START = "co.bitterlemon.trackify.START"
         const val ACTION_TOGGLE = "co.bitterlemon.trackify.TOGGLE"
+        /** Turn the large widget's task list to the next / previous page (extra [EXTRA_DIR]). */
+        const val ACTION_PAGE = "co.bitterlemon.trackify.PAGE"
+        const val EXTRA_DIR = "dir"
         const val EXTRA_TASK = "taskId"
 
         /**
@@ -39,6 +42,19 @@ class TimerActionReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == ACTION_PAGE) {
+            co.bitterlemon.trackify.widget.Paging.move(context, intent.getIntExtra(EXTRA_DIR, 1))
+            val app = context.applicationContext
+            val pending = goAsync()
+            AppGraph.get(context).scope.launch {
+                try {
+                    co.bitterlemon.trackify.widget.FastWidgets.push(app, force = true, animate = true)
+                } finally {
+                    pending?.finish()
+                }
+            }
+            return
+        }
         val op = when (intent.action) {
             ACTION_STOP -> TimerTap.Op.STOP
             ACTION_START -> TimerTap.Op.START
@@ -46,6 +62,7 @@ class TimerActionReceiver : BroadcastReceiver() {
             else -> return
         }
         if (!TimerTap.apply(context, op, intent.getStringExtra(EXTRA_TASK))) return
+        co.bitterlemon.trackify.widget.Paging.reset(context)
         // Never block the broadcast on the network: the next tap would queue behind it.
         val pending = goAsync()
         AppGraph.get(context).scope.launch {

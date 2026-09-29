@@ -53,8 +53,6 @@ object FastWidgets {
 
     private enum class Kind { SMALL, LARGE, TEAM }
 
-    private const val PHASE2_DELAY_MS = 700L
-
     /**
      * Redraw every placed timer, large and team widget from the current snapshot. Returns once all of them have
      * been handed to the launcher. [force] redraws even if the pixels were already pushed.
@@ -96,7 +94,7 @@ object FastWidgets {
         val groups = targets.groupBy { (kind, id) -> kind to sizesOf(context, m, id) }
         class Done(val kind: Kind, val sizes: List<DpSize>, val ids: List<Int>, val options: Bundle, val g: GlanceRemoteViews, val main: DpSize, val rv: RemoteViews)
         val firstAt = java.util.concurrent.atomic.AtomicLong(-1)
-        // Phase 1: the visible size of every widget — timer widgets (they show the tap) before the team widgets.
+        // The visible size of every widget (a rotation or resize calls the receiver, which draws again) — timer widgets (they show the tap) before the team widgets.
         suspend fun visible(part: Map<Pair<Kind, List<DpSize>>, List<Pair<Kind, Int>>>) = coroutineScope {
             part.map { (k, members) ->
                 async(Dispatchers.Default) {
@@ -121,27 +119,7 @@ object FastWidgets {
             lastKey = key
             lastTeamKey = teamKey
         }
-        // Phase 2: every size the launcher may switch to (rotation, foldables) — a moment later, so the launcher
-        // applies phase 1 first (it inflates every update on its main thread).
-        if (done.any { it.sizes.size > 1 }) delay(PHASE2_DELAY_MS)
-        coroutineScope {
-            done.filter { it.sizes.size > 1 }.forEach { d ->
-                launch(Dispatchers.Default) {
-                    runCatching {
-                        val views = d.sizes.map { sz ->
-                            sz to (if (sz == d.main) d.rv else d.g.compose(context, sz, null, d.options) { Content(context, d.kind, snap, team) }.remoteViews)
-                        }
-                        if (stale(context, snap)) return@launch
-                        d.ids.forEach { id ->
-                            val f = shownFrame(context, id) ?: 0
-                            m.updateAppWidget(id, combine(views.map { (sz, rv) -> sz to wrap(context, rv, f) }))
-                            rememberFrame(context, id, f)
-                        }
-                    }.onFailure { if (it !is kotlinx.coroutines.CancellationException) Log.w(TAG, "fast push (all sizes) failed (${d.kind})", it) }
-                }
-            }
-        }
-        Log.i(TAG, "fast push v${snap.version} running=${snap.running?.taskId} → ${targets.size} widgets (${groups.size} layouts): first on screen after ${firstAt.get()} ms, all after $visibleMs ms, all sizes after ${SystemClock.uptimeMillis() - t0} ms (incl. ${PHASE2_DELAY_MS} ms pause)")
+        Log.i(TAG, "fast push v${snap.version} running=${snap.running?.taskId} → ${targets.size} widgets (${groups.size} layouts): first on screen after ${firstAt.get()} ms, all after $visibleMs ms")
     }
 
     // ---- Animated state changes -------------------------------------------------------------------------------
@@ -180,7 +158,15 @@ object FastWidgets {
         val cur = shownFrame(context, id)
         if (animate && cur != null && Build.VERSION.SDK_INT >= 26) {
             val next = 1 - cur
-            m.partiallyUpdateAppWidget(id, wrap(context, content, next))
+            if (Build.VERSION.SDK_INT >= 31) {
+                // Android 12+ hosts re-inflate on a partial update that adds views (a blank flash, no cross-fade):
+                // put the new state into the hidden frame with a full update (same layout, applied in place), then
+                // flip with a partial update that only changes the displayed child.
+                m.updateAppWidget(id, wrap(context, content, next).also { it.setDisplayedChild(R.id.flip, cur) })
+                m.partiallyUpdateAppWidget(id, RemoteViews(context.packageName, R.layout.widget_flip).also { it.setDisplayedChild(R.id.flip, next) })
+            } else {
+                m.partiallyUpdateAppWidget(id, wrap(context, content, next))
+            }
             rememberFrame(context, id, next)
             return
         }
@@ -218,16 +204,6 @@ object FastWidgets {
                 Kind.TEAM -> TeamContent(context, snap, team)
             }
         }
-    }
-
-    /** One RemoteViews for all sizes the launcher may show (like Glance's SizeMode.Exact). */
-    private fun combine(views: List<Pair<DpSize, RemoteViews>>): RemoteViews {
-        if (views.size == 1) return views[0].second
-        if (Build.VERSION.SDK_INT >= 31) {
-            return RemoteViews(views.associate { (s, rv) -> SizeF(s.width.value, s.height.value) to rv })
-        }
-        // Pre-12: [portrait, landscape] (see sizesOf).
-        return RemoteViews(views[1].second, views[0].second)
     }
 
     /** The size shown in the current orientation: portrait = the narrow, tall one; landscape = the wide one. */
