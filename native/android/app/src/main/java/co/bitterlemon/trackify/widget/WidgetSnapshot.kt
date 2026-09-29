@@ -39,6 +39,9 @@ data class WidgetSnapshotData(
      * older snapshot must never land on top of it.
      */
     val version: Long = 0,
+    /** Minutes tracked per local day, oldest first, ending on [activityEnd] (work heat map). */
+    val activity: List<Int> = emptyList(),
+    val activityEnd: String = "",
 ) {
     fun noticeNow(now: Long): String? = notice?.takeIf { now - noticeAt in 0..90_000 }
 
@@ -101,7 +104,9 @@ object WidgetSnapshot {
             },
             todayTotalMs = list.sumOf { todayOf(it) },
             theme = theme,
-            tasks = sorted.take(12).map { t ->
+            activity = ActivityMath.minutesPerDay(list, today, Time.zone()),
+            activityEnd = today.toString(),
+            tasks = sorted.take(30).map { t ->
                 SnapshotTask(t.id, t.name, t.accent, todayOf(t), t.events.sumOf { (it.toMs - it.fromMs).coerceAtLeast(0) })
             },
             lastTaskId = TaskSort.lastUsed(list)?.id ?: sorted.firstOrNull()?.id,

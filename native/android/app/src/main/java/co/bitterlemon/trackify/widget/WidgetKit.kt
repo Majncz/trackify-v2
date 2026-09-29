@@ -165,7 +165,7 @@ internal fun Clock(startTime: Long, sizeDp: Float, modifier: GlanceModifier = Gl
 @Composable
 internal fun StopPill(action: Action, modifier: GlanceModifier = GlanceModifier, height: Dp = 36.dp) {
     Row(
-        modifier.height(height).rounded(P.stopBg, height / 2).clickable(action).padding(horizontal = 16.dp),
+        modifier.height(height).rounded(P.stopBg, height / 2).tap(action).padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Image(ImageProvider(R.drawable.ic_stop), null, GlanceModifier.size(15.dp), colorFilter = ColorFilter.tint(P.stopFg))
@@ -177,10 +177,14 @@ internal fun StopPill(action: Action, modifier: GlanceModifier = GlanceModifier,
 /** Round soft button with an icon (Stop on the 2×1 widget, Play when idle). */
 @Composable
 internal fun RoundButton(icon: Int, label: String, bg: ColorProvider, fg: ColorProvider, size: Dp, action: Action?) {
-    Box(GlanceModifier.circle(bg, size).let { if (action != null) it.clickable(action) else it }, contentAlignment = Alignment.Center) {
+    Box(GlanceModifier.circle(bg, size).let { if (action != null) it.tap(action, round = true) else it }, contentAlignment = Alignment.Center) {
         Image(ImageProvider(icon), contentDescription = label, modifier = GlanceModifier.size(size * 0.4f), colorFilter = ColorFilter.tint(fg))
     }
 }
+
+/** A tap target with visible press feedback (ripple), drawn by the launcher before any data changes. */
+internal fun GlanceModifier.tap(action: Action, round: Boolean = false): GlanceModifier =
+    clickable(action, if (round) R.drawable.w_ripple_round else R.drawable.w_ripple)
 
 internal fun openApp(context: Context, route: String? = null): Action = actionStartActivity(
     Intent(context, MainActivity::class.java)
@@ -193,7 +197,7 @@ internal fun hm(ms: Long): String = if (ms < 60_000) "0m" else Format.durationWo
 
 @Composable
 internal fun Message(context: Context, title: String, body: String) {
-    Card(GlanceModifier.clickable(openApp(context))) {
+    Card(GlanceModifier.tap(openApp(context))) {
         Column(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.Bottom) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Txt("Trackify", P.fg, 15, FontWeight.Bold)

@@ -104,7 +104,7 @@ private fun CompactMemberRow(m: TeamMember, me: Boolean, now: Long) {
 /** Header + up to [rows] member rows (the large timer widget and the Team widget share it). */
 @Composable
 internal fun TeamSection(context: Context, team: TeamSnapshotData, members: List<TeamMember>, rows: Int, rowH: Int, now: Long) {
-    Column(GlanceModifier.fillMaxWidth().clickable(openTeam(context))) {
+    Column(GlanceModifier.fillMaxWidth().tap(openTeam(context))) {
         Header("Team · today", if (members.isEmpty()) null else hm(team.totalMs(now)))
         Spacer(GlanceModifier.height(4.dp))
         if (members.isEmpty()) {
@@ -128,7 +128,7 @@ internal fun TeamContent(context: Context, snap: WidgetSnapshotData, team: TeamS
     val live = members.count { it.live }
     val fs = fontScale(context)
     val h = size.height.value
-    Card(GlanceModifier.clickable(openTeam(context)), padding = if (h < BAR) 14.dp else 16.dp) {
+    Card(GlanceModifier.tap(openTeam(context)), padding = if (h < BAR) 14.dp else 16.dp) {
         Column(GlanceModifier.fillMaxSize()) {
             when {
                 !team.loaded -> {

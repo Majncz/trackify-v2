@@ -23,7 +23,11 @@ import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionSendBroadcast
 import androidx.glance.appwidget.provideContent
+import androidx.glance.appwidget.lazy.LazyColumn
+import androidx.glance.appwidget.lazy.items
 import androidx.glance.layout.Alignment
+import androidx.glance.layout.Box
+import androidx.glance.layout.ContentScale
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
@@ -120,7 +124,7 @@ private fun TaskRow(t: SnapshotTask, snap: WidgetSnapshotData, height: Int, show
     val running = snap.running?.taskId == t.id
     val context = androidx.glance.LocalContext.current
     Row(
-        GlanceModifier.fillMaxWidth().height(height.dp).clickable(if (running) stopAction(context) else startAction(context, t.id)),
+        GlanceModifier.fillMaxWidth().height(height.dp).tap(if (running) stopAction(context) else startAction(context, t.id)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Dot(accent(t.accentHex), 8.dp)
@@ -162,16 +166,18 @@ internal fun TimerContent(context: Context, snap: WidgetSnapshotData, team: Team
             if (snap.version < FastWidgets.pushedVersion) FastWidgets.repushSoon(context)
         }
     }
-    if (!snap.signedIn) return Message(context, "Not signed in", "Open Trackify to sign in")
     val size = LocalSize.current
-    if (snap.running == null && startable(snap).isEmpty()) return Message(context, "No tasks yet", "Create one in Trackify")
-    val w = size.width.value
-    val h = size.height.value
-    when {
-        h < BAR && w < WIDE -> BarNarrow(context, snap)
-        h < BAR -> BarWide(context, snap)
-        w < WIDE -> Square(context, snap)
-        h < 300 -> Medium(context, snap)
+    val layout = WidgetLayoutChoice.choose(
+        if (team == null) WidgetLayoutChoice.Kind.SMALL else WidgetLayoutChoice.Kind.LARGE,
+        snap.signedIn, snap.running != null || startable(snap).isNotEmpty(), size.width.value, size.height.value,
+    )
+    when (layout) {
+        WidgetLayoutChoice.Layout.MESSAGE ->
+            if (!snap.signedIn) Message(context, "Not signed in", "Open Trackify to sign in") else Message(context, "No tasks yet", "Create one in Trackify")
+        WidgetLayoutChoice.Layout.BAR_NARROW -> BarNarrow(context, snap)
+        WidgetLayoutChoice.Layout.BAR_WIDE -> BarWide(context, snap)
+        WidgetLayoutChoice.Layout.SQUARE -> Square(context, snap)
+        WidgetLayoutChoice.Layout.MEDIUM -> Medium(context, snap)
         else -> Large(context, snap, team)
     }
 }
@@ -183,7 +189,7 @@ private fun BarNarrow(context: Context, snap: WidgetSnapshotData) {
     if (r != null) {
         Card(padding = 14.dp) {
             Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-                Column(GlanceModifier.defaultWeight().clickable(openApp(context))) {
+                Column(GlanceModifier.defaultWeight().tap(openApp(context))) {
                     TaskTitle(r, 13, maxLines = if (fontScale(context) > 1.15f) 1 else 2)
                     Clock(r.startTime, 26f)
                 }
@@ -194,7 +200,7 @@ private fun BarNarrow(context: Context, snap: WidgetSnapshotData) {
         return
     }
     val t = startable(snap).first()
-    Card(GlanceModifier.clickable(startAction(context, t.id)), padding = 14.dp) {
+    Card(GlanceModifier.tap(startAction(context, t.id)), padding = 14.dp) {
         Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
             Column(GlanceModifier.defaultWeight()) {
                 Txt("Not tracking", P.muted, 12, FontWeight.Medium)
@@ -219,19 +225,19 @@ private fun BarWide(context: Context, snap: WidgetSnapshotData) {
     Card(padding = 14.dp) {
         if (r != null) {
             Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-                Column(GlanceModifier.defaultWeight().clickable(openApp(context))) {
+                Column(GlanceModifier.defaultWeight().tap(openApp(context))) {
                     TaskTitle(r, 14)
                     SinceLine(snap, r)
                 }
                 Spacer(GlanceModifier.width(10.dp))
-                Clock(r.startTime, 30f, GlanceModifier.clickable(openApp(context)))
+                Clock(r.startTime, 30f, GlanceModifier.tap(openApp(context)))
                 Spacer(GlanceModifier.width(12.dp))
                 StopPill(stopAction(context))
             }
         } else {
             val rows = floor((h - 28) / 34f).toInt().coerceIn(1, 2)
             Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-                Column(GlanceModifier.width(112.dp).clickable(openApp(context))) {
+                Column(GlanceModifier.width(112.dp).tap(openApp(context))) {
                     Txt("Not tracking", P.muted, 12, FontWeight.Medium)
                     Txt(hm(snap.todayTotalLive(now)), P.fg, 24, FontWeight.Medium)
                 }
@@ -255,16 +261,16 @@ private fun Square(context: Context, snap: WidgetSnapshotData) {
         Column(GlanceModifier.fillMaxSize()) {
             if (r != null) {
                 // (No weighted spacer inside a clickable column: RemoteViews ignores it there.)
-                Column(GlanceModifier.fillMaxWidth().clickable(openApp(context))) {
+                Column(GlanceModifier.fillMaxWidth().tap(openApp(context))) {
                     TaskTitle(r, 15, maxLines = 2)
                     SinceLine(snap, r)
                 }
                 Spacer(GlanceModifier.defaultWeight())
-                Clock(r.startTime, 34f, GlanceModifier.clickable(openApp(context)))
+                Clock(r.startTime, 34f, GlanceModifier.tap(openApp(context)))
                 Spacer(GlanceModifier.height(8.dp))
                 StopPill(stopAction(context), GlanceModifier.fillMaxWidth())
             } else {
-                Column(GlanceModifier.fillMaxWidth().clickable(openApp(context))) {
+                Column(GlanceModifier.fillMaxWidth().tap(openApp(context))) {
                     Txt("Not tracking", P.muted, 12, FontWeight.Medium)
                     Txt(hm(snap.todayTotalLive(now)), P.fg, 26, FontWeight.Medium)
                 }
@@ -291,22 +297,22 @@ private fun Medium(context: Context, snap: WidgetSnapshotData) {
         Row(GlanceModifier.fillMaxSize()) {
             Column(GlanceModifier.width(left.dp).fillMaxHeight()) {
                 if (r != null) {
-                    Column(GlanceModifier.fillMaxWidth().clickable(openApp(context))) {
+                    Column(GlanceModifier.fillMaxWidth().tap(openApp(context))) {
                         TaskTitle(r, 15)
                         SinceLine(snap, r)
                     }
                     Spacer(GlanceModifier.defaultWeight())
-                    Clock(r.startTime, 36f, GlanceModifier.clickable(openApp(context)))
+                    Clock(r.startTime, 36f, GlanceModifier.tap(openApp(context)))
                     Spacer(GlanceModifier.height(8.dp))
                     StopPill(stopAction(context), GlanceModifier.fillMaxWidth())
                 } else {
                     val last = lastTask(snap)
-                    Column(GlanceModifier.fillMaxWidth().clickable(openApp(context))) {
+                    Column(GlanceModifier.fillMaxWidth().tap(openApp(context))) {
                         Txt("Not tracking", P.muted, 13, FontWeight.Medium)
                         Txt(hm(snap.todayTotalLive(now)), P.fg, 30, FontWeight.Medium)
                     }
                     Spacer(GlanceModifier.defaultWeight())
-                    if (last != null) Txt("Last: ${last.name}", P.muted, 12, modifier = GlanceModifier.clickable(startAction(context, last.id)))
+                    if (last != null) Txt("Last: ${last.name}", P.muted, 12, modifier = GlanceModifier.tap(startAction(context, last.id)))
                 }
             }
             Spacer(GlanceModifier.width(16.dp))
@@ -319,42 +325,42 @@ private fun Medium(context: Context, snap: WidgetSnapshotData) {
     }
 }
 
-/** 4×3 and up (Mac large): timer, divider, "Tasks · Today" rows; plus the team's day on "Timer and tasks". */
+/**
+ * 4×3 and up (Mac large): timer, divider, a scrolling task list (tap a row to switch, ▶ starts), then — when the
+ * height allows — the work heat map and the team's day. The team block goes first when space runs out, then the
+ * heat map; the list always keeps at least three rows.
+ */
 @Composable
 private fun Large(context: Context, snap: WidgetSnapshotData, team: TeamSnapshotData?) {
     val r = snap.running
     val now = System.currentTimeMillis()
-    val h = LocalSize.current.height.value
+    val size = LocalSize.current
     val fs = fontScale(context)
-    val taskRowH = if (fs > 1.15f) 40 else 36
+    val blocks = WidgetLayoutChoice.largeBlocks(size.height.value, fs, r != null, team != null && team.loaded)
     val teamRowH = teamRowHeight(fs)
-    val heroH = if (r != null) (22 + 17) * fs + 52 else (18 + 42) * fs
-    val headerH = 22 + 4
-    var avail = h - 32 - heroH - 21 - headerH
-    // Team section: up to 4 members, but never at the cost of the first 3 task rows.
     val members = team?.rows(now) ?: emptyList()
+    val taskRowH = if (fs > 1.15f) 40 else 36
+    // Team rows: as many as fit after the list's three rows (max 4).
     var teamRows = 0
-    if (team != null && team.loaded) {
-        var k = min(4, maxOf(1, members.size))
-        while (k > 0 && avail - (21 + headerH + k * teamRowH) < 3 * taskRowH) k--
-        teamRows = k
-        if (k > 0) avail -= 21 + headerH + k * teamRowH
+    if (blocks.team) {
+        val hero = if (r != null) (22 + 17) * fs + 52 else (18 + 42) * fs
+        var spare = size.height.value - (32 + hero + 21 + 26 + 3 * taskRowH) - (if (blocks.heat) 21 + WidgetLayoutChoice.HEAT_H else 0) - (21 + 26)
+        teamRows = 1
+        while (teamRows < min(4, maxOf(1, members.size)) && spare - (teamRows + 1) * teamRowH >= 0 && spare - teamRows * teamRowH >= teamRowH) teamRows++
     }
-    val tasks = snap.tasks
-    val taskRows = min(tasks.size, floor(avail / taskRowH).toInt().coerceAtLeast(1))
     Card(padding = 16.dp) {
         Column(GlanceModifier.fillMaxSize()) {
             if (r != null) {
-                Column(GlanceModifier.fillMaxWidth().clickable(openApp(context))) {
+                Column(GlanceModifier.fillMaxWidth().tap(openApp(context))) {
                     TaskTitle(r, 16)
                     SinceLine(snap, r, 13)
                 }
                 Row(GlanceModifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Clock(r.startTime, 42f, GlanceModifier.defaultWeight().clickable(openApp(context)))
+                    Clock(r.startTime, 42f, GlanceModifier.defaultWeight().tap(openApp(context)))
                     StopPill(stopAction(context), height = 38.dp)
                 }
             } else {
-                Column(GlanceModifier.fillMaxWidth().clickable(openApp(context))) {
+                Column(GlanceModifier.fillMaxWidth().tap(openApp(context))) {
                     Txt("Not tracking", P.muted, 13, FontWeight.Medium)
                     Txt(hm(snap.todayTotalLive(now)), P.fg, 32, FontWeight.Medium)
                 }
@@ -363,14 +369,42 @@ private fun Large(context: Context, snap: WidgetSnapshotData, team: TeamSnapshot
             // Running: "Tasks · Today 3h 59m" (Mac). Idle, the total is already the big number above.
             Header(if (r != null) "Tasks" else "Start", if (r != null) "Today ${hm(snap.todayTotalLive(now))}" else null)
             Spacer(GlanceModifier.height(4.dp))
-            // Glance allows at most 10 children per Column: keep the rows in their own.
-            Column(GlanceModifier.fillMaxWidth()) {
-                tasks.take(min(taskRows, 10)).forEach { TaskRow(it, snap, taskRowH, showToday = true, now) }
+            // Every task, scrolling; the list takes whatever height the blocks below leave.
+            LazyColumn(GlanceModifier.fillMaxWidth().defaultWeight()) {
+                items(snap.tasks, itemId = { it.id.hashCode().toLong() }) { t -> TaskRow(t, snap, taskRowH, showToday = true, now) }
             }
-            if (team != null && teamRows > 0) {
+            if (blocks.heat) {
+                Divider()
+                HeatSection(context, snap, size.width.value - 32, now)
+            }
+            if (team != null && blocks.team && teamRows > 0) {
                 Divider()
                 TeamSection(context, team, members, teamRows, teamRowH, now)
             }
+        }
+    }
+}
+
+/** Last N weeks of tracked time as a calendar grid (weeks = columns, Mon–Sun = rows), tap opens Stats. */
+@Composable
+private fun HeatSection(context: Context, snap: WidgetSnapshotData, widthDp: Float, now: Long) {
+    val end = runCatching { java.time.LocalDate.parse(snap.activityEnd) }.getOrNull() ?: return
+    if (end != Time.today() || snap.activity.isEmpty()) return
+    val weeks = ActivityMath.weeksFor(widthDp)
+    val r = snap.running
+    val live = if (r == null) 0 else (Time.liveRangeMs(r.startTime, now, Time.startOfDay(end), Time.endOfDay(end)) / 60_000L).toInt()
+    val bm = HeatBitmaps.get(context, snap.activity, live, end, widthDp.toInt(), weeks)
+    val total = ActivityMath.totalMinutes(snap.activity.toMutableList().also { it[it.lastIndex] = it.last() + live }, weeks, end)
+    Column(GlanceModifier.fillMaxWidth().tap(openApp(context, "tab_stats"))) {
+        Box(GlanceModifier.fillMaxWidth().height(bm.heightDp.dp)) {
+            Image(ImageProvider(bm.empty), null, GlanceModifier.fillMaxSize(), colorFilter = ColorFilter.tint(P.soft), contentScale = ContentScale.FillBounds)
+            Image(ImageProvider(bm.levels), null, GlanceModifier.fillMaxSize(), colorFilter = ColorFilter.tint(P.live), contentScale = ContentScale.FillBounds)
+            Image(ImageProvider(bm.labels), null, GlanceModifier.fillMaxSize(), colorFilter = ColorFilter.tint(P.muted), contentScale = ContentScale.FillBounds)
+        }
+        Spacer(GlanceModifier.height(4.dp))
+        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Txt("Last $weeks weeks", P.muted, 12, modifier = GlanceModifier.defaultWeight())
+            Txt(hm(total * 60_000L), P.muted, 12)
         }
     }
 }
