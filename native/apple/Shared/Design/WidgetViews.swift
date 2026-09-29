@@ -24,17 +24,25 @@ struct TimerWidgetData {
 struct WidgetLink<Content: View>: View {
     let url: String
     @ViewBuilder let content: Content
+    @Environment(\.widgetOffscreenRender) private var offscreen
     var body: some View {
-        Link(destination: URL(string: url)!) {
+        if offscreen {
+            // AppKit's ImageRenderer can't draw Link (a placeholder appears); the widget host draws it fine.
             content.foregroundStyle(Color.primary)
+        } else {
+            Link(destination: URL(string: url)!) {
+                content.foregroundStyle(Color.primary)
+            }
+            .tint(Color.primary)
         }
-        .tint(Color.primary)
     }
 }
 
 extension EnvironmentValues {
     /// Review renders only: draw as the tinted / accented rendering would (the real mode can't be set off-screen).
     @Entry var widgetMonochromePreview = false
+    /// Review renders only: drawn by ImageRenderer, not the widget host.
+    @Entry var widgetOffscreenRender = false
 }
 
 /// Full colour unless the system (iOS 18 tinted / clear, macOS desktop accented) or a review render says otherwise.
@@ -858,5 +866,6 @@ enum WidgetGallery {
                                    : dark ? [Color(rgb: 0x273548), Color(rgb: 0x111827)] : [Color(rgb: 0xc7d8ea), Color(rgb: 0xe9dfd3)],
                                    startPoint: .topLeading, endPoint: .bottomTrailing))
         .environment(\.colorScheme, dark ? .dark : .light)
+        .environment(\.widgetOffscreenRender, true)
     }
 }
