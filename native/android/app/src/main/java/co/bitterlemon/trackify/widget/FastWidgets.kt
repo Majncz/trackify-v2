@@ -72,7 +72,8 @@ object FastWidgets {
 
     private var current: Pair<Job, Boolean>? = null
 
-    private suspend fun pushLocked(context: Context, force: Boolean, animate: Boolean) {
+    private suspend fun pushLocked(context: Context, force: Boolean, animateIn: Boolean) {
+        val animate = animateIn
         val t0 = SystemClock.uptimeMillis()
         val snap = WidgetSnapshot.read(context)
         val team = TeamSnapshot.read(context)

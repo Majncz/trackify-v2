@@ -43,11 +43,11 @@ object TapLog {
     private var records: MutableList<TapRecord> = mutableListOf()
     private var loaded = false
     private var startMs = 0L
-    private var currentId = -1L
+    @Volatile private var currentId = -1L
     private var counter = 0L
     private var lastReason: Pair<String, Long>? = null
     private var lastPushState: String? = null
-    private val io = Executors.newSingleThreadExecutor { r -> Thread(r, "trackify-taplog").apply { isDaemon = true } }
+    private val io by lazy { Executors.newSingleThreadExecutor { r -> Thread(r, "trackify-taplog").apply { isDaemon = true } } }
     @Volatile private var fileRef: File? = null
 
     private fun now() = System.nanoTime() / 1_000_000L
@@ -142,6 +142,7 @@ object TapLog {
 
     /** Server-op stage, for the tap that created op [opId]. */
     fun opStage(opId: String, name: String) {
+        if (currentId < 0) return
         synchronized(lock) {
             val r = records.lastOrNull { opId in it.opIds } ?: return
             val at = (now() - startMs).takeIf { r.id == currentId } ?: (System.currentTimeMillis() - r.wall)
@@ -152,6 +153,7 @@ object TapLog {
 
     /** Why the next state change (socket event, refresh…) happens; used to explain a flip-back. */
     fun reason(text: String) {
+        if (currentId < 0) return
         lastReason = text to now()
     }
 
@@ -196,7 +198,7 @@ object TapLog {
 
     // ---- Text --------------------------------------------------------------------------------------------------
 
-    private val clock = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US)
+    private val clock by lazy { java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US) }
 
     /** "14:02:11 STOP · widget · cold · recv +0 · applied +12 · drawn +140 · …" plus a line of environment. */
     fun format(r: TapRecord): String {
