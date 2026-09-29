@@ -211,7 +211,7 @@ class TeamWidget : GlanceAppWidget() {
 }
 
 /** Receivers of widgets that show the team: keep the team data fresh while one is placed. */
-abstract class TeamAwareReceiver : GlanceAppWidgetReceiver() {
+abstract class TeamAwareReceiver : FastAwareReceiver() {
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         super.onUpdate(context, appWidgetManager, appWidgetIds)
         val g = AppGraph.get(context)

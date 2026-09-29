@@ -397,7 +397,7 @@ class SmallTimerWidget : GlanceAppWidget() {
     }
 }
 
-class SmallTimerWidgetReceiver : GlanceAppWidgetReceiver() {
+class SmallTimerWidgetReceiver : FastAwareReceiver() {
     override val glanceAppWidget: GlanceAppWidget = SmallTimerWidget()
 }
 

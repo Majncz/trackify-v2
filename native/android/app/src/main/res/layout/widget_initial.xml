@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shown for a fraction of a second when a widget is placed, until FastWidgets draws the real content.
+     No spinner: if anything ever keeps the real draw from arriving, this still reads as Trackify, not "loading". -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_shape">
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:text="Trackify"
+        android:textColor="#FF171717"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+</FrameLayout>
