@@ -74,7 +74,7 @@ Packages/TrackifyKit   Foundation-only Swift package (builds & tests on Linux)
 Shared/                SwiftUI used by both apps: design system, AppModel, all feature screens
 iOS/                   App entry, Timer·Stats·Team·More tabs (iPhone) / sidebar (iPad), Live Activity controller
 macOS/                 NSStatusItem + panel, global hotkey (Carbon), dashboard window + activation policy
-Widgets/               WidgetKit: timer widgets (+accessory), Live Activity, Control (iOS 18)
+Widgets/               WidgetKit: Timer and tasks + Team today widgets (+accessory), Live Activity, Control (iOS 18)
 Intents/               App Intents shared by apps and widgets (Start Task, Stop Timer, Current Timer, widget buttons)
 UITests/, RenderTests/ screenshot walk + timer flow tests; widget/Live Activity rendering
 ```
@@ -86,6 +86,19 @@ UITests/, RenderTests/ screenshot walk + timer flow tests; widget/Live Activity 
 * **Widgets & intents** act through the same engine: in the app process they use the app's engine; in the widget
   extension they build a short-lived engine over the shared store, apply the op, update the snapshot, try to sync
   and ping the app (Darwin notification).
+* **Home-screen / desktop widgets** (`Shared/Design/WidgetViews.swift`, one design for iPhone, iPad and Mac):
+  *Timer and tasks* — small (clock + Stop, or today + 3 quick starts), medium (clock + 4 "switch to" rows), large
+  (hero, ‹ › paged task rows, a Canvas heat map of the last ~25 weeks linking to Stats, and Team today when there's
+  room — the team goes first, then the heat map; the list keeps 3 rows: `WidgetLayout.largeBlocks`), extra large on
+  iPad/Mac (tasks left, heat map + team right). *Team today* — small/medium/large. The app writes the snapshot
+  (tasks, today, per-day minutes for 188 days) and a team snapshot (daily leaderboard) to the App Group; the timeline
+  provider also refetches tasks / presence itself when they're stale (>30 / >10 min) using the shared session, so they
+  stay fresh without opening the app. Taps are App Intents that update the shared state and reload timelines before
+  the network (Start/switch/stop, page ‹ ›). Motion: numeric-text transitions on times, push transition on paging,
+  cross-fade on state change, `invalidatableContent` on totals while an intent runs; clocks are `Text(timerInterval:)`.
+  Tinted (iOS 18) / accented (macOS desktop) modes: heat map, clock and totals are accentable, colours fall back to
+  opacity. Review renders: `TrackifyRenderTests` (iOS, `TEST_RUNNER_SHOT_DIR`), `-TrackifyRenderWidgets <dir>` (Mac),
+  `-TrackifyRenderLiveWidgets <dir>` (iOS, from the signed-in app's real snapshot) → `native/screenshots/apple/widgets/`.
 * **Performance** — last server data is cached on disk (App Group) and shown instantly on launch; `/api/tasks`
   uses the lane's weak ETag (`If-None-Match` → 304). Stats, heat grid and calendar are computed off the main actor;
   long lists are lazy; the 1000-day heat grid is virtualised; refreshes are debounced (400 ms, presence 1 s);
