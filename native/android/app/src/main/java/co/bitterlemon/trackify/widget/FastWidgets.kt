@@ -57,7 +57,7 @@ object FastWidgets {
      * Redraw every placed timer, large and team widget from the current snapshot. Returns once all of them have
      * been handed to the launcher. [force] redraws even if the pixels were already pushed.
      */
-    suspend fun push(context: Context, force: Boolean = true, animate: Boolean = false) {
+    suspend fun push(context: Context, force: Boolean = true, animate: Boolean = true) {
         // A newer push supersedes one still composing (it would only draw an older state).
         // A tap (forced) cancels whatever is composing; a background refresh never cancels a tap's push.
         val job = scope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) { lock.withLock { pushLocked(context, force, animate) } }
@@ -108,10 +108,10 @@ object FastWidgets {
                         val g = GlanceRemoteViews()
                         val main = primary(context, sizes)
                         val rv = g.compose(context, main, null, options) { Content(context, kind, snap, team) }.remoteViews
-                        if (animate) TapLog.stage("composed ${kind.name.lowercase()}")
+                        if (force && animate) TapLog.stage("composed ${kind.name.lowercase()}")
                         if (stale(context, snap)) return@async null
                         ids.forEach { drawId(context, m, it, rv, animate) }
-                        if (animate) TapLog.stage("drawn ${kind.name.lowercase()}")
+                        if (force && animate) TapLog.stage("drawn ${kind.name.lowercase()}")
                         firstAt.compareAndSet(-1, SystemClock.uptimeMillis() - t0)
                         Done(kind, sizes, ids, options, g, main, rv)
                     }.onFailure { if (it !is kotlinx.coroutines.CancellationException) Log.w(TAG, "fast push failed ($kind)", it) }.getOrNull()
@@ -150,6 +150,15 @@ object FastWidgets {
     }
 
     @Volatile private var currentTheme = "system"
+
+    /** Take the overlay away again (a redraw failed or nothing needs drawing): never leave "Stopping…" up. */
+    fun hidePending(context: Context) {
+        val ids = framePrefs(context).all.keys.mapNotNull { it.toIntOrNull() }
+        if (ids.isEmpty()) return
+        val rv = RemoteViews(context.packageName, R.layout.widget_flip).also { it.setViewVisibility(R.id.pending, android.view.View.GONE) }
+        val m = AppWidgetManager.getInstance(context)
+        for (id in ids) runCatching { m.partiallyUpdateAppWidget(id, rv) }
+    }
 
     /** Forget widgets that were removed from the home screen. */
     private fun pruneFrames(context: Context, live: Set<Int>) {

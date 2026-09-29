@@ -36,7 +36,7 @@ abstract class FastAwareReceiver : GlanceAppWidgetReceiver() {
         val pending: PendingResult? = goAsync()
         CoroutineScope(Dispatchers.Default).launch {
             try {
-                withTimeoutOrNull(8_000) { FastWidgets.push(app, force = true) }
+                withTimeoutOrNull(8_000) { FastWidgets.push(app, force = true, animate = false) }
             } finally {
                 pending?.finish()
             }
