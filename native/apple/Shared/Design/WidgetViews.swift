@@ -52,6 +52,11 @@ struct WidgetColorMode: DynamicProperty {
     var fullColor: Bool { mode == .fullColor && !preview }
 }
 
+/// "3h 12m" / "45m"; under a minute reads "0m" (the web's "0s" looks odd on a glanceable total).
+func widgetDuration(_ ms: Int64) -> String {
+    ms < MINUTE_MS ? "0m" : Fmt.durationWords(ms)
+}
+
 // MARK: - Palette
 
 enum WidgetPalette {
@@ -153,7 +158,7 @@ struct WidgetTodayHero: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(label ?? (s.running == nil ? "Not tracking" : "Today")).font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
-            Text(Fmt.durationWords(s.todayTotal(now: now)))
+            Text(widgetDuration(s.todayTotal(now: now)))
                 .font(.system(size: size, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1).minimumScaleFactor(0.6)
@@ -179,7 +184,7 @@ struct WidgetTaskRow: View {
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 if showToday && t.todayMs > 0 {
-                    Text(Fmt.durationWords(t.todayMs)).font(.system(size: 12)).monospacedDigit().foregroundStyle(.secondary)
+                    Text(widgetDuration(t.todayMs)).font(.system(size: 12)).monospacedDigit().foregroundStyle(.secondary)
                         .contentTransition(.numericText())
                         .invalidatableContent()
                 }
@@ -283,14 +288,14 @@ struct WidgetHeatMap: View {
                 HStack {
                     Text(WidgetHeat.caption(weeks: weeks))
                     Spacer()
-                    Text(Fmt.durationWords(Int64(g.totalMinutes) * MINUTE_MS)).monospacedDigit()
+                    Text(widgetDuration(Int64(g.totalMinutes) * MINUTE_MS)).monospacedDigit()
                         .contentTransition(.numericText())
                 }
                 .font(.system(size: 11)).foregroundStyle(.secondary)
                 .frame(height: CGFloat(WidgetLayout.heatCaption), alignment: .bottom)
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(WidgetHeat.caption(weeks: weeks)): \(Fmt.durationWords(Int64(g.totalMinutes) * MINUTE_MS)) tracked")
+            .accessibilityLabel("\(WidgetHeat.caption(weeks: weeks)): \(widgetDuration(Int64(g.totalMinutes) * MINUTE_MS)) tracked")
         }
     }
 
@@ -355,7 +360,7 @@ struct WidgetTeamRow: View {
                 if m.live, let task = m.taskName, !task.isEmpty { liveTask(task) }
             }
             Spacer(minLength: 4)
-            Text(Fmt.durationWords(m.todayLive(now: now)))
+            Text(widgetDuration(m.todayLive(now: now)))
                 .font(.system(size: 12.5, weight: m.live ? .semibold : .regular)).monospacedDigit()
                 .foregroundStyle(m.live ? .primary : .secondary)
                 .contentTransition(.numericText())
@@ -381,7 +386,7 @@ struct WidgetTeamSection: View {
             HStack {
                 Text("Team today").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
                 Spacer()
-                Text(Fmt.durationWords(team.totalMs(now: now))).font(.system(size: 12)).monospacedDigit().foregroundStyle(.secondary)
+                Text(widgetDuration(team.totalMs(now: now))).font(.system(size: 12)).monospacedDigit().foregroundStyle(.secondary)
                     .contentTransition(.numericText())
             }
             .frame(height: WidgetLayout.teamHeader)
@@ -527,7 +532,7 @@ struct WidgetTaskList: View {
         let page = WidgetPaging.page(raw: data.pageRaw, pages: pages)
         VStack(spacing: 0) {
             WidgetListHeader(title: s.running == nil ? "Start" : "Tasks",
-                             trailing: s.running == nil ? nil : "Today \(Fmt.durationWords(s.todayTotal(now: now)))",
+                             trailing: s.running == nil ? nil : "Today \(widgetDuration(s.todayTotal(now: now)))",
                              page: page, pages: pages)
             if s.tasks.isEmpty {
                 Text("Create a task in Trackify to start.").font(.system(size: 12)).foregroundStyle(.secondary)
@@ -677,7 +682,7 @@ struct TeamWidgetContent: View {
     }
 
     private var total: some View {
-        Text(Fmt.durationWords(team.totalMs(now: now)))
+        Text(widgetDuration(team.totalMs(now: now)))
             .font(.system(size: 30, weight: .semibold, design: .rounded)).monospacedDigit()
             .lineLimit(1).minimumScaleFactor(0.6)
             .contentTransition(.numericText())
@@ -704,7 +709,7 @@ struct TeamWidgetContent: View {
                             .font(.system(size: 12, weight: m.userId == team.myId ? .semibold : .regular)).lineLimit(1)
                         if m.live { WidgetLiveDot(size: 4) }
                         Spacer(minLength: 2)
-                        Text(Fmt.durationWords(m.todayLive(now: now))).font(.system(size: 11.5)).monospacedDigit().foregroundStyle(.secondary)
+                        Text(widgetDuration(m.todayLive(now: now))).font(.system(size: 11.5)).monospacedDigit().foregroundStyle(.secondary)
                     }
                 }
             }
