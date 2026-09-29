@@ -175,8 +175,6 @@ object TeamSnapshot {
             }
         }
         FastWidgets.push(context, force = false)
-        kotlinx.coroutines.delay(WidgetUpdater.SETTLE_MS)
-        WidgetUpdater.updateTeam(context)
     }
 }
 

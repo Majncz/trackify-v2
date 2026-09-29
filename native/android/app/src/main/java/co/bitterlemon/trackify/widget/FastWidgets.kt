@@ -8,6 +8,8 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
 import android.util.SizeF
+import co.bitterlemon.trackify.BuildConfig
+import co.bitterlemon.trackify.R
 import android.widget.RemoteViews
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.DpSize
@@ -57,10 +59,10 @@ object FastWidgets {
      * Redraw every placed timer, large and team widget from the current snapshot. Returns once all of them have
      * been handed to the launcher. [force] redraws even if the pixels were already pushed.
      */
-    suspend fun push(context: Context, force: Boolean = true) {
+    suspend fun push(context: Context, force: Boolean = true, animate: Boolean = false) {
         // A newer push supersedes one still composing (it would only draw an older state).
         // A tap (forced) cancels whatever is composing; a background refresh never cancels a tap's push.
-        val job = scope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) { lock.withLock { pushLocked(context, force) } }
+        val job = scope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) { lock.withLock { pushLocked(context, force, animate) } }
         synchronized(this) {
             val cur = current
             if (cur != null && cur.first.isActive && (force || !cur.second)) cur.first.cancel()
@@ -72,7 +74,7 @@ object FastWidgets {
 
     private var current: Pair<Job, Boolean>? = null
 
-    private suspend fun pushLocked(context: Context, force: Boolean) {
+    private suspend fun pushLocked(context: Context, force: Boolean, animate: Boolean) {
         val t0 = SystemClock.uptimeMillis()
         val snap = WidgetSnapshot.read(context)
         val team = TeamSnapshot.read(context)
@@ -106,7 +108,7 @@ object FastWidgets {
                         val main = primary(context, sizes)
                         val rv = g.compose(context, main, null, options) { Content(context, kind, snap, team) }.remoteViews
                         if (stale(context, snap)) return@async null
-                        ids.forEach { m.updateAppWidget(it, rv) }
+                        ids.forEach { drawId(context, m, it, rv, animate) }
                         firstAt.compareAndSet(-1, SystemClock.uptimeMillis() - t0)
                         Done(kind, sizes, ids, options, g, main, rv)
                     }.onFailure { if (it !is kotlinx.coroutines.CancellationException) Log.w(TAG, "fast push failed ($kind)", it) }.getOrNull()
@@ -129,14 +131,62 @@ object FastWidgets {
                         val views = d.sizes.map { sz ->
                             sz to (if (sz == d.main) d.rv else d.g.compose(context, sz, null, d.options) { Content(context, d.kind, snap, team) }.remoteViews)
                         }
-                        val all = combine(views)
                         if (stale(context, snap)) return@launch
-                        d.ids.forEach { m.updateAppWidget(it, all) }
+                        d.ids.forEach { id ->
+                            val f = shownFrame(context, id) ?: 0
+                            m.updateAppWidget(id, combine(views.map { (sz, rv) -> sz to wrap(context, rv, f) }))
+                            rememberFrame(context, id, f)
+                        }
                     }.onFailure { if (it !is kotlinx.coroutines.CancellationException) Log.w(TAG, "fast push (all sizes) failed (${d.kind})", it) }
                 }
             }
         }
         Log.i(TAG, "fast push v${snap.version} running=${snap.running?.taskId} → ${targets.size} widgets (${groups.size} layouts): first on screen after ${firstAt.get()} ms, all after $visibleMs ms, all sizes after ${SystemClock.uptimeMillis() - t0} ms (incl. ${PHASE2_DELAY_MS} ms pause)")
+    }
+
+    // ---- Animated state changes -------------------------------------------------------------------------------
+    // Every widget is a two-frame ViewFlipper ([R.layout.widget_flip]). A full draw puts the content into the shown
+    // frame. A tap draws the new state into the hidden frame with a partial update and flips: the launcher plays the
+    // cross-fade (in/out animations) by itself. Which frame shows is remembered per widget id (and app build).
+
+    private fun framePrefs(context: Context) = context.getSharedPreferences("widget_frames", Context.MODE_PRIVATE)
+    private val frames = java.util.concurrent.ConcurrentHashMap<Int, Int>()
+
+    /** The shown frame of [id] if this build has drawn its wrapper layout before, else null. */
+    private fun shownFrame(context: Context, id: Int): Int? {
+        frames[id]?.let { return it }
+        val v = framePrefs(context).getString(id.toString(), null) ?: return null
+        val (build, frame) = v.split(":").let { it[0] to it.getOrNull(1)?.toIntOrNull() }
+        if (build != BuildConfig.VERSION_CODE.toString() || frame == null) return null
+        return frame.also { frames[id] = it }
+    }
+
+    private fun rememberFrame(context: Context, id: Int, frame: Int) {
+        frames[id] = frame
+        framePrefs(context).edit().putString(id.toString(), "${BuildConfig.VERSION_CODE}:$frame").apply()
+    }
+
+    private fun frameView(frame: Int) = if (frame == 0) R.id.frame_a else R.id.frame_b
+
+    private fun wrap(context: Context, content: RemoteViews, frame: Int): RemoteViews =
+        RemoteViews(context.packageName, R.layout.widget_flip).also {
+            it.removeAllViews(frameView(frame))
+            it.addView(frameView(frame), content)
+            it.setDisplayedChild(R.id.flip, frame)
+        }
+
+    /** Draw [content] for [id]: animated into the hidden frame when [animate] and the widget already shows a wrapper. */
+    private fun drawId(context: Context, m: AppWidgetManager, id: Int, content: RemoteViews, animate: Boolean) {
+        val cur = shownFrame(context, id)
+        if (animate && cur != null && Build.VERSION.SDK_INT >= 26) {
+            val next = 1 - cur
+            m.partiallyUpdateAppWidget(id, wrap(context, content, next))
+            rememberFrame(context, id, next)
+            return
+        }
+        val frame = cur ?: 0
+        m.updateAppWidget(id, wrap(context, content, frame))
+        rememberFrame(context, id, frame)
     }
 
     /** A newer snapshot exists: never put this one on screen. */
@@ -146,8 +196,8 @@ object FastWidgets {
     }
 
     /** [push] in the background (surfaces that changed outside a tap: app, socket, sync results). */
-    fun pushAsync(context: Context) {
-        scope.launch { runCatching { push(context, force = false) } }
+    fun pushAsync(context: Context, force: Boolean = false) {
+        scope.launch { runCatching { push(context, force = force) } }
     }
 
     /** A Glance session composed an older snapshot than the one on screen: draw the current one again. */

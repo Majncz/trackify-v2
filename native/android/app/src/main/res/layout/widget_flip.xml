@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Two frames; a state change draws the new state into the hidden one and flips, which the launcher animates. -->
+<ViewFlipper xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/flip"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:inAnimation="@anim/w_in"
+    android:outAnimation="@anim/w_out"
+    android:measureAllChildren="false">
+    <FrameLayout android:id="@+id/frame_a" android:layout_width="match_parent" android:layout_height="match_parent" />
+    <FrameLayout android:id="@+id/frame_b" android:layout_width="match_parent" android:layout_height="match_parent" />
+</ViewFlipper>

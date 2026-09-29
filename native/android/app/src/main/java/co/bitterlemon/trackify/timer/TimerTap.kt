@@ -68,7 +68,7 @@ object TimerTap {
     suspend fun redraw(context: Context) {
         val t0 = SystemClock.uptimeMillis()
         try {
-            runCatching { FastWidgets.push(context) }.onFailure { Log.w(TAG, "fast push failed", it) }
+            runCatching { FastWidgets.push(context, animate = true) }.onFailure { Log.w(TAG, "fast push failed", it) }
         } finally {
             inFlight.updateAndGet { maxOf(0, it - 1) }
         }

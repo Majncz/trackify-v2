@@ -29,49 +29,24 @@ object WidgetUpdater {
         rendered.value = rendered.value + (widgetId to key)
     }
 
+    /**
+     * Widgets are drawn only by [FastWidgets] (RemoteViews handed straight to the launcher); there is no Glance
+     * session any more, so nothing can land on top of a newer state or replace the animated layout.
+     */
     fun updateAll(context: Context, force: Boolean = false) {
-        val snap = WidgetSnapshot.read(context)
-        // Skip no-op redraws (the snapshot's updatedAt changes on every build).
-        val key = snap.copy(updatedAt = 0, version = 0).hashCode().toString()
-        // A fresh process: the widgets already show the stored snapshot (drawn by the previous process).
-        if (lastKey == null) WidgetSnapshot.storedSnapshotKey?.let { lastKey = it }
-        if (!force && key == lastKey) return
-        lastKey = key
-        // FastWidgets has already drawn this state. Glance settles it a little later (a session that is alive
-        // recomposes from the snapshot flow anyway; this starts one if none is).
-        pending?.cancel()
-        pending = scope.launch {
-            delay(SETTLE_MS)
-            updateTimerWidgets(context)
-        }
+        if (force) FastWidgets.pushAsync(context, force = true)
     }
 
-    private var pending: kotlinx.coroutines.Job? = null
-
-    /** How long Glance waits behind a fast push (FastWidgets) before it redraws the same state. */
-    const val SETTLE_MS = 1_500L
-
-    /** Both timer widgets at once (a closed Glance session takes a few hundred ms to start). */
-    private suspend fun updateTimerWidgets(context: Context) = coroutineScope {
-        listOf(
-            async { runCatching { SmallTimerWidget().updateAll(context) } },
-            async { runCatching { LargeTimerWidget().updateAll(context) } },
-        ).awaitAll()
-    }
+    /** How long a Glance session used to wait behind a fast push (kept for the team refresh's pacing). */
+    const val SETTLE_MS = 0L
 
     /** Redraw now (always, no dedupe) and wait for it — for background actions and app updates. */
     suspend fun updateAllNow(context: Context) {
-        lastKey = WidgetSnapshot.read(context).copy(updatedAt = 0, version = 0).hashCode().toString()
-        updateTimerWidgets(context)
+        FastWidgets.push(context, force = true)
     }
 
-    /** Team data changed: redraw the widgets that show it. */
-    suspend fun updateTeam(context: Context) = coroutineScope {
-        listOf(
-            async { runCatching { TeamWidget().updateAll(context) } },
-            async { runCatching { LargeTimerWidget().updateAll(context) } },
-        ).awaitAll()
-    }
+    /** Team data changed: the fast push that follows a refresh already drew it. */
+    suspend fun updateTeam(context: Context) {}
 
     fun requestTileUpdate(context: Context) = TimerTileService.requestUpdate(context)
 }

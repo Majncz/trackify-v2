@@ -17,28 +17,28 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 abstract class FastAwareReceiver : GlanceAppWidgetReceiver() {
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
-        super.onUpdate(context, appWidgetManager, appWidgetIds)
+        // No super call: it would start a Glance session, which redraws through WorkManager and would replace
+        // the animated wrapper layout FastWidgets draws. FastWidgets is the single draw path.
         drawNow(context)
     }
 
     override fun onAppWidgetOptionsChanged(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int, newOptions: Bundle) {
-        super.onAppWidgetOptionsChanged(context, appWidgetManager, appWidgetId, newOptions)
         drawNow(context)
     }
 
     override fun onRestored(context: Context, oldWidgetIds: IntArray, newWidgetIds: IntArray) {
-        super.onRestored(context, oldWidgetIds, newWidgetIds)
         drawNow(context)
     }
 
     private fun drawNow(context: Context) {
         val app = context.applicationContext
-        val pending = goAsync()
+        // goAsync() is null when a Glance session (not the system's broadcast) calls onUpdate — keep going then.
+        val pending: PendingResult? = goAsync()
         CoroutineScope(Dispatchers.Default).launch {
             try {
                 withTimeoutOrNull(8_000) { FastWidgets.push(app, force = true) }
             } finally {
-                pending.finish()
+                pending?.finish()
             }
         }
     }

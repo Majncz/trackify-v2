@@ -120,7 +120,7 @@ class AppGraph(private val context: Context) {
             // Redraw through Glance too (new build, new day), a little later: a tap that started this process
             // has pushed its own RemoteViews already and shouldn't compete with eight Glance compositions.
             kotlinx.coroutines.delay(5_000)
-            WidgetUpdater.updateAllNow(context)
+            co.bitterlemon.trackify.widget.FastWidgets.push(context, force = false)
             runCatching { co.bitterlemon.trackify.widget.WidgetPreviews.publish(context) }
             if (co.bitterlemon.trackify.widget.TeamSnapshot.anyTeamWidget(context)) {
                 co.bitterlemon.trackify.widget.TeamRefreshWorker.ensure(context)
@@ -217,7 +217,7 @@ class AppGraph(private val context: Context) {
     /** syncSurfaces + wait for the widget redraw (background taps: the process may freeze right after). */
     suspend fun syncSurfacesNow() {
         syncSurfaces()
-        WidgetUpdater.updateAllNow(context)
+        co.bitterlemon.trackify.widget.FastWidgets.push(context, force = false)
     }
 
     // Runs in the app scope: storing the session swaps the login screen out right away, which cancels the

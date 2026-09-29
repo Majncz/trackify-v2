@@ -13,7 +13,10 @@ import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
+import androidx.glance.LocalContext
 import androidx.glance.LocalSize
+import android.widget.RemoteViews
+import androidx.glance.appwidget.AndroidRemoteViews
 import androidx.glance.action.Action
 import androidx.glance.action.ActionParameters
 import androidx.glance.action.clickable
@@ -92,7 +95,7 @@ private fun startable(snap: WidgetSnapshotData): List<SnapshotTask> {
 }
 
 /** Today's time per task including the running stretch. */
-private fun todayOf(t: SnapshotTask, snap: WidgetSnapshotData, now: Long): Long {
+internal fun todayOf(t: SnapshotTask, snap: WidgetSnapshotData, now: Long): Long {
     val r = snap.running
     if (r == null || r.taskId != t.id) return t.todayMs
     val today = Time.today()
@@ -103,7 +106,12 @@ private fun todayOf(t: SnapshotTask, snap: WidgetSnapshotData, now: Long): Long 
 private fun SinceLine(snap: WidgetSnapshotData, r: SnapshotRunning, size: Int = 12) {
     val notice = snap.noticeNow(System.currentTimeMillis())
     if (notice != null) Txt("Couldn't sync: $notice", P.stopFg, size)
-    else Txt("Since ${Time.clock(r.startTime)}", P.muted, size)
+    else Row(verticalAlignment = Alignment.CenterVertically) {
+        // A softly pulsing green dot: the timer is live (the launcher animates it, no redraws).
+        AndroidRemoteViews(RemoteViews(LocalContext.current.packageName, R.layout.widget_pulse), GlanceModifier.size(8.dp))
+        Spacer(GlanceModifier.width(6.dp))
+        Txt("Since ${Time.clock(r.startTime)}", P.muted, size)
+    }
 }
 
 @Composable
@@ -348,6 +356,10 @@ private fun Large(context: Context, snap: WidgetSnapshotData, team: TeamSnapshot
         teamRows = 1
         while (teamRows < min(4, maxOf(1, members.size)) && spare - (teamRows + 1) * teamRowH >= 0 && spare - teamRows * teamRowH >= teamRowH) teamRows++
     }
+    val heroH = if (r != null) (22 + 17) * fs + 52 else (18 + 42) * fs
+    val listH = size.height.value - (32 + heroH + 21 + 26 + 4) -
+        (if (blocks.heat) 21 + WidgetLayoutChoice.HEAT_H else 0) - (if (blocks.team && teamRows > 0) 21 + 26 + teamRows * teamRowH else 0)
+    val listRows = floor(listH / taskRowH).toInt().coerceAtLeast(1)
     Card(padding = 16.dp) {
         Column(GlanceModifier.fillMaxSize()) {
             if (r != null) {
@@ -370,9 +382,7 @@ private fun Large(context: Context, snap: WidgetSnapshotData, team: TeamSnapshot
             Header(if (r != null) "Tasks" else "Start", if (r != null) "Today ${hm(snap.todayTotalLive(now))}" else null)
             Spacer(GlanceModifier.height(4.dp))
             // Every task, scrolling; the list takes whatever height the blocks below leave.
-            LazyColumn(GlanceModifier.fillMaxWidth().defaultWeight()) {
-                items(snap.tasks, itemId = { it.id.hashCode().toLong() }) { t -> TaskRow(t, snap, taskRowH, showToday = true, now) }
-            }
+            TaskList(snap, taskRowH, listRows, now, GlanceModifier.fillMaxWidth().defaultWeight())
             if (blocks.heat) {
                 Divider()
                 HeatSection(context, snap, size.width.value - 32, now)
@@ -382,6 +392,24 @@ private fun Large(context: Context, snap: WidgetSnapshotData, team: TeamSnapshot
                 TeamSection(context, team, members, teamRows, teamRowH, now)
             }
         }
+    }
+}
+
+/**
+ * The task list. Android 12+: Glance's lazy list, so it scrolls (its items travel inside the RemoteViews).
+ * Android 8–11: a lazy list (and any ListView adapter) is not usable in RemoteViews that [FastWidgets] pushes —
+ * the platform refuses adapters in nested RemoteViews and Glance's own list needs a Glance session — so the rows
+ * that fit are drawn in a plain column (tap works, no scrolling).
+ */
+@Composable
+private fun TaskList(snap: WidgetSnapshotData, rowH: Int, rows: Int, now: Long, modifier: GlanceModifier) {
+    if (Build.VERSION.SDK_INT >= 31) {
+        LazyColumn(modifier) {
+            items(snap.tasks, itemId = { it.id.hashCode().toLong() }) { t -> TaskRow(t, snap, rowH, showToday = true, now) }
+        }
+    } else {
+        // (Glance allows at most 10 children per Column.)
+        Column(modifier) { snap.tasks.take(min(rows, 10)).forEach { TaskRow(it, snap, rowH, showToday = true, now) } }
     }
 }
 
