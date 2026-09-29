@@ -219,15 +219,22 @@ object FastWidgets {
         val cur = shownFrame(context, id)
         if (animate && cur != null) {
             val next = 1 - cur
-            // The new state goes into the hidden frame with a FULL update (same layout, so the launcher applies it
-            // in place); then a tiny partial update flips to it and the launcher plays the cross-fade. A partial
-            // update that carries the content would be *appended* to the views the system keeps (mergeRemoteViews),
-            // growing every tap until the launcher's binder transaction fails (238–570 KB seen on Android 8).
-            m.updateAppWidget(id, wrap(context, content, next).also { it.setDisplayedChild(R.id.flip, cur) })
-            m.partiallyUpdateAppWidget(id, RemoteViews(context.packageName, R.layout.widget_flip).also {
-                it.setDisplayedChild(R.id.flip, next)
-                it.setViewVisibility(R.id.pending, android.view.View.GONE)
-            })
+            if (Build.VERSION.SDK_INT >= 31) {
+                // Android 12+: a partial update that adds views makes the launcher re-inflate (a blank flash), so the
+                // new state goes into the hidden frame with a FULL update (same layout, applied in place) and a tiny
+                // partial update then flips to it: the launcher plays the cross-fade.
+                m.updateAppWidget(id, wrap(context, content, next).also { it.setDisplayedChild(R.id.flip, cur) })
+                m.partiallyUpdateAppWidget(id, RemoteViews(context.packageName, R.layout.widget_flip).also {
+                    it.setDisplayedChild(R.id.flip, next)
+                    it.setViewVisibility(R.id.pending, android.view.View.GONE)
+                })
+            } else {
+                // Android 8-11: a partial update that carries the content is *appended* by the system to the views it
+                // keeps (mergeRemoteViews) and outgrows the launcher's binder transaction limit within a few taps
+                // (TransactionTooLargeException, widget host killed), so these versions get a plain full update:
+                // instant swap, no cross-fade (the "Stopping…/Starting…" overlay still gives the tap its feedback).
+                m.updateAppWidget(id, wrap(context, content, next))
+            }
             rememberFrame(context, id, next)
             return
         }
