@@ -88,6 +88,9 @@ private fun fixedPalette(context: Context, night: Boolean): Pal {
 }
 
 internal val LocalPal = staticCompositionLocalOf<Pal> { error("no widget palette") }
+
+/** False when the composed RemoteViews would be too big for the launcher's binder transaction (drops the heat map). */
+internal val LocalHeat = staticCompositionLocalOf { true }
 internal val P: Pal @Composable get() = LocalPal.current
 
 @Composable

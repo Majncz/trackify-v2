@@ -36,6 +36,7 @@ import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
+import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
@@ -363,7 +364,7 @@ private fun Large(context: Context, snap: WidgetSnapshotData, team: TeamSnapshot
     val now = System.currentTimeMillis()
     val size = LocalSize.current
     val fs = fontScale(context)
-    val blocks = WidgetLayoutChoice.largeBlocks(size.height.value, fs, r != null, team != null && team.loaded)
+    val blocks = WidgetLayoutChoice.largeBlocks(size.height.value, fs, r != null, team != null && team.loaded, LocalHeat.current)
     val teamRowH = teamRowHeight(fs)
     val members = team?.rows(now) ?: emptyList()
     val taskRowH = if (fs > 1.15f) 40 else 36
@@ -431,10 +432,12 @@ private fun HeatSection(context: Context, snap: WidgetSnapshotData, widthDp: Flo
     val bm = HeatBitmaps.get(context, snap.activity, live, end, widthDp.toInt(), weeks)
     val total = ActivityMath.totalMinutes(snap.activity.toMutableList().also { it[it.lastIndex] = it.last() + live }, weeks, end)
     Column(GlanceModifier.fillMaxWidth().tap(openApp(context, "tab_stats"))) {
-        Box(GlanceModifier.fillMaxWidth().height(bm.heightDp.dp)) {
-            Image(ImageProvider(bm.empty), null, GlanceModifier.fillMaxSize(), colorFilter = ColorFilter.tint(P.soft), contentScale = ContentScale.FillBounds)
-            Image(ImageProvider(bm.levels), null, GlanceModifier.fillMaxSize(), colorFilter = ColorFilter.tint(P.live), contentScale = ContentScale.FillBounds)
-            Image(ImageProvider(bm.labels), null, GlanceModifier.fillMaxSize(), colorFilter = ColorFilter.tint(P.muted), contentScale = ContentScale.FillBounds)
+        // Month names (text, positioned by dp offsets) above the grid (one tinted alpha bitmap).
+        Box(GlanceModifier.fillMaxWidth().height(14.dp)) {
+            bm.labels.forEach { (x, name) -> Box(GlanceModifier.padding(start = x.dp)) { Txt(name, P.muted, 10) } }
+        }
+        Box(GlanceModifier.fillMaxWidth().height(bm.gridHeightDp.dp)) {
+            Image(ImageProvider(bm.bitmap), null, GlanceModifier.fillMaxSize(), colorFilter = ColorFilter.tint(P.live), contentScale = ContentScale.FillBounds)
         }
         Spacer(GlanceModifier.height(4.dp))
         Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

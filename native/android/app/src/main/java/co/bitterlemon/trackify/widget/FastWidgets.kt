@@ -107,7 +107,16 @@ object FastWidgets {
                         val options = runCatching { m.getAppWidgetOptions(ids.first()) }.getOrNull() ?: Bundle()
                         val g = GlanceRemoteViews()
                         val main = primary(context, sizes)
-                        val rv = g.compose(context, main, null, options) { Content(context, kind, snap, team) }.remoteViews
+                        var rv = g.compose(context, main, null, options) { Content(context, kind, snap, team, true) }.remoteViews
+                        // Launchers get the update through a binder transaction with a hard size limit (a 350 KB
+                        // update made the widget host "dead" on Android 8): keep it small, drop the heat map if not.
+                        var bytes = parcelBytes(rv)
+                        if (bytes > MAX_RV_BYTES && kind != Kind.TEAM) {
+                            rv = g.compose(context, main, null, options) { Content(context, kind, snap, team, false) }.remoteViews
+                            if (force && animate) TapLog.note("RemoteViews were ${bytes / 1024} KB: drew without the heat map")
+                            bytes = parcelBytes(rv)
+                        }
+                        if (force && animate) TapLog.note("${kind.name.lowercase()} RemoteViews ${bytes / 1024} KB")
                         if (force && animate) TapLog.stage("composed ${kind.name.lowercase()}")
                         if (stale(context, snap)) return@async null
                         ids.forEach { drawId(context, m, it, rv, animate) }
@@ -208,20 +217,17 @@ object FastWidgets {
     /** Draw [content] for [id]: animated into the hidden frame when [animate] and the widget already shows a wrapper. */
     private fun drawId(context: Context, m: AppWidgetManager, id: Int, content: RemoteViews, animate: Boolean) {
         val cur = shownFrame(context, id)
-        if (animate && cur != null && Build.VERSION.SDK_INT >= 26) {
+        if (animate && cur != null) {
             val next = 1 - cur
-            if (Build.VERSION.SDK_INT >= 31) {
-                // Android 12+ hosts re-inflate on a partial update that adds views (a blank flash, no cross-fade):
-                // put the new state into the hidden frame with a full update (same layout, applied in place), then
-                // flip with a partial update that only changes the displayed child.
-                m.updateAppWidget(id, wrap(context, content, next, hideOverlay = false).also { it.setDisplayedChild(R.id.flip, cur) })
-                m.partiallyUpdateAppWidget(id, RemoteViews(context.packageName, R.layout.widget_flip).also {
-                    it.setDisplayedChild(R.id.flip, next)
-                    it.setViewVisibility(R.id.pending, android.view.View.GONE)
-                })
-            } else {
-                m.partiallyUpdateAppWidget(id, wrap(context, content, next))
-            }
+            // The new state goes into the hidden frame with a FULL update (same layout, so the launcher applies it
+            // in place); then a tiny partial update flips to it and the launcher plays the cross-fade. A partial
+            // update that carries the content would be *appended* to the views the system keeps (mergeRemoteViews),
+            // growing every tap until the launcher's binder transaction fails (238–570 KB seen on Android 8).
+            m.updateAppWidget(id, wrap(context, content, next).also { it.setDisplayedChild(R.id.flip, cur) })
+            m.partiallyUpdateAppWidget(id, RemoteViews(context.packageName, R.layout.widget_flip).also {
+                it.setDisplayedChild(R.id.flip, next)
+                it.setViewVisibility(R.id.pending, android.view.View.GONE)
+            })
             rememberFrame(context, id, next)
             return
         }
@@ -251,7 +257,8 @@ object FastWidgets {
     }
 
     @Composable
-    private fun Content(context: Context, kind: Kind, snap: WidgetSnapshotData, team: TeamSnapshotData) {
+    private fun Content(context: Context, kind: Kind, snap: WidgetSnapshotData, team: TeamSnapshotData, heat: Boolean) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalHeat provides heat) {
         Themed(context, snap.theme) {
             when (kind) {
                 Kind.SMALL -> TimerContent(context, snap, null, null)
@@ -259,7 +266,16 @@ object FastWidgets {
                 Kind.TEAM -> TeamContent(context, snap, team)
             }
         }
+        }
     }
+
+    /** Size of [rv] as the system parcels it for the launcher. */
+    private fun parcelBytes(rv: RemoteViews): Int {
+        val p = android.os.Parcel.obtain()
+        return try { rv.writeToParcel(p, 0); p.dataSize() } catch (_: Exception) { 0 } finally { p.recycle() }
+    }
+
+    private const val MAX_RV_BYTES = 250_000
 
     /** The size shown in the current orientation: portrait = the narrow, tall one; landscape = the wide one. */
     private fun primary(context: Context, sizes: List<DpSize>): DpSize {
