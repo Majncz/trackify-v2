@@ -131,18 +131,25 @@ disconnects.
     kept in `files/widget_team.json` and refreshed on the app's presence signal (timer ops, socket
     `presence:changed` while the app or timer service is up), on foreground, when the system updates the widget and
     every 30 minutes (`TeamRefreshWorker`) — only while a widget that shows the team is placed.
-  - Taps never go through Glance's machinery. Buttons send an explicit foreground broadcast to
-    `TimerActionReceiver` → `TimerTap`: the timer changes in memory (files are written by a background writer), the
-    snapshot is rebuilt from the previous one, and `FastWidgets` composes the same widget content with
-    `GlanceRemoteViews` for every placed timer / Timer-and-tasks / Team widget (the size it shows first, then all
-    sizes) and hands it to `AppWidgetManager.updateAppWidget` itself. A Glance update needs a session, and without a
-    live one Glance starts it through WorkManager — which Doze, battery saver and the rare/restricted buckets defer by
-    seconds. Glance still redraws the same state 1.5 s later; snapshots carry a monotonic `version`, so an older
-    composition never lands on top (it triggers a re-push instead). The notification, tile, shortcuts and the
-    expedited `TimerSyncWorker` follow after the pixels; nothing on the tap path waits for the network, the session
-    (DataStore + Keystore), OkHttp or WorkManager (initialised on demand). The Quick Settings tile and the Switch…
-    picker use the same path. Tap → RemoteViews at the system: 50–120 ms warm, 240–370 ms for a cold process in
-    Doze / battery saver (emulator, 8 widgets placed).
+  - **One draw path: `FastWidgets`.** There is no Glance session any more (the receivers no longer call `super`); every
+    draw (placement, resize, tap, sync, team refresh) composes the widget with `GlanceRemoteViews` and hands the
+    RemoteViews to `AppWidgetManager` itself. Each widget is a two-frame `ViewFlipper` (`res/layout/widget_flip.xml`):
+    a state change draws into the hidden frame and flips, so the launcher cross-fades old and new (Android 12+: full
+    update into the hidden frame, then a tiny partial update that flips; Android 8–11: plain full update, no fade,
+    because partial updates that carry content are appended by the system and outgrow the launcher's binder limit).
+    A tap first puts a "Stopping… / Starting…" overlay on the widgets (a few binder calls, no composition), then the
+    real redraw replaces it. `TimerActionReceiver` → `TimerTap`: the timer changes in memory, the snapshot is rebuilt,
+    the widgets are pushed, then notification, tile, shortcuts and the server sync follow. Socket echoes
+    (`timer:started/stopped`) within 8 s of a local change are ignored (`TimerEngine.staleEcho`), so an old event can't
+    bring the previous state back.
+  - **Timer and tasks** layout by height: timer + Stop, a paged task list (‹ › turn the page with a fade; tap a row
+    to start/switch, tap the running row to stop), the work heat map (`Activity.kt`: last N weeks, Mon–Sun rows, one
+    tinted alpha bitmap), then the team. The team block is dropped first, then the heat map; the list keeps 3 rows.
+    Which layout a kind gets at a size is `WidgetLayoutChoice.choose` (unit-tested).
+  - **Widget diagnostics** (More → About): the last 30 taps with per-stage timings, standby bucket, battery
+    optimisation, timer service state, server host, and any flip-back with its reason (`TapLog`). Copy / Clear.
+    Launcher updates travel through a binder transaction (~500 KB async budget): `FastWidgets` measures the parcel
+    and drops the heat map if a widget's RemoteViews exceed 250 KB.
   - Picker previews: `previewLayout` (Android 12–14) and generated Glance previews (Android 15+).
 - **Quick Settings tile:** stops the running timer, or starts the last task.
 - **Dynamic shortcuts:** the 4 most recent tasks, plus Stop while a timer runs.
