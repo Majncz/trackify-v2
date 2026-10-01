@@ -10,9 +10,8 @@ import TrackifyKit
 // Both put the panel far off-screen and never activate the app, so they can run on a Mac someone is using.
 
 extension Notification.Name {
-    /// Test hooks: set the panel's search text / hovered row (object: String or nil).
+    /// Test hook: set the panel's search text (object: String).
     static let trackifyBenchQuery = Notification.Name("trackify.bench.query")
-    static let trackifyBenchHover = Notification.Name("trackify.bench.hover")
 }
 
 /// Pings the main thread every few ms from a background thread; records how long each ping waited.
@@ -63,12 +62,6 @@ final class MainThreadHitchMonitor: @unchecked Sendable {
 
 @MainActor
 enum PanelBench {
-    /// Read once: the panel's rows only subscribe to the hover hook in test-hook runs that ask for it.
-    nonisolated(unsafe) static let hooksEnabled: Bool = {
-        let d = UserDefaults.standard
-        return d.string(forKey: "TrackifyPanelBench") != nil || d.string(forKey: "TrackifyPanelShot") != nil
-            || d.string(forKey: "TrackifyPanelHold") != nil
-    }()
     nonisolated(unsafe) static let shotRequested: Bool = UserDefaults.standard.string(forKey: "TrackifyPanelShot") != nil
     static var benchRequested: Bool { UserDefaults.standard.string(forKey: "TrackifyPanelBench") != nil }
 
@@ -104,6 +97,21 @@ enum PanelBench {
             window.orderOut(nil)
         }
         var scrollView: NSScrollView? { Self.find(NSScrollView.self, in: window.contentView) }
+        /// A real mouse-moved event at `y` points from the top (what the system sends when the pointer moves), so
+        /// hover goes through SwiftUI's own tracking like a user's.
+        func mouse(toTop y: CGFloat, x: CGFloat = 170) {
+            guard let v = window.contentView,
+                  let e = NSEvent.mouseEvent(with: .mouseMoved, location: NSPoint(x: x, y: window.frame.height - y), modifierFlags: [],
+                                             timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                             context: nil, eventNumber: 0, clickCount: 0, pressure: 0) else { return }
+            v.mouseMoved(with: e)
+        }
+        /// Middle of the n-th task row, from the top of the panel (hero + search + list header above it).
+        static func rowY(_ n: Int) -> CGFloat { rowTop + CGFloat(n) * 30 + 15 }
+        static var rowTop: CGFloat {
+            let d = UserDefaults.standard.double(forKey: "TrackifyPanelRowTop")
+            return d > 0 ? CGFloat(d) : 172
+        }
         static func find<T: NSView>(_ type: T.Type, in v: NSView?) -> T? {
             guard let v else { return nil }
             if let t = v as? T { return t }
@@ -218,12 +226,12 @@ enum PanelBench {
         // Hover across the rows.
         var hovers: [Double] = []
         cpuLog = []
-        let ids = Analytics.sortTasks(model.tasks, runningTaskId: model.running?.taskId).prefix(16).map(\.id)
-        for id in ids {
-            hovers.append(await measure { NotificationCenter.default.post(name: .trackifyBenchHover, object: id) })
+        host.mouse(toTop: Host.rowY(0))
+        await sleep(0.3)
+        for n in 1..<14 {
+            hovers.append(await measure { host.mouse(toTop: Host.rowY(n)) })
             await sleep(0.05)
         }
-        hovers.append(await measure { NotificationCenter.default.post(name: .trackifyBenchHover, object: nil) })
         log("hover row → frame: " + stats(hovers))
         log("  main-thread CPU per hover: " + stats(cpuLog))
 
@@ -279,7 +287,6 @@ enum PanelBench {
         NSLog("bench: hold %@ start", mode)
         let cpu0 = cpuSeconds()
         let end = Date().addingTimeInterval(30)
-        let ids = Analytics.sortTasks(model.tasks, runningTaskId: model.running?.taskId).prefix(16).map(\.id)
         var i = 0
         while Date() < end {
             switch mode {
@@ -290,7 +297,7 @@ enum PanelBench {
                 NotificationCenter.default.post(name: .trackifyBenchQuery, object: q)
                 await sleep(0.1)
             case "hover":
-                NotificationCenter.default.post(name: .trackifyBenchHover, object: ids[i % ids.count])
+                host.mouse(toTop: Host.rowY(i % 14))
                 await sleep(0.05)
             case "scroll":
                 if let sv = host.scrollView, let doc = sv.documentView {
@@ -323,9 +330,7 @@ enum PanelBench {
             NotificationCenter.default.post(name: .trackifyBenchQuery, object: q)
         }
         if d.object(forKey: "TrackifyPanelHover") != nil {
-            let i = d.integer(forKey: "TrackifyPanelHover")
-            let sorted = Analytics.sortTasks(model.tasks, runningTaskId: model.running?.taskId)
-            if i < sorted.count { NotificationCenter.default.post(name: .trackifyBenchHover, object: sorted[i].id) }
+            host.mouse(toTop: Host.rowY(d.integer(forKey: "TrackifyPanelHover")))
         }
         await sleep(0.6)
         let scroll = d.double(forKey: "TrackifyPanelScroll")

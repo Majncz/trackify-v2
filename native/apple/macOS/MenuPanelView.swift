@@ -581,7 +581,6 @@ struct PanelTaskRow: View, Equatable {
         }
         .buttonStyle(PanelRowButtonStyle(hovered: hovered || isDefault))
         .onHover { h in if h != hovered { hovered = h } }
-        .modifier(BenchHoverHook(id: row.id, hovered: $hovered))
         .contextMenu {
             Button(running ? "Stop" : "Start") { actions.model.toggle(row.id) }
             Button("Log past time…") { if let t = actions.model.task(row.id) { actions.onLogPast(t) } }
@@ -792,18 +791,3 @@ struct PanelSignedOut: View {
     }
 }
 
-/// Test hook only: the bench / screenshot hooks hover a row by id.
-struct BenchHoverHook: ViewModifier {
-    let id: String
-    @Binding var hovered: Bool
-    func body(content: Content) -> some View {
-        if PanelBench.hooksEnabled {
-            content.onReceive(NotificationCenter.default.publisher(for: .trackifyBenchHover)) { n in
-                let h = (n.object as? String) == id
-                if h != hovered { hovered = h }
-            }
-        } else {
-            content
-        }
-    }
-}
