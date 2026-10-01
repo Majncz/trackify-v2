@@ -73,6 +73,7 @@ enum PanelBench {
 
     static func runIfRequested(model: AppModel) {
         guard model.isTestHookEnabled else { return }
+        if let mode = UserDefaults.standard.string(forKey: "TrackifyPanelHold") { Task { await hold(model: model, mode: mode) } }
         if benchRequested { Task { await bench(model: model) } }
         if shotRequested { Task { await shot(model: model) } }
     }
@@ -155,6 +156,10 @@ enum PanelBench {
         let mon = MainThreadHitchMonitor()
         mon.start()
         let host = Host(model: model)
+
+        // The status item builds its panel ahead of the first click.
+        host.window.contentView?.layoutSubtreeIfNeeded()
+        await sleep(1)
 
         // Open / close.
         var opens: [Double] = []
@@ -242,6 +247,47 @@ enum PanelBench {
         log(String(format: "memory footprint %.0f MB", rss))
         mon.stop()
         try? lines.joined(separator: "\n").appending("\n").write(toFile: out, atomically: true, encoding: .utf8)
+        NSApp.terminate(nil)
+    }
+
+    // MARK: Hold (for `sample` / Instruments from outside)
+
+    /// `-TrackifyPanelHold open|closed|type|scroll|hover`: one steady activity for 30 s after the data is in, then quit.
+    static func hold(model: AppModel, mode: String) async {
+        await waitForData(model)
+        let host = Host(model: model)
+        host.window.contentView?.layoutSubtreeIfNeeded()
+        if mode != "closed" { host.open() }
+        NSLog("bench: hold %@ start", mode)
+        let end = Date().addingTimeInterval(30)
+        let ids = Analytics.sortTasks(model.tasks, runningTaskId: model.running?.taskId).prefix(16).map(\.id)
+        var i = 0
+        while Date() < end {
+            switch mode {
+            case "type":
+                let word = "server"
+                let n = i % (2 * word.count)
+                let q = String(word.prefix(n <= word.count ? n : 2 * word.count - n))
+                NotificationCenter.default.post(name: .trackifyBenchQuery, object: q)
+                await sleep(0.1)
+            case "hover":
+                NotificationCenter.default.post(name: .trackifyBenchHover, object: ids[i % ids.count])
+                await sleep(0.05)
+            case "scroll":
+                if let sv = host.scrollView, let doc = sv.documentView {
+                    let maxY = max(1, doc.frame.height - sv.contentView.bounds.height)
+                    let phase = Double(i % 120) / 60
+                    let y = maxY * (phase <= 1 ? phase : 2 - phase)
+                    sv.contentView.scroll(to: NSPoint(x: 0, y: y))
+                    sv.reflectScrolledClipView(sv.contentView)
+                }
+                await sleep(0.016)
+            default:
+                await sleep(1)
+            }
+            i += 1
+        }
+        NSLog("bench: hold %@ end", mode)
         NSApp.terminate(nil)
     }
 
