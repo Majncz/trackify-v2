@@ -216,7 +216,7 @@ struct PanelRunningHero: View, Equatable {
         VStack(alignment: .leading, spacing: 0) {
             // Title + since use the full width; the clock and Stop share the row below.
             HStack(alignment: .firstTextBaseline, spacing: 7) {
-                WidgetTaskDot(hex: accentHex, size: 8).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+                WidgetTaskDot(hex: accentHex, size: 8, ring: true).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
                 Text(name).font(.system(size: 15, weight: .semibold)).lineLimit(1)
             }
             HStack(spacing: 3) {
@@ -552,7 +552,7 @@ struct PanelTaskRow: View, Equatable {
     var body: some View {
         Button { actions.model.toggle(row.id) } label: {
             HStack(spacing: 8) {
-                WidgetTaskDot(hex: row.accentHex, size: 7)
+                WidgetTaskDot(hex: row.accentHex, size: 7, ring: true)
                 Text(row.name)
                     .font(.system(size: 13, weight: running ? .semibold : .regular))
                     .lineLimit(1)

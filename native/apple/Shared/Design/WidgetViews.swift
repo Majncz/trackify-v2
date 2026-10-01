@@ -78,7 +78,13 @@ enum WidgetPalette {
 struct WidgetTaskDot: View {
     let hex: String
     var size: CGFloat = 8
-    var body: some View { Circle().fill(Color(hex: hex)).frame(width: size, height: size) }
+    /// A hairline ring so very dark / very light task colours still read on the panel's material.
+    var ring = false
+    var body: some View {
+        Circle().fill(Color(hex: hex))
+            .overlay { if ring { Circle().strokeBorder(Color.primary.opacity(0.22), lineWidth: 0.5) } }
+            .frame(width: size, height: size)
+    }
 }
 
 /// Green "live" dot with a soft halo (widgets can't run repeating animations; the ticking clock carries the motion).
