@@ -28,6 +28,10 @@ final class PanelModel {
     private(set) var visible = false
     /// ⌘ held while the panel is key: the ⌘1…9 hints get stronger.
     var commandHeld = false
+    /// Search text (here rather than in the view so a keystroke only re-renders the field and the list).
+    var query = ""
+    /// "Couldn't create …" under the list.
+    var createError: String?
     /// Launch-at-login state (an XPC round trip to read, so it's read off the main thread when the panel opens).
     private(set) var launchAtLogin = false
 

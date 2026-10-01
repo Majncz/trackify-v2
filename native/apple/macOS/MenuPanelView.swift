@@ -24,11 +24,9 @@ struct MenuPanelView: View {
     var close: () -> Void
     var openDashboard: (AppScreen?) -> Void
 
-    @State private var query = ""
     @State private var fixing: RunningTimer?
     @State private var loggingPast: TrackifyTask?
     @State private var showNewTask = false
-    @State private var createError: String?
     @FocusState private var searchFocused: Bool
 
     var body: some View {
@@ -40,11 +38,11 @@ struct MenuPanelView: View {
             .sheet(item: $loggingPast) { t in LogPastSheet(task: t).environment(model) }
             .sheet(isPresented: $showNewTask) { NewTaskSheet(startAfterCreate: true).environment(model) }
             .onReceive(NotificationCenter.default.publisher(for: .trackifyPanelOpened)) { _ in
-                query = ""
-                createError = nil
+                panel.query = ""
+                panel.createError = nil
                 searchFocused = true
             }
-            .onReceive(NotificationCenter.default.publisher(for: .trackifyBenchQuery)) { n in query = n.object as? String ?? "" }
+            .onReceive(NotificationCenter.default.publisher(for: .trackifyBenchQuery)) { n in panel.query = n.object as? String ?? "" }
     }
 
     @ViewBuilder private var content: some View {
@@ -60,12 +58,11 @@ struct MenuPanelView: View {
                     .padding(.horizontal, PanelMetrics.inset)
                     .padding(.top, 14)
                 PanelSaveError()
-                PanelSearchField(query: $query, focused: $searchFocused, onSubmit: submitSearch)
+                PanelSearchField(focused: $searchFocused, onSubmit: submitSearch)
                     .padding(.horizontal, PanelMetrics.inset - 4)
                     .padding(.top, 12)
                     .padding(.bottom, 6)
-                PanelScrollArea(query: query, createError: createError,
-                                onCreate: createAndStart,
+                PanelScrollArea(onCreate: createAndStart,
                                 onLogPast: { loggingPast = $0 },
                                 openDashboard: openDashboard)
                 Divider()
@@ -77,24 +74,24 @@ struct MenuPanelView: View {
     // MARK: Search actions
 
     private func filtered() -> [PanelModel.Row] {
-        PanelFilter.rows(panel.rows, query: query)
+        PanelFilter.rows(panel.rows, query: panel.query)
     }
 
     private func submitSearch() {
-        let q = query.trimmingCharacters(in: .whitespaces)
+        let q = panel.query.trimmingCharacters(in: .whitespaces)
         if let first = filtered().first {
             model.start(first.id)
-            query = ""
+            panel.query = ""
         } else if !q.isEmpty {
             createAndStart(q)
         }
     }
 
     private func createAndStart(_ name: String) {
-        createError = nil
+        panel.createError = nil
         Task {
-            do { try await model.createAndStart(name: name); query = "" }
-            catch let e as APIError { createError = e.message } catch {}
+            do { try await model.createAndStart(name: name); panel.query = "" }
+            catch let e as APIError { panel.createError = e.message } catch {}
         }
     }
 
@@ -335,20 +332,21 @@ struct PanelSaveError: View {
 // MARK: - Search
 
 struct PanelSearchField: View {
-    @Binding var query: String
+    @Environment(PanelModel.self) private var panel
     var focused: FocusState<Bool>.Binding
     var onSubmit: () -> Void
 
     var body: some View {
+        @Bindable var search = panel
         HStack(spacing: 7) {
             Image(systemName: "magnifyingglass").font(.system(size: 12.5, weight: .medium)).foregroundStyle(.secondary)
-            TextField("Start a task…", text: $query)
+            TextField("Start a task…", text: $search.query)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13.5))
                 .focused(focused)
                 .onSubmit(onSubmit)
-            if !query.isEmpty {
-                Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary) }
+            if !panel.query.isEmpty {
+                Button { panel.query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary) }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Clear")
             } else {
@@ -366,21 +364,19 @@ struct PanelSearchField: View {
 struct PanelScrollArea: View {
     @Environment(AppModel.self) private var model
     @Environment(PanelModel.self) private var panel
-    let query: String
-    let createError: String?
     var onCreate: (String) -> Void
     var onLogPast: (TrackifyTask) -> Void
     var openDashboard: (AppScreen?) -> Void
 
     var body: some View {
-        let searching = !query.trimmingCharacters(in: .whitespaces).isEmpty
+        let searching = !panel.query.trimmingCharacters(in: .whitespaces).isEmpty
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     PanelTasksHeader(searching: searching)
                         .padding(.horizontal, PanelMetrics.inset)
                         .id("top")
-                    PanelTaskList(query: query, createError: createError, onCreate: onCreate, onLogPast: onLogPast,
+                    PanelTaskList(onCreate: onCreate, onLogPast: onLogPast,
                                   openDashboard: openDashboard)
                     // Kept alive while searching, just collapsed.
                     VStack(alignment: .leading, spacing: 0) {
@@ -416,15 +412,13 @@ struct PanelTasksHeader: View {
 struct PanelTaskList: View {
     @Environment(AppModel.self) private var model
     @Environment(PanelModel.self) private var panel
-    let query: String
-    let createError: String?
     var onCreate: (String) -> Void
     var onLogPast: (TrackifyTask) -> Void
     var openDashboard: (AppScreen?) -> Void
 
     var body: some View {
-        let rows = PanelFilter.rows(panel.rows, query: query)
-        let q = query.trimmingCharacters(in: .whitespaces)
+        let rows = PanelFilter.rows(panel.rows, query: panel.query)
+        let q = panel.query.trimmingCharacters(in: .whitespaces)
         let runningId = model.running?.taskId
         let actions = PanelRowActions(model: model, onLogPast: onLogPast, openDashboard: openDashboard)
         // A few dozen rows: built once and kept (scrolling is then pure compositing). Long lists go lazy.
@@ -466,7 +460,7 @@ struct PanelTaskList: View {
             if !q.isEmpty, !rows.contains(where: { $0.name.compare(q, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }) {
                 PanelCreateRow(name: q, isDefault: rows.isEmpty, onCreate: onCreate)
             }
-            if let createError {
+            if let createError = panel.createError {
                 Text(createError).font(.system(size: 12)).foregroundStyle(.red)
                     .padding(.horizontal, PanelMetrics.inset).padding(.top, 4)
             }
@@ -506,15 +500,18 @@ struct PanelTaskRow: View, Equatable {
                     .lineLimit(1)
                 Spacer(minLength: 6)
                 PanelRowToday(row: row, running: running)
-                ZStack {
-                    if running || hovered {
-                        TaskRowGlyph(running: running, size: 19)
-                            .transition(.opacity)
-                    } else if isDefault {
-                        Text("↩").font(.system(size: 12)).foregroundStyle(.tertiary)
-                    } else if index < 9 {
-                        PanelShortcutHint(index: index)
+                // Both stay in place; hover only flips opacities (no views created or removed).
+                ZStack(alignment: .trailing) {
+                    Group {
+                        if isDefault {
+                            Text(verbatim: "↩").font(.system(size: 12)).foregroundStyle(.tertiary)
+                        } else if index < 9 {
+                            PanelShortcutHint(index: index)
+                        }
                     }
+                    .opacity(running || hovered ? 0 : 1)
+                    TaskRowGlyph(running: running, size: 19)
+                        .opacity(running || hovered ? 1 : 0)
                 }
                 .frame(width: 24, alignment: .trailing)
             }
@@ -523,9 +520,7 @@ struct PanelTaskRow: View, Equatable {
             .contentShape(Rectangle())
         }
         .buttonStyle(PanelRowButtonStyle(hovered: hovered || isDefault))
-        .onHover { h in
-            withAnimation(.easeOut(duration: 0.08)) { hovered = h }
-        }
+        .onHover { h in if h != hovered { hovered = h } }
         .modifier(BenchHoverHook(id: row.id, hovered: $hovered))
         .contextMenu {
             Button(running ? "Stop" : "Start") { actions.model.toggle(row.id) }
