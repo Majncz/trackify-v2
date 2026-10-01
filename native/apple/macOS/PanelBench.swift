@@ -275,7 +275,9 @@ enum PanelBench {
         let host = Host(model: model)
         host.window.contentView?.layoutSubtreeIfNeeded()
         if mode != "closed" { host.open() }
+        await sleep(5)   // let the open's refresh settle
         NSLog("bench: hold %@ start", mode)
+        let cpu0 = cpuSeconds()
         let end = Date().addingTimeInterval(30)
         let ids = Analytics.sortTasks(model.tasks, runningTaskId: model.running?.taskId).prefix(16).map(\.id)
         var i = 0
@@ -304,7 +306,7 @@ enum PanelBench {
             }
             i += 1
         }
-        NSLog("bench: hold %@ end", mode)
+        NSLog("bench: hold %@ end, process CPU %.2f %% over 30 s", mode, (cpuSeconds() - cpu0) / 30 * 100)
         NSApp.terminate(nil)
     }
 
