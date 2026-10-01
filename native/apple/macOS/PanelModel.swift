@@ -28,6 +28,8 @@ final class PanelModel {
     private(set) var visible = false
     /// ⌘ held while the panel is key: the ⌘1…9 hints get stronger.
     var commandHeld = false
+    /// Launch-at-login state (an XPC round trip to read, so it's read off the main thread when the panel opens).
+    private(set) var launchAtLogin = false
 
     @ObservationIgnored let model: AppModel
     @ObservationIgnored private var recomputeQueued = false
@@ -158,6 +160,20 @@ final class PanelModel {
         return total
     }
 
+    // MARK: Launch at login
+
+    func setLaunchAtLogin(_ on: Bool) {
+        launchAtLogin = on
+        Task.detached(priority: .userInitiated) { LaunchAtLogin.set(on) }
+    }
+
+    private func readLaunchAtLogin() {
+        Task.detached(priority: .utility) { [weak self] in
+            let on = LaunchAtLogin.isEnabled
+            await MainActor.run { if self?.launchAtLogin != on { self?.launchAtLogin = on } }
+        }
+    }
+
     // MARK: Visibility + minute tick
 
     func setVisible(_ v: Bool) {
@@ -165,6 +181,7 @@ final class PanelModel {
         visible = v
         if v {
             tick()
+            readLaunchAtLogin()
             flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] e in
                 let held = e.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command
                 if self?.commandHeld != held { self?.commandHeld = held }

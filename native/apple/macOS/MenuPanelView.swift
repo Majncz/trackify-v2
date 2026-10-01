@@ -228,7 +228,7 @@ struct PanelRunningHero: View, Equatable {
                         Text(stopping ? "Saving…" : "Syncing…")
                     } else {
                         WidgetLiveDot(size: 5)
-                        Text("Since \(DayCalc.current.format(Date(ms: running.startTime), "HH:mm"))")
+                        Text(verbatim: "Since \(DayCalc.current.format(Date(ms: running.startTime), "HH:mm"))")
                     }
                 }
                 .font(.system(size: 11.5)).foregroundStyle(.secondary)
@@ -263,15 +263,36 @@ struct PanelRunningHero: View, Equatable {
         }
     }
 
-    @ViewBuilder private var clock: some View {
-        let font = Font.system(size: 36, weight: .medium, design: .rounded)
+    private var clock: some View {
+        PanelClock(start: running.startTime, live: live)
+    }
+}
+
+/// The ticking clock, isolated: once a second only this text updates (a plain string, like the widget's
+/// `Text(timerInterval:)` format: 33:29, 1:03:26). Static while the panel is closed.
+struct PanelClock: View {
+    let start: Int64
+    let live: Bool
+    var body: some View {
         if live {
-            Text(timerInterval: Date(ms: running.startTime)...Date.distantFuture, countsDown: false)
-                .font(font).monospacedDigit().lineLimit(1)
+            TimelineView(.periodic(from: Date(ms: start), by: 1)) { ctx in
+                text(ctx.date)
+            }
         } else {
-            Text(Fmt.duration(max(0, Date().ms - running.startTime)))
-                .font(font).monospacedDigit().lineLimit(1)
+            text(Date())
         }
+    }
+
+    private func text(_ now: Date) -> some View {
+        Text(verbatim: Self.format(max(0, now.ms - start)))
+            .font(.system(size: 36, weight: .medium, design: .rounded))
+            .monospacedDigit()
+            .lineLimit(1)
+    }
+
+    static func format(_ ms: Int64) -> String {
+        let s = Int(ms / 1000)
+        return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60) : String(format: "%d:%02d", s / 60, s % 60)
     }
 }
 
@@ -400,7 +421,18 @@ struct PanelTaskList: View {
         let q = query.trimmingCharacters(in: .whitespaces)
         let runningId = model.running?.taskId
         let actions = PanelRowActions(model: model, onLogPast: onLogPast, openDashboard: openDashboard)
-        LazyVStack(alignment: .leading, spacing: 0) {
+        // A few dozen rows: built once and kept (scrolling is then pure compositing). Long lists go lazy.
+        if rows.count > 120 {
+            LazyVStack(alignment: .leading, spacing: 0) { list(rows, q: q, runningId: runningId, actions: actions) }
+                .padding(.horizontal, PanelMetrics.inset - PanelMetrics.rowInset)
+        } else {
+            VStack(alignment: .leading, spacing: 0) { list(rows, q: q, runningId: runningId, actions: actions) }
+                .padding(.horizontal, PanelMetrics.inset - PanelMetrics.rowInset)
+        }
+    }
+
+    @ViewBuilder
+    private func list(_ rows: [PanelModel.Row], q: String, runningId: String?, actions: PanelRowActions) -> some View {
             if !model.tasksLoaded {
                 ForEach(0..<5, id: \.self) { _ in
                     RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.07)).frame(height: 12)
@@ -423,8 +455,6 @@ struct PanelTaskList: View {
                 Text(createError).font(.system(size: 12)).foregroundStyle(.red)
                     .padding(.horizontal, PanelMetrics.inset).padding(.top, 4)
             }
-        }
-        .padding(.horizontal, PanelMetrics.inset - PanelMetrics.rowInset)
     }
 }
 
@@ -524,7 +554,7 @@ struct PanelShortcutHint: View {
     @Environment(PanelModel.self) private var panel
     let index: Int
     var body: some View {
-        Text("⌘\(index + 1)")
+        Text(verbatim: "⌘\(index + 1)")
             .font(.system(size: 10.5, weight: .medium, design: .rounded))
             .foregroundStyle(panel.commandHeld ? AnyShapeStyle(.secondary) : AnyShapeStyle(.quaternary))
     }
@@ -539,7 +569,7 @@ struct PanelCreateRow: View {
         Button { onCreate(name) } label: {
             HStack(spacing: 8) {
                 Image(systemName: "plus.circle.fill").font(.system(size: 14)).foregroundStyle(.green)
-                Text("Create “\(name)” and start").font(.system(size: 13)).lineLimit(1)
+                Text(verbatim: "Create “\(name)” and start").font(.system(size: 13)).lineLimit(1)
                 Spacer(minLength: 6)
                 if isDefault { Text("↩").font(.system(size: 12)).foregroundStyle(.tertiary) }
             }
@@ -612,8 +642,8 @@ struct PanelTeamSection: View {
 
 struct PanelFooter: View {
     @Environment(AppModel.self) private var model
+    @Environment(PanelModel.self) private var panel
     var openDashboard: (AppScreen?) -> Void
-    @State private var launchAtLogin = LaunchAtLogin.isEnabled
 
     var body: some View {
         HStack(spacing: 2) {
@@ -632,7 +662,7 @@ struct PanelFooter: View {
             Menu {
                 Button("Open Dashboard") { openDashboard(nil) }.keyboardShortcut("d")
                 Button("Settings…") { openDashboard(.settings) }.keyboardShortcut(",")
-                Toggle("Launch at Login", isOn: Binding(get: { launchAtLogin }, set: { launchAtLogin = $0; LaunchAtLogin.set($0) }))
+                Toggle("Launch at Login", isOn: Binding(get: { panel.launchAtLogin }, set: { panel.setLaunchAtLogin($0) }))
                 Divider()
                 if model.phase == .signedIn {
                     Button("Sign Out") { Task { await model.signOut() } }
@@ -649,7 +679,6 @@ struct PanelFooter: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 38)
-        .onReceive(NotificationCenter.default.publisher(for: .trackifyPanelOpened)) { _ in launchAtLogin = LaunchAtLogin.isEnabled }
     }
 }
 
