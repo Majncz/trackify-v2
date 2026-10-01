@@ -304,7 +304,7 @@ final class MenuPanelWindow: NSPanel {
 
     init(contentViewController: NSViewController) {
         super.init(contentRect: NSRect(x: 0, y: 0, width: PanelMetrics.width, height: PanelMetrics.height),
-                   styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView], backing: .buffered, defer: false)
+                   styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         self.contentViewController = contentViewController
         isFloatingPanel = true
         level = .popUpMenu
