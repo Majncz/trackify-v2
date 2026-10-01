@@ -103,14 +103,24 @@ UITests/, RenderTests/ screenshot walk + timer flow tests; widget/Live Activity 
   uses the lane's weak ETag (`If-None-Match` → 304). Stats, heat grid and calendar are computed off the main actor;
   long lists are lazy; the 1000-day heat grid is virtualised; refreshes are debounced (400 ms, presence 1 s);
   widgets reload only when the snapshot changes; the iOS socket disconnects in the background; the macOS menu-bar
-  label ticks once per minute (per second only with "show seconds"); the panel/dashboard drop their view trees
-  while hidden.
+  label ticks once per minute (per second only with "show seconds"); the dashboard drops its view tree while closed.
+* **Menu-bar panel** (`macOS/MenuPanelView.swift`, `PanelModel.swift`) — the widget design on the popover material:
+  hero (task, "Since", rounded clock that opens Fix session, soft Stop pill; idle: today's total), search
+  (⌘1–9, ↩ starts the first match or creates the task), the task rows, the heat map (→ Stats) and Team today (→ Team).
+  Built once and pre-rendered off-screen at launch, kept while closed (nothing ticks then); sorted rows, totals, heat
+  days and team are computed in `PanelModel` when the data changes, never in a view body; the clock is a small AppKit
+  view that redraws its own text, so the per-second tick never touches the SwiftUI graph; a search collapses rows
+  instead of rebuilding them; launch-at-login state is read off the main thread. Test hooks: `-TrackifyPanelBench <file>`
+  (open/typing/hover/scroll/CPU numbers), `-TrackifyPanelShot <png>` (`-TrackifyPanelQuery`, `-TrackifyPanelHover n`,
+  `-TrackifyPanelScroll pt`), `-TrackifyPanelHold open|closed|type|hover|scroll` (for `sample`); screenshots in
+  `native/screenshots/apple/panel/`.
 
 ## Measured (CI, GitHub `macos-26` runners)
 
 | What | Result |
 |---|---|
 | macOS idle CPU, menu-bar only, timer running, 30 s sample | **0.03–0.13 %**, RSS ≈ 75 MB |
+| Menu-bar panel (Release, Taryk's Mac, 40 tasks / 2 660 events, timer running; `-TrackifyPanelBench`) | open ≈ 45 ms (was ≈ 150 ms), no stall after open (was ≈ 220 ms); open and idle 0.5 % CPU (was 1.4 %), closed 0.05 %; hover ≈ 16 ms main-thread CPU (was ≈ 30 ms) |
 | iOS launch (`XCTApplicationLaunchMetric`, Debug build, iPhone 17 Pro simulator on a shared CI VM, 3 runs) | ≈ 2.3–3.2 s avg (cold, includes simulator overhead); cached tasks/profile render before the first network response |
 | TrackifyKit unit tests (Linux + macOS) | 49 tests, incl. audit test vectors, timer-queue/offline/legacy-fallback, SSE, Socket.IO frames; live read-only decoding + socket auth on macOS |
 | UI tests | screenshot walk (all screens), Live Activity on lock screen/Dynamic Island, end-to-end timer flow against the lane API (start → switch → fix → stop → log past → live sync via socket) |
