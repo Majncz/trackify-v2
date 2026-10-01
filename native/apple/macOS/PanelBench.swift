@@ -270,7 +270,10 @@ enum PanelBench {
             sv.reflectScrolledClipView(sv.contentView)
         }
         await sleep(1.2)
-        DebugPanelCapture.capture(host.window, to: out)
+        for _ in 0..<5 {
+            if DebugPanelCapture.capture(host.window, to: out) { break }
+            await sleep(0.5)
+        }
         NSApp.terminate(nil)
     }
 }
@@ -289,14 +292,15 @@ extension ProcessInfo {
 /// Images one of the app's own windows (with its shadow-less frame) to a PNG.
 @MainActor
 enum DebugPanelCapture {
-    static func capture(_ window: NSWindow, to path: String) {
+    @discardableResult
+    static func capture(_ window: NSWindow, to path: String) -> Bool {
         typealias Fn = @convention(c) (CGRect, UInt32, UInt32, UInt32) -> Unmanaged<CGImage>?
         var image: CGImage?
         if let sym = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CGWindowListCreateImage") {
             let f = unsafeBitCast(sym, to: Fn.self)
             image = f(.null, 1 << 3, UInt32(window.windowNumber), (1 << 0) | (1 << 3))?.takeRetainedValue()
         }
-        guard let image else { NSLog("panel snapshot failed"); return }
-        try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+        guard let image else { NSLog("panel snapshot failed"); return false }
+        return (try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))) != nil
     }
 }
