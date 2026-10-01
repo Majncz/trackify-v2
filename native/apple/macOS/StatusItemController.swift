@@ -6,6 +6,7 @@ import TrackifyKit
 @MainActor
 final class StatusItemController: NSObject, NSWindowDelegate {
     let model: AppModel
+    let panelModel: PanelModel
     let openDashboard: (AppScreen?) -> Void
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var panel: MenuPanelWindow?
@@ -16,6 +17,7 @@ final class StatusItemController: NSObject, NSWindowDelegate {
 
     init(model: AppModel, openDashboard: @escaping (AppScreen?) -> Void) {
         self.model = model
+        self.panelModel = PanelModel(model: model)
         self.openDashboard = openDashboard
         super.init()
         if let b = item.button {
@@ -30,6 +32,17 @@ final class StatusItemController: NSObject, NSWindowDelegate {
         NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.updateLabel() }
         }
+        // Build the panel's view tree ahead of the first click (it then stays alive; a closed panel doesn't tick).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            MainActor.assumeIsolated { self?.prewarmPanel() }
+        }
+    }
+
+    private func prewarmPanel() {
+        guard panel == nil else { return }
+        let p = makePanel()
+        panel = p
+        p.contentView?.layoutSubtreeIfNeeded()
     }
 
     /// Re-arm a one-shot timer for the next visible change: next second with seconds on,
@@ -190,6 +203,7 @@ final class StatusItemController: NSObject, NSWindowDelegate {
             p.animator().alphaValue = 1
         }
         item.button?.highlight(true)
+        if let m = outsideMonitor { NSEvent.removeMonitor(m) }
         outsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             Task { @MainActor in
                 guard let self, let p = self.panel, p.attachedSheet == nil, p.childWindows?.isEmpty ?? true else { return }
@@ -197,6 +211,8 @@ final class StatusItemController: NSObject, NSWindowDelegate {
             }
         }
         NotificationCenter.default.post(name: .trackifyPanelOpened, object: nil)
+        // Refresh after the first frame is on screen (the cached state shows instantly).
+        DispatchQueue.main.async { [weak self] in self?.model.foreground() }
     }
 
     func closePanel() {
@@ -214,7 +230,7 @@ final class StatusItemController: NSObject, NSWindowDelegate {
 
     private func makePanel() -> MenuPanelWindow {
         let p = Self.makePanelWindow(
-            model: model,
+            model: model, panelModel: panelModel,
             close: { [weak self] in self?.closePanel() },
             openDashboard: { [weak self] screen in self?.closePanel(); self?.openDashboard(screen) })
         p.onEscape = { [weak self] in self?.closePanel() }
@@ -222,9 +238,12 @@ final class StatusItemController: NSObject, NSWindowDelegate {
     }
 
     /// The panel window with its SwiftUI content (also used by the panel test hooks).
-    static func makePanelWindow(model: AppModel, close: @escaping () -> Void, openDashboard: @escaping (AppScreen?) -> Void) -> MenuPanelWindow {
-        let root = MenuPanelView(close: close, openDashboard: openDashboard).environment(model)
+    static func makePanelWindow(model: AppModel, panelModel: PanelModel, close: @escaping () -> Void,
+                                openDashboard: @escaping (AppScreen?) -> Void) -> MenuPanelWindow {
+        let root = MenuPanelView(close: close, openDashboard: openDashboard).environment(model).environment(panelModel)
         let host = NSHostingController(rootView: root)
+        // Fixed-size panel: no intrinsic-size passes on every content change.
+        host.sizingOptions = []
         return MenuPanelWindow(contentViewController: host)
     }
 
@@ -240,12 +259,14 @@ final class StatusItemController: NSObject, NSWindowDelegate {
 
     /// DEBUG/screenshot: the panel content in a normal titled window.
     func showPanelAsWindow() {
-        let root = MenuPanelView(close: {}, openDashboard: { [weak self] s in self?.openDashboard(s) }, alwaysVisible: true).environment(model)
+        let root = MenuPanelView(close: {}, openDashboard: { [weak self] s in self?.openDashboard(s) })
+            .environment(model).environment(panelModel)
         let host = NSHostingController(rootView: root)
+        panelModel.setVisible(true)
         let w = NSWindow(contentViewController: host)
         w.title = "Trackify Panel"
         w.styleMask = [.titled, .closable]
-        w.setContentSize(NSSize(width: 360, height: 560))
+        w.setContentSize(NSSize(width: PanelMetrics.width, height: PanelMetrics.height))
         w.center()
         w.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -263,7 +284,7 @@ final class MenuPanelWindow: NSPanel {
     var onEscape: (() -> Void)?
 
     init(contentViewController: NSViewController) {
-        super.init(contentRect: NSRect(x: 0, y: 0, width: 360, height: 560),
+        super.init(contentRect: NSRect(x: 0, y: 0, width: PanelMetrics.width, height: PanelMetrics.height),
                    styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView], backing: .buffered, defer: false)
         self.contentViewController = contentViewController
         isFloatingPanel = true
@@ -279,7 +300,7 @@ final class MenuPanelWindow: NSPanel {
             v.layer?.cornerRadius = 12
             v.layer?.masksToBounds = true
         }
-        setContentSize(NSSize(width: 360, height: 560))
+        setContentSize(NSSize(width: PanelMetrics.width, height: PanelMetrics.height))
     }
 
     /// Test hooks: draw as the key window without taking focus, anywhere (off-screen).

@@ -43,6 +43,7 @@
 		4089D4801DAFE4E36B98C836 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 22797FA861B872512FE3FB2B /* WidgetKit.framework */; };
 		416435D009A283418D886BA0 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B55E024593F54F7CB556FB16 /* SwiftUI.framework */; };
 		43E8B912156A2C2BABF21CD9 /* SessionSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 516216E5BC416F6F7E0C725D /* SessionSlider.swift */; };
+		443A9FB9FCF8D2B606A296FA /* PanelModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F3AE9AB5DC659F1C7890918 /* PanelModel.swift */; };
 		4AA51F81200DCB76194B9DDB /* MarkPaidSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7A598356E1DD539530F920B /* MarkPaidSheet.swift */; };
 		4BBB582B2B746A9DE4151819 /* StatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5B6BF9AECFD881C074D051C /* StatusItemController.swift */; };
 		4D0DE7EBD63EA109EEB343AB /* AIBillingTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 909E67B136B718FCA4385CE5 /* AIBillingTab.swift */; };
@@ -225,6 +226,7 @@
 		69F628C6E944BA1344E7D6DD /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		6B32683C346A8E237873FEB4 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		6EC0896EC077C1C731A99E70 /* LiveActivityAndControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityAndControl.swift; sourceTree = "<group>"; };
+		6F3AE9AB5DC659F1C7890918 /* PanelModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelModel.swift; sourceTree = "<group>"; };
 		6F522474E7CEFD1F5169E252 /* PhoneStatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneStatsView.swift; sourceTree = "<group>"; };
 		7102C6D8550B95B3BD5DF990 /* TrackifyKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = TrackifyKit; path = Packages/TrackifyKit; sourceTree = SOURCE_ROOT; };
 		7CB0BE40DA7694E967B5C8CD /* BillingRatesTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BillingRatesTab.swift; sourceTree = "<group>"; };
@@ -372,6 +374,7 @@
 				2EC23DE92AC9F163A75E77B9 /* GlobalHotKey.swift */,
 				81A4D3236B61057AE10A6537 /* MenuPanelView.swift */,
 				22765E3E03D46D74ABE68FC4 /* PanelBench.swift */,
+				6F3AE9AB5DC659F1C7890918 /* PanelModel.swift */,
 				A5B6BF9AECFD881C074D051C /* StatusItemController.swift */,
 				B77EF644DD87BE7E975A5BD3 /* TrackifyMacApp.swift */,
 			);
@@ -934,6 +937,7 @@
 				4AA51F81200DCB76194B9DDB /* MarkPaidSheet.swift in Sources */,
 				A1BE1A989F290ABA472415C3 /* MenuPanelView.swift in Sources */,
 				E069CD112697D77EA9658F28 /* PanelBench.swift in Sources */,
+				443A9FB9FCF8D2B606A296FA /* PanelModel.swift in Sources */,
 				E225263AB6B56876D06260B0 /* Reminder.swift in Sources */,
 				5CD388467C5F1B0CF689CC87 /* RootView.swift in Sources */,
 				E898EFF4E00091FCD8C062A1 /* SessionSlider.swift in Sources */,

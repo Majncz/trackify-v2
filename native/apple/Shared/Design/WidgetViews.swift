@@ -132,20 +132,53 @@ struct WidgetClock: View {
     }
 }
 
+/// The soft red "■ Stop" capsule: tinted background, red label (widgets and the Mac menu-bar panel).
+struct StopPillLabel: View {
+    var title = "Stop"
+    var full = true
+    var height: CGFloat = 30
+    /// Pressed / hovered emphasis (the panel); widgets keep the resting look.
+    var emphasis: Double = 0
+    var body: some View {
+        Label(title, systemImage: "stop.fill")
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(.red)
+            .padding(.horizontal, 16)
+            .frame(maxWidth: full ? .infinity : nil, minHeight: height)
+            .background(Color.red.opacity(0.14 + emphasis), in: Capsule())
+            .contentShape(Capsule())
+    }
+}
+
 struct WidgetStopPill: View {
     var full = true
     var height: CGFloat = 30
     var body: some View {
         Button(intent: WidgetStopIntent()) {
-            Label("Stop", systemImage: "stop.fill")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.red)
-                .padding(.horizontal, 16)
-                .frame(maxWidth: full ? .infinity : nil, minHeight: height)
-                .background(Color.red.opacity(0.14), in: Capsule())
-                .contentShape(Capsule())
+            StopPillLabel(full: full, height: height)
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// A task row's trailing control: solid red stop disc on the running task, otherwise a ▶ circle.
+struct TaskRowGlyph: View {
+    let running: Bool
+    var size: CGFloat = 20
+    var body: some View {
+        Group {
+            if running {
+                // Solid red disc with a white square, like the Stop pill's colour.
+                Image(systemName: "stop.circle.fill")
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, .red)
+            } else {
+                Image(systemName: "play.circle")
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.system(size: size, weight: .light))
     }
 }
 
@@ -188,20 +221,8 @@ struct WidgetTaskRow: View {
                         .contentTransition(.numericText())
                         .invalidatableContent()
                 }
-                Group {
-                    if running {
-                        // Solid red disc with a white square, like the Stop pill's colour.
-                        Image(systemName: "stop.circle.fill")
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, .red)
-                    } else {
-                        Image(systemName: "play.circle")
-                            .symbolRenderingMode(.hierarchical)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .font(.system(size: 20, weight: .light))
-                .contentTransition(.symbolEffect(.replace))
+                TaskRowGlyph(running: running)
+                    .contentTransition(.symbolEffect(.replace))
             }
             .frame(maxWidth: .infinity, maxHeight: height == nil ? .infinity : nil)
             .frame(height: height)

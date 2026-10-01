@@ -63,6 +63,11 @@ final class MainThreadHitchMonitor: @unchecked Sendable {
 
 @MainActor
 enum PanelBench {
+    /// Read once: the panel's rows only subscribe to the hover hook in test-hook runs that ask for it.
+    nonisolated(unsafe) static let hooksEnabled: Bool = {
+        let d = UserDefaults.standard
+        return d.string(forKey: "TrackifyPanelBench") != nil || d.string(forKey: "TrackifyPanelShot") != nil
+    }()
     static var shotRequested: Bool { UserDefaults.standard.string(forKey: "TrackifyPanelShot") != nil }
     static var benchRequested: Bool { UserDefaults.standard.string(forKey: "TrackifyPanelBench") != nil }
 
@@ -76,8 +81,10 @@ enum PanelBench {
 
     @MainActor final class Host {
         let window: MenuPanelWindow
+        let model: AppModel
         init(model: AppModel) {
-            window = StatusItemController.makePanelWindow(model: model, close: {}, openDashboard: { _ in })
+            self.model = model
+            window = StatusItemController.makePanelWindow(model: model, panelModel: PanelModel(model: model), close: {}, openDashboard: { _ in })
             window.benchForceKey = true
             window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
         }
@@ -86,7 +93,10 @@ enum PanelBench {
             window.alphaValue = 1
             window.orderFront(nil)
             NotificationCenter.default.post(name: .trackifyPanelOpened, object: nil)
+            if Self.refreshAfterOpen { DispatchQueue.main.async { [model] in model.foreground() } }
         }
+        /// The status item refreshes once the panel's first frame is up (as `StatusItemController.showPanel`).
+        static var refreshAfterOpen = true
         func close() {
             NotificationCenter.default.post(name: .trackifyPanelClosed, object: nil)
             window.orderOut(nil)

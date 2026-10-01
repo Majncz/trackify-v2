@@ -154,9 +154,15 @@ final class AppModel {
         socketDisconnectedForBackground = true
     }
 
-    /// App came to foreground / network came back.
+    @ObservationIgnored private var lastForeground: Date = .distantPast
+
+    /// App came to foreground / network came back. Calls within 3 s of each other (the Mac panel opening also
+    /// activates the app) refresh once.
     func foreground() {
         guard phase == .signedIn else { return }
+        let t = Date()
+        if t.timeIntervalSince(lastForeground) < 3, !socketDisconnectedForBackground { return }
+        lastForeground = t
         if socketDisconnectedForBackground, let s = session {
             socketDisconnectedForBackground = false
             socket.connect(baseURL: api.baseURL, token: s.token)
