@@ -475,24 +475,44 @@ struct PanelTaskList: View {
     var onCreate: (String) -> Void
     var onLogPast: (TrackifyTask) -> Void
     var openDashboard: (AppScreen?) -> Void
+    /// Row under the pointer (index among the shown rows). One hover handler and one context menu for the whole list
+    /// instead of one per row: far fewer hover regions and platform views to update on every mouse move.
+    @State private var hoverIndex: Int?
 
     var body: some View {
         let rows = PanelFilter.rows(panel.rows, query: panel.query)
         let q = panel.query.trimmingCharacters(in: .whitespaces)
         let runningId = model.running?.taskId
         let actions = PanelRowActions(model: model, onLogPast: onLogPast, openDashboard: openDashboard)
-        // A few dozen rows: built once and kept (scrolling is then pure compositing). Long lists go lazy.
-        if rows.count > 120 {
-            LazyVStack(alignment: .leading, spacing: 0) { list(rows, q: q, runningId: runningId, actions: actions) }
-                .padding(.horizontal, PanelMetrics.inset - PanelMetrics.rowInset)
-        } else {
-            VStack(alignment: .leading, spacing: 0) { list(rows, q: q, runningId: runningId, actions: actions) }
-                .padding(.horizontal, PanelMetrics.inset - PanelMetrics.rowInset)
+        let hoveredId = hoverIndex.flatMap { $0 < rows.count ? rows[$0].id : nil }
+        Group {
+            // A few dozen rows: built once and kept (scrolling is then pure compositing). Long lists go lazy.
+            if panel.rows.count > 120 {
+                LazyVStack(alignment: .leading, spacing: 0) { list(rows, q: q, runningId: runningId, hoveredId: hoveredId, actions: actions) }
+            } else {
+                VStack(alignment: .leading, spacing: 0) { list(rows, q: q, runningId: runningId, hoveredId: hoveredId, actions: actions) }
+            }
         }
+        .onContinuousHover(coordinateSpace: .local) { phase in
+            var i: Int?
+            if case .active(let p) = phase, model.tasksLoaded, p.y >= 0 { i = Int(p.y / PanelMetrics.rowHeight) }
+            if i != hoverIndex { hoverIndex = i }
+        }
+        .contextMenu {
+            if let id = hoveredId {
+                let running = id == runningId
+                Button(running ? "Stop" : "Start") { model.toggle(id) }
+                Button("Log past time…") { if let t = model.task(id) { onLogPast(t) } }
+                Button("Details") { NavigationState.shared.open(.task(id)); openDashboard(.home) }
+                Divider()
+                Button("Hide") { Task { try? await model.hide(id) } }
+            }
+        }
+        .padding(.horizontal, PanelMetrics.inset - PanelMetrics.rowInset)
     }
 
     @ViewBuilder
-    private func list(_ rows: [PanelModel.Row], q: String, runningId: String?, actions: PanelRowActions) -> some View {
+    private func list(_ rows: [PanelModel.Row], q: String, runningId: String?, hoveredId: String?, actions: PanelRowActions) -> some View {
             if !model.tasksLoaded {
                 ForEach(0..<5, id: \.self) { _ in
                     RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.07)).frame(height: 12)
@@ -508,7 +528,8 @@ struct PanelTaskList: View {
                 let shown = Dictionary(uniqueKeysWithValues: rows.enumerated().map { ($1.id, $0) })
                 ForEach(panel.rows) { row in
                     let i = shown[row.id]
-                    PanelTaskRow(row: row, index: i ?? 0, running: row.id == runningId, isDefault: i == 0 && !q.isEmpty, actions: actions)
+                    PanelTaskRow(row: row, index: i ?? 0, running: row.id == runningId, isDefault: i == 0 && !q.isEmpty,
+                                 hovered: row.id == hoveredId, actions: actions)
                         .equatable()
                         .frame(height: i == nil ? 0 : PanelMetrics.rowHeight, alignment: .top)
                         .clipped()
@@ -544,11 +565,11 @@ struct PanelTaskRow: View, Equatable {
     let running: Bool
     /// First search result: return starts it.
     let isDefault: Bool
+    let hovered: Bool
     let actions: PanelRowActions
-    @State private var hovered = false
 
     static func == (a: Self, b: Self) -> Bool {
-        a.row == b.row && a.index == b.index && a.running == b.running && a.isDefault == b.isDefault
+        a.row == b.row && a.index == b.index && a.running == b.running && a.isDefault == b.isDefault && a.hovered == b.hovered
     }
 
     var body: some View {
@@ -580,14 +601,6 @@ struct PanelTaskRow: View, Equatable {
             .contentShape(Rectangle())
         }
         .buttonStyle(PanelRowButtonStyle(hovered: hovered || isDefault))
-        .onHover { h in if h != hovered { hovered = h } }
-        .contextMenu {
-            Button(running ? "Stop" : "Start") { actions.model.toggle(row.id) }
-            Button("Log past time…") { if let t = actions.model.task(row.id) { actions.onLogPast(t) } }
-            Button("Details") { NavigationState.shared.open(.task(row.id)); actions.openDashboard(.home) }
-            Divider()
-            Button("Hide") { Task { try? await actions.model.hide(row.id) } }
-        }
         .accessibilityLabel("\(row.name)\(running ? ", running" : "")")
     }
 }
