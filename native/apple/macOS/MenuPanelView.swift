@@ -231,7 +231,7 @@ struct PanelRunningHero: View, Equatable {
                 .font(.system(size: 11.5)).foregroundStyle(.secondary)
                 .padding(.leading, -1)
                 Button(action: onFix) {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    HStack(alignment: .center, spacing: 6) {
                         clock
                         Image(systemName: "pencil")
                             .font(.system(size: 11, weight: .semibold))
@@ -261,35 +261,95 @@ struct PanelRunningHero: View, Equatable {
     }
 
     private var clock: some View {
-        PanelClock(start: running.startTime, live: live)
+        PanelClock(start: running.startTime, live: live).fixedSize()
     }
 }
 
-/// The ticking clock, isolated: once a second only this text updates (a plain string, like the widget's
-/// `Text(timerInterval:)` format: 33:29, 1:03:26). Static while the panel is closed.
-struct PanelClock: View {
+/// The ticking clock. It's a small AppKit view that redraws its own text once a second, so the tick never touches the
+/// SwiftUI graph (no view update, layout or display-list pass for the rest of the panel). Same look and format as the
+/// widget's `Text(timerInterval:)`: rounded 36 pt, monospaced digits, 33:29 / 1:03:26. Static while the panel is closed.
+struct PanelClock: NSViewRepresentable {
     let start: Int64
     let live: Bool
-    var body: some View {
-        if live {
-            TimelineView(.periodic(from: Date(ms: start), by: 1)) { ctx in
-                text(ctx.date)
-            }
-        } else {
-            text(Date())
-        }
+
+    func makeNSView(context: Context) -> PanelClockView { PanelClockView() }
+
+    func updateNSView(_ v: PanelClockView, context: Context) {
+        v.configure(start: start, live: live)
     }
 
-    private func text(_ now: Date) -> some View {
-        Text(verbatim: Self.format(max(0, now.ms - start)))
-            .font(.system(size: 36, weight: .medium, design: .rounded))
-            .monospacedDigit()
-            .lineLimit(1)
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: PanelClockView, context: Context) -> CGSize? {
+        nsView.intrinsicContentSize
     }
 
     static func format(_ ms: Int64) -> String {
         let s = Int(ms / 1000)
         return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60) : String(format: "%d:%02d", s / 60, s % 60)
+    }
+}
+
+final class PanelClockView: NSView {
+    private var start: Int64 = 0
+    private var live = false
+    private var text = ""
+    private var timer: Timer?
+    private var size = NSSize.zero
+
+    static let font: NSFont = {
+        let base = NSFont.systemFont(ofSize: 36, weight: .medium)
+        var d = base.fontDescriptor.withDesign(.rounded) ?? base.fontDescriptor
+        d = d.addingAttributes([.featureSettings: [[NSFontDescriptor.FeatureKey.typeIdentifier: kNumberSpacingType,
+                                                     NSFontDescriptor.FeatureKey.selectorIdentifier: kMonospacedNumbersSelector]]])
+        return NSFont(descriptor: d, size: 36) ?? base
+    }()
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.staticText)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    func configure(start: Int64, live: Bool) {
+        let changed = start != self.start || live != self.live
+        self.start = start
+        self.live = live
+        if changed || text.isEmpty { tick() }
+    }
+
+    override var isFlipped: Bool { true }
+    override var intrinsicContentSize: NSSize { size }
+    override func viewDidChangeEffectiveAppearance() { needsDisplay = true }
+    override func viewDidMoveToWindow() { if window == nil { timer?.invalidate(); timer = nil } else { tick() } }
+
+    private func tick() {
+        let now = Date().ms
+        let elapsed = max(0, now - start)
+        let t = PanelClock.format(elapsed)
+        if t != text {
+            text = t
+            let s = (t as NSString).size(withAttributes: [.font: Self.font])
+            let newSize = NSSize(width: ceil(s.width), height: ceil(s.height))
+            if newSize != size {
+                size = newSize
+                invalidateIntrinsicContentSize()   // only when the width class changes (59:59 → 1:00:00)
+            }
+            needsDisplay = true
+            setAccessibilityValue(Fmt.durationWords(elapsed))
+        }
+        timer?.invalidate()
+        timer = nil
+        guard live, window != nil else { return }
+        // Next whole second of the elapsed time.
+        let wait = Double(1000 - elapsed % 1000) / 1000 + 0.005
+        let tm = Timer(timeInterval: wait, repeats: false) { [weak self] _ in self?.tick() }
+        tm.tolerance = 0.02
+        RunLoop.main.add(tm, forMode: .common)
+        timer = tm
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        (text as NSString).draw(at: .zero, withAttributes: [.font: Self.font, .foregroundColor: NSColor.labelColor])
     }
 }
 
