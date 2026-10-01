@@ -332,6 +332,14 @@ enum PanelBench {
             NotificationCenter.default.post(name: .trackifyBenchQuery, object: q)
         }
         if d.object(forKey: "TrackifyPanelHover") != nil {
+            func dump(_ v: NSView, _ depth: Int) {
+                for a in v.trackingAreas {
+                    NSLog("bench: tracking %@ depth %d rect %@ opts %lu owner %@", String(describing: type(of: v)), depth,
+                          NSStringFromRect(a.rect), a.options.rawValue, String(describing: a.owner.map { type(of: $0) }))
+                }
+                for sv in v.subviews { dump(sv, depth + 1) }
+            }
+            if let cv = host.window.contentView { NSLog("bench: content %@", String(describing: type(of: cv))); dump(cv, 0) }
             host.mouse(toTop: Host.rowY(d.integer(forKey: "TrackifyPanelHover")))
         }
         await sleep(0.6)
