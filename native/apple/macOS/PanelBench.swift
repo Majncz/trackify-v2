@@ -67,6 +67,7 @@ enum PanelBench {
     nonisolated(unsafe) static let hooksEnabled: Bool = {
         let d = UserDefaults.standard
         return d.string(forKey: "TrackifyPanelBench") != nil || d.string(forKey: "TrackifyPanelShot") != nil
+            || d.string(forKey: "TrackifyPanelHold") != nil
     }()
     nonisolated(unsafe) static let shotRequested: Bool = UserDefaults.standard.string(forKey: "TrackifyPanelShot") != nil
     static var benchRequested: Bool { UserDefaults.standard.string(forKey: "TrackifyPanelBench") != nil }

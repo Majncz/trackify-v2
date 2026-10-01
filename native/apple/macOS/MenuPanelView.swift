@@ -744,7 +744,8 @@ struct BenchHoverHook: ViewModifier {
     func body(content: Content) -> some View {
         if PanelBench.hooksEnabled {
             content.onReceive(NotificationCenter.default.publisher(for: .trackifyBenchHover)) { n in
-                hovered = (n.object as? String) == id
+                let h = (n.object as? String) == id
+                if h != hovered { hovered = h }
             }
         } else {
             content
