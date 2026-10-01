@@ -265,7 +265,8 @@ enum PanelBench {
         await sleep(0.6)
         let scroll = d.double(forKey: "TrackifyPanelScroll")
         if scroll > 0, let sv = host.scrollView {
-            sv.contentView.scroll(to: NSPoint(x: 0, y: scroll))
+            let clip = sv.contentView
+            clip.scroll(to: clip.constrainBoundsRect(NSRect(origin: NSPoint(x: 0, y: scroll), size: clip.bounds.size)).origin)
             sv.reflectScrolledClipView(sv.contentView)
         }
         await sleep(1.2)
