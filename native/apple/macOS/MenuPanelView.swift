@@ -412,7 +412,7 @@ struct PanelTaskList: View {
                     .padding(.horizontal, PanelMetrics.inset).padding(.vertical, 8)
             } else {
                 ForEach(Array(rows.enumerated()), id: \.element.id) { i, row in
-                    PanelTaskRow(row: row, index: i, running: row.id == runningId, actions: actions)
+                    PanelTaskRow(row: row, index: i, running: row.id == runningId, isDefault: i == 0 && !q.isEmpty, actions: actions)
                         .equatable()
                 }
             }
@@ -443,10 +443,14 @@ struct PanelTaskRow: View, Equatable {
     let row: PanelModel.Row
     let index: Int
     let running: Bool
+    /// First search result: return starts it.
+    let isDefault: Bool
     let actions: PanelRowActions
     @State private var hovered = false
 
-    static func == (a: Self, b: Self) -> Bool { a.row == b.row && a.index == b.index && a.running == b.running }
+    static func == (a: Self, b: Self) -> Bool {
+        a.row == b.row && a.index == b.index && a.running == b.running && a.isDefault == b.isDefault
+    }
 
     var body: some View {
         Button { actions.model.toggle(row.id) } label: {
@@ -461,6 +465,8 @@ struct PanelTaskRow: View, Equatable {
                     if running || hovered {
                         TaskRowGlyph(running: running, size: 19)
                             .transition(.opacity)
+                    } else if isDefault {
+                        Text("↩").font(.system(size: 12)).foregroundStyle(.tertiary)
                     } else if index < 9 {
                         PanelShortcutHint(index: index)
                     }
@@ -471,7 +477,7 @@ struct PanelTaskRow: View, Equatable {
             .frame(height: PanelMetrics.rowHeight)
             .contentShape(Rectangle())
         }
-        .buttonStyle(PanelRowButtonStyle(hovered: hovered))
+        .buttonStyle(PanelRowButtonStyle(hovered: hovered || isDefault))
         .onHover { h in
             withAnimation(.easeOut(duration: 0.08)) { hovered = h }
         }
