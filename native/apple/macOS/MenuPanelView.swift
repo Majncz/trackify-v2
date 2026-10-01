@@ -213,23 +213,24 @@ struct PanelRunningHero: View, Equatable {
     }
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .firstTextBaseline, spacing: 7) {
-                    WidgetTaskDot(hex: accentHex, size: 8).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
-                    Text(name).font(.system(size: 15, weight: .semibold)).lineLimit(1)
+        VStack(alignment: .leading, spacing: 0) {
+            // Title + since use the full width; the clock and Stop share the row below.
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                WidgetTaskDot(hex: accentHex, size: 8).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+                Text(name).font(.system(size: 15, weight: .semibold)).lineLimit(1)
+            }
+            HStack(spacing: 3) {
+                if running.pending {
+                    Circle().fill(Color.orange).frame(width: 5, height: 5).frame(width: 10, height: 10)
+                    Text(stopping ? "Saving…" : "Syncing…")
+                } else {
+                    WidgetLiveDot(size: 5)
+                    Text(verbatim: "Since \(DayCalc.current.format(Date(ms: running.startTime), "HH:mm"))")
                 }
-                HStack(spacing: 3) {
-                    if running.pending {
-                        Circle().fill(Color.orange).frame(width: 5, height: 5).frame(width: 10, height: 10)
-                        Text(stopping ? "Saving…" : "Syncing…")
-                    } else {
-                        WidgetLiveDot(size: 5)
-                        Text(verbatim: "Since \(DayCalc.current.format(Date(ms: running.startTime), "HH:mm"))")
-                    }
-                }
-                .font(.system(size: 11.5)).foregroundStyle(.secondary)
-                .padding(.leading, -1)
+            }
+            .font(.system(size: 11.5)).foregroundStyle(.secondary)
+            .padding(.leading, -1)
+            HStack(alignment: .center, spacing: 8) {
                 Button(action: onFix) {
                     HStack(alignment: .center, spacing: 6) {
                         clock
@@ -248,15 +249,14 @@ struct PanelRunningHero: View, Equatable {
                 .onHover { clockHover = $0 }
                 .help("Fix this session (⌘E)")
                 .accessibilityLabel("Elapsed time. Fix this session")
+                Spacer(minLength: 8)
+                Button(action: onStop) {
+                    StopPillLabel(title: stopping ? "Saving…" : "Stop", full: false, height: 34, emphasis: stopHover ? 0.06 : 0)
+                }
+                .buttonStyle(.plain)
+                .onHover { stopHover = $0 }
+                .help("Stop (⌘.)")
             }
-            Spacer(minLength: 8)
-            Button(action: onStop) {
-                StopPillLabel(title: stopping ? "Saving…" : "Stop", full: false, height: 34, emphasis: stopHover ? 0.06 : 0)
-            }
-            .buttonStyle(.plain)
-            .onHover { stopHover = $0 }
-            .padding(.bottom, 5)
-            .help("Stop (⌘.)")
         }
     }
 
