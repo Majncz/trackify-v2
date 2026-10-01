@@ -13,6 +13,7 @@ final class StatusItemController: NSObject, NSWindowDelegate {
     private var testWindow: NSWindow?
     private var ticker: Timer?
     private var outsideMonitor: Any?
+    private var panelShown = false
     private var lastTitle = ""
 
     init(model: AppModel, openDashboard: @escaping (AppScreen?) -> Void) {
@@ -42,7 +43,22 @@ final class StatusItemController: NSObject, NSWindowDelegate {
         guard panel == nil else { return }
         let p = makePanel()
         panel = p
+        Self.prewarm(p) { [weak self] in self?.panelShown ?? false }
+    }
+
+    /// Renders the panel once, invisibly and off-screen, so the first click only has to show it.
+    static func prewarm(_ p: MenuPanelWindow, isShown: @escaping () -> Bool = { false }) {
+        p.alphaValue = 0
+        p.setFrameOrigin(NSPoint(x: -20000, y: -20000))
+        p.orderFront(nil)
         p.contentView?.layoutSubtreeIfNeeded()
+        p.displayIfNeeded()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            MainActor.assumeIsolated {
+                // Unless it was opened meanwhile.
+                if !isShown() { p.orderOut(nil) }
+            }
+        }
     }
 
     /// Re-arm a one-shot timer for the next visible change: next second with seconds on,
@@ -188,12 +204,13 @@ final class StatusItemController: NSObject, NSWindowDelegate {
     @objc private func menuStop() { model.stop() }
 
     func togglePanel() {
-        if let p = panel, p.isVisible { closePanel() } else { showPanel() }
+        if panelShown { closePanel() } else { showPanel() }
     }
 
     func showPanel() {
         let p = panel ?? makePanel()
         panel = p
+        panelShown = true
         positionPanel(p)
         p.alphaValue = 0
         p.makeKeyAndOrderFront(nil)
@@ -217,6 +234,7 @@ final class StatusItemController: NSObject, NSWindowDelegate {
 
     func closePanel() {
         guard let p = panel else { return }
+        panelShown = false
         NotificationCenter.default.post(name: .trackifyPanelClosed, object: nil)
         if let m = outsideMonitor { NSEvent.removeMonitor(m); outsideMonitor = nil }
         item.button?.highlight(false)
@@ -224,7 +242,8 @@ final class StatusItemController: NSObject, NSWindowDelegate {
             ctx.duration = 0.1
             p.animator().alphaValue = 0
         }, completionHandler: {
-            Task { @MainActor in p.orderOut(nil) }
+            // Not if it was reopened during the fade.
+            Task { @MainActor [weak self] in if self?.panelShown != true { p.orderOut(nil) } }
         })
     }
 

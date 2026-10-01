@@ -113,11 +113,19 @@ enum PanelBench {
 
     /// Runs `f`, then waits until the main run loop is about to sleep again: SwiftUI's update, layout, drawing and
     /// the Core Animation commit for that change have all happened by then. Returns milliseconds.
+    /// Main-thread CPU (ms) spent on each measured step, from the change until the run loop sleeps again
+    /// (the latency includes waiting for the display-link-aligned commit; this doesn't).
+    static var cpuLog: [Double] = []
+
+    static func threadCPUms() -> Double { Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)) / 1e6 }
+
     static func measure(_ f: () -> Void) async -> Double {
         let t0 = CACurrentMediaTime()
+        let c0 = threadCPUms()
         f()
         return await withCheckedContinuation { (c: CheckedContinuation<Double, Never>) in
             let obs = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue, false, CFIndex.max) { _, _ in
+                cpuLog.append(threadCPUms() - c0)
                 c.resume(returning: (CACurrentMediaTime() - t0) * 1000)
             }
             CFRunLoopAddObserver(CFRunLoopGetMain(), obs, .commonModes)
@@ -158,10 +166,11 @@ enum PanelBench {
         let host = Host(model: model)
 
         // The status item builds its panel ahead of the first click.
-        host.window.contentView?.layoutSubtreeIfNeeded()
+        StatusItemController.prewarm(host.window)
         await sleep(1)
 
         // Open / close.
+        cpuLog = []
         var opens: [Double] = []
         var settle: [String] = []
         for i in 0..<8 {
@@ -176,6 +185,7 @@ enum PanelBench {
             await sleep(0.6)
         }
         log("open (warm, 7×): " + stats(Array(opens.dropFirst())))
+        log("  main-thread CPU per open: " + stats(Array(cpuLog.dropFirst())) + String(format: " (first %.1f ms)", cpuLog.first ?? 0))
         log("worst main-thread stall in the 1.5 s after each open (ms): " + settle.joined(separator: ", "))
 
         // Open and idle: the ticking clock.
@@ -192,6 +202,7 @@ enum PanelBench {
         // Typing in search (one character at a time, then back).
         let word = "server"
         var typing: [Double] = []
+        cpuLog = []
         for n in 1...word.count {
             typing.append(await measure { NotificationCenter.default.post(name: .trackifyBenchQuery, object: String(word.prefix(n))) })
             await sleep(0.12)
@@ -201,9 +212,11 @@ enum PanelBench {
             await sleep(0.12)
         }
         log("search keystroke → frame: " + stats(typing))
+        log("  main-thread CPU per keystroke: " + stats(cpuLog))
 
         // Hover across the rows.
         var hovers: [Double] = []
+        cpuLog = []
         let ids = Analytics.sortTasks(model.tasks, runningTaskId: model.running?.taskId).prefix(16).map(\.id)
         for id in ids {
             hovers.append(await measure { NotificationCenter.default.post(name: .trackifyBenchHover, object: id) })
@@ -211,10 +224,12 @@ enum PanelBench {
         }
         hovers.append(await measure { NotificationCenter.default.post(name: .trackifyBenchHover, object: nil) })
         log("hover row → frame: " + stats(hovers))
+        log("  main-thread CPU per hover: " + stats(cpuLog))
 
         // Scroll the list down and back up in 40 pt steps.
         if let sv = host.scrollView, let doc = sv.documentView {
             var scrolls: [Double] = []
+            cpuLog = []
             let maxY = max(0, doc.frame.height - sv.contentView.bounds.height)
             var y: CGFloat = 0
             var dir: CGFloat = 1
@@ -231,6 +246,7 @@ enum PanelBench {
             }
             h = mon.reset()
             log(String(format: "scroll step (40 pt, document %.0f pt): ", doc.frame.height) + stats(scrolls) + String(format: " · frames over 16.7 ms: %d", h.1))
+            log("  main-thread CPU per scroll step: " + stats(cpuLog))
         } else {
             log("scroll: no scroll view found")
         }

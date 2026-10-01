@@ -382,10 +382,16 @@ struct PanelScrollArea: View {
                         .id("top")
                     PanelTaskList(query: query, createError: createError, onCreate: onCreate, onLogPast: onLogPast,
                                   openDashboard: openDashboard)
-                    if !searching {
+                    // Kept alive while searching, just collapsed.
+                    VStack(alignment: .leading, spacing: 0) {
                         PanelHeatSection(openDashboard: openDashboard)
                         PanelTeamSection(openDashboard: openDashboard)
                     }
+                    .frame(height: searching ? 0 : nil, alignment: .top)
+                    .clipped()
+                    .opacity(searching ? 0 : 1)
+                    .allowsHitTesting(!searching)
+                    .accessibilityHidden(searching)
                 }
                 .padding(.bottom, 10)
             }
@@ -443,9 +449,18 @@ struct PanelTaskList: View {
                     .font(.system(size: 12.5)).foregroundStyle(.secondary)
                     .padding(.horizontal, PanelMetrics.inset).padding(.vertical, 8)
             } else {
-                ForEach(Array(rows.enumerated()), id: \.element.id) { i, row in
-                    PanelTaskRow(row: row, index: i, running: row.id == runningId, isDefault: i == 0 && !q.isEmpty, actions: actions)
+                // Every row stays in the tree; a search only collapses the ones that don't match (re-creating rows
+                // on each keystroke is what made typing slow).
+                let shown = Dictionary(uniqueKeysWithValues: rows.enumerated().map { ($1.id, $0) })
+                ForEach(panel.rows) { row in
+                    let i = shown[row.id]
+                    PanelTaskRow(row: row, index: i ?? 0, running: row.id == runningId, isDefault: i == 0 && !q.isEmpty, actions: actions)
                         .equatable()
+                        .frame(height: i == nil ? 0 : PanelMetrics.rowHeight, alignment: .top)
+                        .clipped()
+                        .opacity(i == nil ? 0 : 1)
+                        .allowsHitTesting(i != nil)
+                        .accessibilityHidden(i == nil)
                 }
             }
             if !q.isEmpty, !rows.contains(where: { $0.name.compare(q, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }) {
@@ -519,7 +534,6 @@ struct PanelTaskRow: View, Equatable {
             Divider()
             Button("Hide") { Task { try? await actions.model.hide(row.id) } }
         }
-        .help(index < 9 ? "\(running ? "Stop" : "Start") · ⌘\(index + 1)" : (running ? "Stop" : "Start"))
         .accessibilityLabel("\(row.name)\(running ? ", running" : "")")
     }
 }
