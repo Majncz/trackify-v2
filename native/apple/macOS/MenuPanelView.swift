@@ -444,7 +444,6 @@ struct PanelScrollArea: View {
                         PanelTeamSection(openDashboard: openDashboard)
                     }
                     .frame(height: searching ? 0 : nil, alignment: .top)
-                    .clipped()
                     .opacity(searching ? 0 : 1)
                     .allowsHitTesting(!searching)
                     .accessibilityHidden(searching)
@@ -532,7 +531,6 @@ struct PanelTaskList: View {
                                  hovered: row.id == hoveredId, actions: actions)
                         .equatable()
                         .frame(height: i == nil ? 0 : PanelMetrics.rowHeight, alignment: .top)
-                        .clipped()
                         .opacity(i == nil ? 0 : 1)
                         .allowsHitTesting(i != nil)
                         .accessibilityHidden(i == nil)
