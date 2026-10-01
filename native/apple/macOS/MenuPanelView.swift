@@ -131,16 +131,11 @@ enum PanelFilter {
 
 // MARK: - Material
 
-/// The popover material behind the whole panel (vibrancy, follows light / dark and the app's appearance setting).
+/// The panel background: opaque, the same white / dark grey as the widgets. The see-through popover material
+/// read as muddy grey over a dark desktop and washed out the text, the Stop pill and the heat map.
 struct PanelMaterial: View {
     var body: some View {
-        if PanelBench.shotRequested {
-            // Off-screen review shots have no desktop to blur (the material falls back to flat grey): draw the
-            // material's usual look over a plain desktop instead.
-            Color(light: 0xF0F0F0, dark: 0x2A2A2C)
-        } else {
-            PanelEffectView()
-        }
+        WidgetPalette.background
     }
 }
 
