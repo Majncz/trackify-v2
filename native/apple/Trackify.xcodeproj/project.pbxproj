@@ -124,6 +124,7 @@
 		D7C7C11B161373CC910454EA /* Appearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0C2BE051915ADDF32431C73 /* Appearance.swift */; };
 		D9D4D57F8BC7E1976ABD3ACB /* LiveActivityAndControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EC0896EC077C1C731A99E70 /* LiveActivityAndControl.swift */; };
 		DC6B9DED21D68B4C894D62BE /* TrackifyKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1BFED707E86CF539894FB6DB /* TrackifyKit */; };
+		E069CD112697D77EA9658F28 /* PanelBench.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22765E3E03D46D74ABE68FC4 /* PanelBench.swift */; };
 		E225263AB6B56876D06260B0 /* Reminder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ED93246DD3CCA6D37F6C3F0 /* Reminder.swift */; };
 		E2EDC9C6148C203BC141031D /* TrackifyKit in Frameworks */ = {isa = PBXBuildFile; productRef = C02DC519EDC51487402B23C7 /* TrackifyKit */; };
 		E7CA7502F49453B27B8F6F1A /* AIBillingPeriodCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8CD3CEA2F1F9A743A6035EF /* AIBillingPeriodCard.swift */; };
@@ -196,6 +197,7 @@
 		1539D88D9BA5B06A9BF60438 /* TrackifyUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackifyUITests.swift; sourceTree = "<group>"; };
 		155A2EC4D78AD2379B5FEBCF /* ChatSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSession.swift; sourceTree = "<group>"; };
 		1FB217F9767A6169318D004A /* ChatMessageViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessageViews.swift; sourceTree = "<group>"; };
+		22765E3E03D46D74ABE68FC4 /* PanelBench.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelBench.swift; sourceTree = "<group>"; };
 		22797FA861B872512FE3FB2B /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		2313CBAE1EC2BE660E3A5D15 /* BillingSessionsTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BillingSessionsTab.swift; sourceTree = "<group>"; };
 		281A65533EB7780782D49F56 /* BillingGuide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BillingGuide.swift; sourceTree = "<group>"; };
@@ -369,6 +371,7 @@
 				346DB28AAEA7CBAF7E6DDBBA /* DashboardWindow.swift */,
 				2EC23DE92AC9F163A75E77B9 /* GlobalHotKey.swift */,
 				81A4D3236B61057AE10A6537 /* MenuPanelView.swift */,
+				22765E3E03D46D74ABE68FC4 /* PanelBench.swift */,
 				A5B6BF9AECFD881C074D051C /* StatusItemController.swift */,
 				B77EF644DD87BE7E975A5BD3 /* TrackifyMacApp.swift */,
 			);
@@ -930,6 +933,7 @@
 				CE398C07D69378460F214647 /* LiveActivityAttributes.swift in Sources */,
 				4AA51F81200DCB76194B9DDB /* MarkPaidSheet.swift in Sources */,
 				A1BE1A989F290ABA472415C3 /* MenuPanelView.swift in Sources */,
+				E069CD112697D77EA9658F28 /* PanelBench.swift in Sources */,
 				E225263AB6B56876D06260B0 /* Reminder.swift in Sources */,
 				5CD388467C5F1B0CF689CC87 /* RootView.swift in Sources */,
 				E898EFF4E00091FCD8C062A1 /* SessionSlider.swift in Sources */,

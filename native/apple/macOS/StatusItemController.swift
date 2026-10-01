@@ -213,14 +213,19 @@ final class StatusItemController: NSObject, NSWindowDelegate {
     }
 
     private func makePanel() -> MenuPanelWindow {
-        let root = MenuPanelView(
+        let p = Self.makePanelWindow(
+            model: model,
             close: { [weak self] in self?.closePanel() },
             openDashboard: { [weak self] screen in self?.closePanel(); self?.openDashboard(screen) })
-            .environment(model)
-        let host = NSHostingController(rootView: root)
-        let p = MenuPanelWindow(contentViewController: host)
         p.onEscape = { [weak self] in self?.closePanel() }
         return p
+    }
+
+    /// The panel window with its SwiftUI content (also used by the panel test hooks).
+    static func makePanelWindow(model: AppModel, close: @escaping () -> Void, openDashboard: @escaping (AppScreen?) -> Void) -> MenuPanelWindow {
+        let root = MenuPanelView(close: close, openDashboard: openDashboard).environment(model)
+        let host = NSHostingController(rootView: root)
+        return MenuPanelWindow(contentViewController: host)
     }
 
     private func positionPanel(_ p: NSWindow) {
@@ -275,6 +280,13 @@ final class MenuPanelWindow: NSPanel {
             v.layer?.masksToBounds = true
         }
         setContentSize(NSSize(width: 360, height: 560))
+    }
+
+    /// Test hooks: draw as the key window without taking focus, anywhere (off-screen).
+    var benchForceKey = false
+    override var isKeyWindow: Bool { benchForceKey || super.isKeyWindow }
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        benchForceKey ? frameRect : super.constrainFrameRect(frameRect, to: screen)
     }
 
     override var canBecomeKey: Bool { true }

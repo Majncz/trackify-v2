@@ -55,6 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if d.bool(forKey: "TrackifyShowPanelWindow") { statusItem?.showPanelAsWindow() }
                 if d.bool(forKey: "TrackifyOpenDashboard") { dashboard.show(AppScreen.launchScreen ?? .home) }
                 if d.bool(forKey: "TrackifyOpenPanel") { statusItem?.showPanel() }
+                PanelBench.runIfRequested(model: model)
             }
             if model.phase == .signedOut && !d.bool(forKey: "TrackifyShowPanelWindow") && !d.bool(forKey: "TrackifyNoWindows") {
                 // First launch: show the sign-in window rather than an empty menu.

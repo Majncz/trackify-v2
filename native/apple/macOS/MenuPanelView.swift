@@ -35,6 +35,8 @@ struct MenuPanelView: View {
         .onReceive(NotificationCenter.default.publisher(for: .trackifyPanelClosed)) { _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { visible = false }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .trackifyBenchQuery)) { n in query = n.object as? String ?? "" }
+        .onReceive(NotificationCenter.default.publisher(for: .trackifyBenchHover)) { n in hovered = n.object as? String }
     }
 
     private var panel: some View {
