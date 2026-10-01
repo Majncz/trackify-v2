@@ -68,7 +68,7 @@ enum PanelBench {
         let d = UserDefaults.standard
         return d.string(forKey: "TrackifyPanelBench") != nil || d.string(forKey: "TrackifyPanelShot") != nil
     }()
-    static var shotRequested: Bool { UserDefaults.standard.string(forKey: "TrackifyPanelShot") != nil }
+    nonisolated(unsafe) static let shotRequested: Bool = UserDefaults.standard.string(forKey: "TrackifyPanelShot") != nil
     static var benchRequested: Bool { UserDefaults.standard.string(forKey: "TrackifyPanelBench") != nil }
 
     static func runIfRequested(model: AppModel) {

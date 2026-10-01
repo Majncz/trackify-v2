@@ -135,7 +135,19 @@ enum PanelFilter {
 // MARK: - Material
 
 /// The popover material behind the whole panel (vibrancy, follows light / dark and the app's appearance setting).
-struct PanelMaterial: NSViewRepresentable {
+struct PanelMaterial: View {
+    var body: some View {
+        if PanelBench.shotRequested {
+            // Off-screen review shots have no desktop to blur (the material falls back to flat grey): draw the
+            // material's usual look over a plain desktop instead.
+            Color(light: 0xF0F0F0, dark: 0x2A2A2C)
+        } else {
+            PanelEffectView()
+        }
+    }
+}
+
+struct PanelEffectView: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {
         let v = NSVisualEffectView()
         v.material = .popover
