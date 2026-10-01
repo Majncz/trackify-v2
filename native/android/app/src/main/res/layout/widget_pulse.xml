@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- An indeterminate ProgressBar is the one view every launcher animates on its own; it carries the pulsing dot. -->
+<ProgressBar xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="8dp"
+    android:layout_height="8dp"
+    android:indeterminate="true"
+    android:indeterminateOnly="true"
+    android:indeterminateDrawable="@drawable/w_pulse"
+    android:indeterminateBehavior="repeat"
+    android:importantForAccessibility="no" />

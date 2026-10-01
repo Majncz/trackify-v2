@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Two frames; a state change draws the new state into the hidden one and flips, which the launcher animates.
+     "pending" is a translucent overlay ("Stopping…") a tap shows within a few milliseconds, before any composition. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+    <ViewFlipper
+        android:id="@+id/flip"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:inAnimation="@anim/w_in"
+        android:outAnimation="@anim/w_out"
+        android:measureAllChildren="false">
+        <FrameLayout android:id="@+id/frame_a" android:layout_width="match_parent" android:layout_height="match_parent" />
+        <FrameLayout android:id="@+id/frame_b" android:layout_width="match_parent" android:layout_height="match_parent" />
+    </ViewFlipper>
+    <FrameLayout
+        android:id="@+id/pending"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone">
+        <ImageView
+            android:id="@+id/pending_bg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="fitXY"
+            android:src="@drawable/w_scrim"
+            android:importantForAccessibility="no" />
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+            <ProgressBar
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:indeterminate="true"
+                android:importantForAccessibility="no" />
+            <TextView
+                android:id="@+id/pending_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:fontFamily="sans-serif-medium"
+                android:textSize="15sp"
+                android:textColor="@color/w_fg"
+                android:text="…" />
+        </LinearLayout>
+    </FrameLayout>
+</FrameLayout>

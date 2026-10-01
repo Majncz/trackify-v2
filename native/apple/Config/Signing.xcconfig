@@ -1,0 +1,10 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Set your Apple Developer Team ID here — the ONLY place it's needed.
+// (Xcode → Settings → Accounts, or developer.apple.com → Membership.)
+// Leave empty for unsigned CI / simulator builds.
+// ─────────────────────────────────────────────────────────────────────────────
+DEVELOPMENT_TEAM =
+
+// Bundle identifier root; widgets/extensions are derived from it.
+TRACKIFY_BUNDLE_ID = co.bitterlemon.trackify
+TRACKIFY_APP_GROUP = group.co.bitterlemon.trackify

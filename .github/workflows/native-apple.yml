@@ -1,0 +1,122 @@
+name: native-apple
+# Manual only. Apple builds run on Taryk's Mac (lanes/native/bin/macbuild), never here on push.
+on:
+  workflow_dispatch:
+    inputs:
+      shots:
+        description: "Screenshot set: quick | full | none"
+        default: "full"
+
+concurrency:
+  group: native-apple-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  APPLE: native/apple
+  DD: ${{ github.workspace }}/native/apple/build/dd
+  OUT: ${{ github.workspace }}/native/apple/build/out
+  TRACKIFY_SERVER: https://trackify-native.dev.bitterlemon.co
+
+jobs:
+  apple:
+    runs-on: macos-26
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Version (build number = commit count)
+        run: |
+          N=$(git rev-list --count HEAD)
+          echo "VERSION_FLAGS=MARKETING_VERSION=1.1.$N CURRENT_PROJECT_VERSION=$N" >> "$GITHUB_ENV"
+          echo "Trackify 1.1.$N ($N)"
+
+      - name: Tools
+        run: |
+          brew install xcodegen >/dev/null
+          xcodebuild -version
+          mkdir -p "$OUT"
+
+      - name: TrackifyKit tests (incl. live read-only checks)
+        working-directory: native/apple/Packages/TrackifyKit
+        run: TRACKIFY_LIVE=1 swift test 2>&1 | tee "$OUT/kit-tests.log" | grep -E "error|failed|Executed .* tests" | tail -20; test ${PIPESTATUS[0]} -eq 0
+
+      - name: Generate project
+        working-directory: native/apple
+        run: |
+          xcodegen generate
+          zip -qr "$OUT/generated.zip" Trackify.xcodeproj iOS/Info.plist iOS/*.entitlements macOS/Info.plist macOS/*.entitlements Widgets/*.plist Widgets/*.entitlements
+
+      - name: Build iOS (simulator)
+        working-directory: native/apple
+        run: |
+          set -o pipefail
+          xcodebuild -project Trackify.xcodeproj -scheme Trackify \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath "$DD" \
+            CODE_SIGNING_ALLOWED=NO $VERSION_FLAGS build-for-testing 2>&1 | tee "$OUT/ios-build.log" | grep -E "error:|BUILD|\*\*" | head -150
+
+      - name: Build macOS (ad-hoc)
+        if: always()
+        working-directory: native/apple
+        run: |
+          set -o pipefail
+          xcodebuild -project Trackify.xcodeproj -scheme TrackifyMac -destination 'platform=macOS' \
+            -derivedDataPath "$DD" CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+            CODE_SIGN_ENTITLEMENTS= CODE_SIGNING_REQUIRED=NO $VERSION_FLAGS build 2>&1 | tee "$OUT/mac-build.log" | grep -E "error:|BUILD|\*\*" | head -150
+          # Distributable build: Release, ad-hoc signed (Debug stays for the screenshot hooks).
+          xcodebuild -project Trackify.xcodeproj -scheme TrackifyMac -configuration Release -destination 'platform=macOS' \
+            -derivedDataPath "$DD" CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+            CODE_SIGN_ENTITLEMENTS= CODE_SIGNING_REQUIRED=NO $VERSION_FLAGS build 2>&1 | tee "$OUT/mac-release-build.log" | grep -E "error:|BUILD|\*\*" | head -50
+          ditto -c -k --keepParent "$DD/Build/Products/Release/Trackify.app" "$OUT/Trackify-macOS.zip"
+
+      - name: Screenshots, flows, performance (iOS + macOS)
+        if: success() && inputs.shots != 'none'
+        timeout-minutes: 85
+        working-directory: native/apple
+        env:
+          SHOT_SET: ${{ inputs.shots || 'quick' }}
+        run: bash Scripts/ci-screenshots.sh
+
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-out
+          path: native/apple/build/out
+          retention-days: 7
+
+  legacy-ios:
+    if: github.event_name == 'workflow_dispatch' && inputs.shots == 'full'
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build (Xcode 26.3) for the iOS 18 runtime
+        working-directory: native/apple
+        run: |
+          brew install xcodegen >/dev/null
+          mkdir -p "$OUT"
+          xcodegen generate
+          set -o pipefail
+          xcodebuild -project Trackify.xcodeproj -scheme Trackify -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$DD" CODE_SIGNING_ALLOWED=NO IPHONEOS_DEPLOYMENT_TARGET=17.0 \
+            MARKETING_VERSION=1.1.$(git rev-list --count HEAD) CURRENT_PROJECT_VERSION=$(git rev-list --count HEAD) build-for-testing 2>&1 | tee "$OUT/ios18-build.log" | grep -E "error:|BUILD|\*\*" | head -80
+      - name: iPhone SE (3rd gen) · iOS 18
+        timeout-minutes: 30
+        working-directory: native/apple
+        env:
+          SHOT_SET: legacy
+          RUN_FLOWS: "0"
+          RUN_MAC: "0"
+        run: bash Scripts/ci-screenshots.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: apple-legacy
+          path: native/apple/build/out
+          retention-days: 7

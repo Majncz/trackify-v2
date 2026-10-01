@@ -41,6 +41,38 @@ function enableReconnect(socket: Socket) {
   socket.io.reconnection(true);
 }
 
+let cachedTicket: { ticket: string; expiresAt: number } | null = null;
+
+/** Signed socket ticket (the server no longer accepts a bare user id). */
+async function socketTicket(userId: string): Promise<string | null> {
+  if (
+    cachedTicket &&
+    cachedTicket.ticket.startsWith(`${userId}.`) &&
+    cachedTicket.expiresAt - Date.now() > 5 * 60 * 1000
+  ) {
+    return cachedTicket.ticket;
+  }
+  try {
+    const res = await fetch("/api/socket-ticket", { credentials: "same-origin", cache: "no-store" });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { ticket?: string; expiresAt?: number };
+    if (!body.ticket || !body.expiresAt) return null;
+    cachedTicket = { ticket: body.ticket, expiresAt: body.expiresAt };
+    return body.ticket;
+  } catch {
+    return null;
+  }
+}
+
+async function authenticateSocket(
+  socket: { emit: (event: string, data: unknown) => unknown },
+  userId: string | null | undefined
+) {
+  if (!userId) return;
+  const ticket = await socketTicket(userId);
+  if (ticket) socket.emit("authenticate", { ticket });
+}
+
 export function SocketProvider({ children }: { children: ReactNode }) {
   const { data: session, status: sessionStatus } = useSession();
   const queryClient = useQueryClient();
@@ -151,10 +183,13 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
     function handleConnect() {
       markConnected();
-      socket.emit("authenticate", { userId });
-      attachBufferedListeners(socket);
-      flushQueue(socket);
-      void queryClient.invalidateQueries({ queryKey: ["presence"] });
+      void (async () => {
+        // Queued timer events must follow the authenticate, so flush after it.
+        await authenticateSocket(socket, userIdRef.current);
+        attachBufferedListeners(socket);
+        flushQueue(socket);
+        void queryClient.invalidateQueries({ queryKey: ["presence"] });
+      })();
     }
 
     function handleDisconnect() {
@@ -207,8 +242,9 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      current.emit("authenticate", { userId: userIdRef.current });
-      current.emit("timer:request-state");
+      void authenticateSocket(current, userIdRef.current).then(() => {
+        current.emit("timer:request-state");
+      });
     }
 
     function onVisibility() {

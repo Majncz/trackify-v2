@@ -170,6 +170,7 @@ export async function POST(request: NextRequest) {
       where: {
         id: { in: uniqueIds },
         paymentRecordId: null,
+        task: { userId: user.id },
       },
       include: {
         paymentRecord: { select: { paidAt: true } },

@@ -1,5 +1,10 @@
 import { auth } from "./auth";
 import { prisma } from "./prisma";
+import { hashApiToken } from "./password";
+
+/** Native app tokens live this long and are renewed while in use. */
+export const TOKEN_LIFETIME_DAYS = 90;
+const RENEW_WHEN_LEFT_MS = 60 * 24 * 60 * 60 * 1000;
 
 /**
  * Get authenticated user from either NextAuth session (web) or Bearer token (mobile)
@@ -39,15 +44,21 @@ export async function getAuthUser(request: Request) {
     const token = authHeader.slice(7);
     
     const apiToken = await prisma.apiToken.findUnique({
-      where: { token },
+      where: { token: hashApiToken(token) },
       include: { user: { select: { id: true, email: true } } },
     });
 
     if (apiToken && apiToken.expiresAt > new Date()) {
-      // Update lastUsedAt
+      const now = Date.now();
+      const renew = apiToken.expiresAt.getTime() - now < RENEW_WHEN_LEFT_MS;
       await prisma.apiToken.update({
         where: { id: apiToken.id },
-        data: { lastUsedAt: new Date() },
+        data: {
+          lastUsedAt: new Date(now),
+          ...(renew && {
+            expiresAt: new Date(now + TOKEN_LIFETIME_DAYS * 24 * 60 * 60 * 1000),
+          }),
+        },
       }).catch(() => {
         // Ignore errors updating lastUsedAt - not critical
       });

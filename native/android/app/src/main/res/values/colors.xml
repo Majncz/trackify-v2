@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="launcher_bg">#0A0A0A</color>
+    <color name="window_bg">#FFFFFF</color>
+    <!-- Widget roles (Trackify green palette; wallpaper colours on Android 12+, see values-v31). -->
+    <color name="widget_bg">#F3F4EC</color>
+    <color name="widget_primary">#386A20</color>
+    <color name="widget_on_primary">#FFFFFF</color>
+    <color name="widget_primary_container">#B8F397</color>
+    <color name="widget_on_primary_container">#042100</color>
+    <color name="widget_secondary_container">#D9E7CB</color>
+    <color name="widget_on_secondary_container">#131F0D</color>
+    <color name="widget_surface">#FFFFFF</color>
+    <color name="widget_on_surface">#1A1C18</color>
+    <color name="widget_on_surface_variant">#43483E</color>
+</resources>

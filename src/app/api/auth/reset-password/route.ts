@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
+import { clientIp, rateHit, rateLimited, tooManyResponseBody } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
 export async function POST(request: Request) {
   try {
     const { token, password } = await request.json();
+    const ip = clientIp(request.headers);
+    if (rateLimited(`reset:${ip}`, 10, 15 * 60 * 1000)) {
+      return NextResponse.json(tooManyResponseBody(), { status: 429 });
+    }
+    rateHit(`reset:${ip}`, 15 * 60 * 1000);
 
     if (!token || !password) {
       return NextResponse.json({ error: "Token and password are required" }, { status: 400 });

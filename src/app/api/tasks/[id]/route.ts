@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { emitToUser, persistTimerStop } from "@/lib/timer-runtime";
 
 const updateTaskSchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -129,13 +130,17 @@ export async function DELETE(
     return NextResponse.json({ error: "Task not found" }, { status: 404 });
   }
 
-  // Stop any active timer for this task before hiding it
-  await prisma.activeTimer.deleteMany({
-    where: {
-      userId: user.id,
-      taskId: id,
-    },
+  // Stop any active timer for this task before hiding it (DB row and live memory).
+  const running = await prisma.activeTimer.findFirst({
+    where: { userId: user.id, taskId: id },
   });
+  if (running) {
+    await persistTimerStop(user.id, id);
+    emitToUser(user.id, "timer:stopped", {
+      taskId: id,
+      duration: Math.max(0, Date.now() - running.startTime.getTime()),
+    });
+  }
 
   // Soft delete - hide the task instead of deleting
   await prisma.task.update({

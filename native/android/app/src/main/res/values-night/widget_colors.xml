@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="w_bg">#1C1C1E</color>
+    <color name="w_fg">#F2F2F7</color>
+    <color name="w_muted">#98989F</color>
+    <color name="w_line">#38383A</color>
+    <color name="w_soft">#2C2C2E</color>
+    <color name="w_stop_bg">#46211F</color>
+    <color name="w_stop_fg">#FF5147</color>
+    <color name="w_live">#32D35C</color>
+</resources>

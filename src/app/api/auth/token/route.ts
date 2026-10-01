@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { randomBytes } from "crypto";
-import { getAuthUser } from "@/lib/api-auth";
+import { getAuthUser, TOKEN_LIFETIME_DAYS } from "@/lib/api-auth";
+import { hashApiToken, verifyPassword } from "@/lib/password";
+import { clientIp, rateClear, rateHit, rateLimited, tooManyResponseBody, LOGIN_FAILURES, LOGIN_WINDOW_MS } from "@/lib/rate-limit";
 
 const tokenRequestSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  email: z.string().trim().toLowerCase().pipe(z.string().email("Invalid email address")),
   password: z.string().min(1, "Password is required"),
+  /** Shown in token lists, e.g. "Trackify for Mac". */
+  deviceName: z.string().trim().min(1).max(60).optional(),
 });
 
 /**
@@ -17,7 +20,12 @@ const tokenRequestSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email, password } = tokenRequestSchema.parse(body);
+    const { email, password, deviceName } = tokenRequestSchema.parse(body);
+    const ip = clientIp(request.headers);
+    const rateKey = `login:${ip}:${email.toLowerCase()}`;
+    if (rateLimited(rateKey, LOGIN_FAILURES, LOGIN_WINDOW_MS) || rateLimited(`loginip:${ip}`, 50, LOGIN_WINDOW_MS)) {
+      return NextResponse.json(tooManyResponseBody(), { status: 429 });
+    }
 
     // Find user by email
     const user = await prisma.user.findUnique({
@@ -25,6 +33,8 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user || !user.password) {
+      rateHit(rateKey, LOGIN_WINDOW_MS);
+      rateHit(`loginip:${ip}`, LOGIN_WINDOW_MS);
       return NextResponse.json(
         { error: "Invalid email or password" },
         { status: 401 }
@@ -32,31 +42,36 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate password
-    const isValid = await bcrypt.compare(password, user.password);
+    const isValid = await verifyPassword(password, user.password);
     if (!isValid) {
+      rateHit(rateKey, LOGIN_WINDOW_MS);
+      rateHit(`loginip:${ip}`, LOGIN_WINDOW_MS);
       return NextResponse.json(
         { error: "Invalid email or password" },
         { status: 401 }
       );
     }
 
+    rateClear(rateKey);
+
     // Generate secure token (32 bytes = 64 hex characters)
     const token = randomBytes(32).toString("hex");
 
-    // Create token with 30-day expiry
+    // Sliding expiry: getAuthUser pushes it out again while the device keeps using it.
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
+    expiresAt.setDate(expiresAt.getDate() + TOKEN_LIFETIME_DAYS);
 
     const apiToken = await prisma.apiToken.create({
       data: {
-        token,
+        token: hashApiToken(token),
         userId: user.id,
         expiresAt,
+        ...(deviceName && { name: deviceName }),
       },
     });
 
     return NextResponse.json({
-      token: apiToken.token,
+      token,
       expiresAt: apiToken.expiresAt.toISOString(),
       user: {
         id: user.id,
@@ -103,7 +118,7 @@ export async function DELETE(request: NextRequest) {
   // Delete the token
   await prisma.apiToken.deleteMany({
     where: {
-      token,
+      token: hashApiToken(token),
       userId: user.id,
     },
   });

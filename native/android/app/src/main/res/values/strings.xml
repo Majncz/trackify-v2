@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Trackify</string>
+    <string name="widget_small_label">Timer</string>
+    <string name="widget_small_desc">Small: only the running timer with Stop, or resume your last task in one tap</string>
+    <string name="widget_large_label">Timer and tasks</string>
+    <string name="widget_large_desc">The big one: running timer with Stop, your tasks (tap one to switch), a work heat map and the team\'s day</string>
+    <string name="widget_team_label">Team today</string>
+    <string name="widget_team_desc">Team only: everyone\'s hours today and who is tracking. No timer, no tasks</string>
+    <string name="tile_label">Trackify</string>
+    <string name="picker_title">Switch task</string>
+</resources>

@@ -13,6 +13,8 @@ import {
   persistTimerStop,
   setRealtimeIo,
 } from "../src/lib/timer-runtime";
+import { verifySocketTicket } from "../src/lib/socket-ticket";
+import { hashApiToken } from "../src/lib/password";
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "0.0.0.0";
@@ -94,17 +96,20 @@ app.prepare().then(async () => {
     let userId: string | null = null;
 
     // Support both web (userId from session) and mobile (Bearer token) auth
-    socket.on("authenticate", async (data: { userId?: string; token?: string }) => {
+    socket.on("authenticate", async (data: { ticket?: string; token?: string }) => {
       // Leave previous room if re-authenticating
       if (userId) {
         socket.leave(`user:${userId}`);
+        socket.leave("authed");
+        userId = null;
       }
+      data = data && typeof data === "object" ? data : {};
 
       // Mobile app: validate Bearer token
       if (data.token) {
         try {
           const apiToken = await prisma.apiToken.findUnique({
-            where: { token: data.token },
+            where: { token: hashApiToken(String(data.token)) },
             include: { user: { select: { id: true } } },
           });
 
@@ -116,6 +121,7 @@ app.prepare().then(async () => {
 
           userId = apiToken.user.id;
           socket.join(`user:${userId}`);
+          socket.join("authed");
           socket.emit("auth:success", { userId });
           console.log(`User ${userId} authenticated via token`);
 
@@ -134,12 +140,18 @@ app.prepare().then(async () => {
         }
       }
 
-      // Web app: trust userId from authenticated session
-      // (The web client only sends userId after validating via NextAuth)
-      if (data.userId) {
-        userId = data.userId;
+      // Web app: signed ticket from /api/socket-ticket (never a bare user id).
+      if (data.ticket) {
+        const ticketUser = verifySocketTicket(data.ticket);
+        if (!ticketUser) {
+          socket.emit("auth:error", { message: "Invalid or expired ticket" });
+          socket.disconnect();
+          return;
+        }
+        userId = ticketUser;
         socket.join(`user:${userId}`);
-        console.log(`User ${userId} authenticated via session`);
+        socket.join("authed");
+        socket.emit("auth:success", { userId });
         return;
       }
 

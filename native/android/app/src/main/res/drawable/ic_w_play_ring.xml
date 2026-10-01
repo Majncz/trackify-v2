@@ -1,0 +1,6 @@
+<!-- Outlined play button for widget task rows (tinted at runtime). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="1.6" android:fillColor="#00000000"
+        android:pathData="M12,1.8a10.2,10.2 0,1 1,0 20.4a10.2,10.2 0,1 1,0 -20.4z"/>
+    <path android:fillColor="#FFFFFFFF" android:pathData="M9.6,7.9v8.2a0.6,0.6 0,0 0,0.9 0.52l6.7,-4.1a0.6,0.6 0,0 0,0 -1.03l-6.7,-4.1A0.6,0.6 0,0 0,9.6 7.9z"/>
+</vector>

@@ -28,7 +28,8 @@ export function emitToUser(userId: string, event: string, payload: unknown) {
 }
 
 export function emitPresenceChanged() {
-  g.__trackifyIo?.emit("presence:changed");
+  // Only signed-in sockets; anonymous connections learn nothing about activity.
+  g.__trackifyIo?.to("authed").emit("presence:changed");
 }
 
 export async function persistTimerStart(
