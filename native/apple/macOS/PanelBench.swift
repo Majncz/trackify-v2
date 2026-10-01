@@ -297,6 +297,7 @@ enum PanelBench {
         let cpu0 = cpuSeconds()
         let end = Date().addingTimeInterval(30)
         var i = 0
+        let scrollView = host.scrollView
         while Date() < end {
             switch mode {
             case "type":
@@ -309,7 +310,7 @@ enum PanelBench {
                 host.mouse(toTop: Host.rowY(i % 14))
                 await sleep(0.05)
             case "scroll":
-                if let sv = host.scrollView, let doc = sv.documentView {
+                if let sv = scrollView, let doc = sv.documentView {
                     let maxY = max(1, doc.frame.height - sv.contentView.bounds.height)
                     let phase = Double(i % 120) / 60
                     let y = maxY * (phase <= 1 ? phase : 2 - phase)

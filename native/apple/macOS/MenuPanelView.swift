@@ -666,7 +666,6 @@ struct PanelHeatSection: View {
             .buttonStyle(PanelRowButtonStyle(hovered: hovered, radius: 9))
             .onHover { hovered = $0 }
             .padding(.horizontal, PanelMetrics.inset - PanelMetrics.rowInset)
-            .help("Open Stats")
         }
     }
 }
@@ -699,7 +698,6 @@ struct PanelTeamSection: View {
             .buttonStyle(PanelRowButtonStyle(hovered: hovered, radius: 9))
             .onHover { hovered = $0 }
             .padding(.horizontal, PanelMetrics.inset - PanelMetrics.rowInset)
-            .help("Open Team")
         }
     }
 }
