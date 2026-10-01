@@ -99,14 +99,21 @@ enum PanelBench {
         var scrollView: NSScrollView? { Self.find(NSScrollView.self, in: window.contentView) }
         /// A real mouse-moved event at `y` points from the top (what the system sends when the pointer moves), so
         /// hover goes through SwiftUI's own tracking like a user's.
+        private var entered = false
         func mouse(toTop y: CGFloat, x: CGFloat = 170) {
             guard let v = window.contentView,
                   let e = NSEvent.mouseEvent(with: .mouseMoved, location: NSPoint(x: x, y: window.frame.height - y), modifierFlags: [],
                                              timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
                                              context: nil, eventNumber: 0, clickCount: 0, pressure: 0) else { return }
-            window.acceptsMouseMovedEvents = true
-            window.sendEvent(e)
-            if let target = v.hitTest(e.locationInWindow), target !== v { target.mouseMoved(with: e) }
+            if !entered, let area = v.trackingAreas.first(where: { $0.options.contains(.mouseMoved) && $0.owner === v }),
+               let enter = NSEvent.enterExitEvent(with: .mouseEntered, location: e.locationInWindow, modifierFlags: [],
+                                                  timestamp: e.timestamp, windowNumber: window.windowNumber, context: nil,
+                                                  eventNumber: 0, trackingNumber: Int(bitPattern: Unmanaged.passUnretained(area).toOpaque()),
+                                                  userData: nil) {
+                v.mouseEntered(with: enter)
+                entered = true
+            }
+            v.mouseMoved(with: e)
         }
         /// Middle of the n-th task row, from the top of the panel (hero + search + list header above it).
         static func rowY(_ n: Int) -> CGFloat { rowTop + CGFloat(n) * 30 + 15 }
@@ -332,14 +339,6 @@ enum PanelBench {
             NotificationCenter.default.post(name: .trackifyBenchQuery, object: q)
         }
         if d.object(forKey: "TrackifyPanelHover") != nil {
-            func dump(_ v: NSView, _ depth: Int) {
-                for a in v.trackingAreas {
-                    NSLog("bench: tracking %@ depth %d rect %@ opts %lu owner %@", String(describing: type(of: v)), depth,
-                          NSStringFromRect(a.rect), a.options.rawValue, String(describing: a.owner.map { type(of: $0) }))
-                }
-                for sv in v.subviews { dump(sv, depth + 1) }
-            }
-            if let cv = host.window.contentView { NSLog("bench: content %@", String(describing: type(of: cv))); dump(cv, 0) }
             host.mouse(toTop: Host.rowY(d.integer(forKey: "TrackifyPanelHover")))
         }
         await sleep(0.6)
