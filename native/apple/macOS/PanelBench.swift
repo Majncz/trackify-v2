@@ -69,7 +69,7 @@ enum PanelBench {
 
     // MARK: Window
 
-    final class Host {
+    @MainActor final class Host {
         let window: MenuPanelWindow
         init(model: AppModel) {
             window = StatusItemController.makePanelWindow(model: model, close: {}, openDashboard: { _ in })
