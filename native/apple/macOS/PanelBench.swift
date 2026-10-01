@@ -104,7 +104,9 @@ enum PanelBench {
                   let e = NSEvent.mouseEvent(with: .mouseMoved, location: NSPoint(x: x, y: window.frame.height - y), modifierFlags: [],
                                              timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
                                              context: nil, eventNumber: 0, clickCount: 0, pressure: 0) else { return }
-            v.mouseMoved(with: e)
+            window.acceptsMouseMovedEvents = true
+            window.sendEvent(e)
+            if let target = v.hitTest(e.locationInWindow), target !== v { target.mouseMoved(with: e) }
         }
         /// Middle of the n-th task row, from the top of the panel (hero + search + list header above it).
         static func rowY(_ n: Int) -> CGFloat { rowTop + CGFloat(n) * 30 + 15 }
