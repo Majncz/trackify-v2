@@ -22,10 +22,12 @@ final class MainThreadHitchMonitor: @unchecked Sendable {
     private var over16 = 0
     private var over50 = 0
     private var stopped = false
+    private var paused = false
 
     func start() {
         Thread.detachNewThread { [self] in
             while !isStopped {
+                if isPaused { usleep(50_000); continue }
                 let t0 = CACurrentMediaTime()
                 let sem = DispatchSemaphore(value: 0)
                 DispatchQueue.main.async { sem.signal() }
@@ -38,6 +40,9 @@ final class MainThreadHitchMonitor: @unchecked Sendable {
 
     private var isStopped: Bool { lock.lock(); defer { lock.unlock() }; return stopped }
     func stop() { lock.lock(); stopped = true; lock.unlock() }
+    private var isPaused: Bool { lock.lock(); defer { lock.unlock() }; return paused }
+    /// CPU samples run with the monitor paused (its pings cost CPU themselves).
+    func pause(_ p: Bool) { lock.lock(); paused = p; lock.unlock() }
 
     private func record(_ ms: Double) {
         lock.lock()
@@ -161,12 +166,13 @@ enum PanelBench {
         // Open and idle: the ticking clock.
         host.open()
         await sleep(2)
-        _ = mon.reset()
+        mon.pause(true)
         var c0 = cpuSeconds()
         await sleep(20)
         var c1 = cpuSeconds()
+        mon.pause(false)
+        log(String(format: "CPU, panel open, idle 20 s: %.2f %%", (c1 - c0) / 20 * 100))
         var h = mon.reset()
-        log(String(format: "CPU, panel open, idle 20 s: %.2f %% · worst stall %.0f ms", (c1 - c0) / 20 * 100, h.0))
 
         // Typing in search (one character at a time, then back).
         let word = "server"
@@ -217,12 +223,11 @@ enum PanelBench {
         // Closed, timer running: the app as it sits in the menu bar.
         host.close()
         await sleep(2)
-        _ = mon.reset()
+        mon.pause(true)
         c0 = cpuSeconds()
         await sleep(20)
         c1 = cpuSeconds()
-        h = mon.reset()
-        log(String(format: "CPU, panel closed, 20 s: %.2f %% · worst stall %.0f ms", (c1 - c0) / 20 * 100, h.0))
+        log(String(format: "CPU, panel closed, 20 s: %.2f %%", (c1 - c0) / 20 * 100))
         let rss = ProcessInfo.processInfo.physicalMemoryFootprintMB
         log(String(format: "memory footprint %.0f MB", rss))
         mon.stop()
